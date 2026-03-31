@@ -175,7 +175,7 @@ class TaskInstanceTest {
 
     task.create();
 
-    task.assign(operation);
+    task.assignUser(operation);
 
     assertEquals(TaskInstanceStatus.ASSIGNED, task.getStatus());
     assertNotNull(task.getAssignedAt());
@@ -196,7 +196,7 @@ class TaskInstanceTest {
         .note("Assign once").build();
 
     task.create();
-    task.assign(operation);
+    task.assignUser(operation);
 
     var operation2 = TaskOperationData.builder()
         .id(taskId)
@@ -204,7 +204,7 @@ class TaskInstanceTest {
         .targetUser("user2@nosi.cv")
         .note("Assign again").build();
 
-    var ex = assertThrows(IgrpResponseStatusException.class, () -> task.assign(operation2));
+    var ex = assertThrows(IgrpResponseStatusException.class, () -> task.assignUser(operation2));
     assertTrue(ex.getMessage().contains("Cannot Assign a Task in Status[ASSIGNED]"));
   }
 
@@ -238,19 +238,19 @@ class TaskInstanceTest {
   }
 
   @Test
-  void testComplete_ShouldThrow_WhenTaskNotAssigned() {
+  void testComplete_ShouldSucceed_WhenTaskIsCreated() {
     var completeOperation = TaskOperationData.builder()
         .id(taskId)
         .currentUser(currentUser)
-        .note("Trying to complete without claim/assign")
+        .note("Complete from CREATED status")
         .build();
 
-    task.create(); // status = CREATED (não ASSIGNED)
+    task.create();
 
-    var ex = assertThrows(IgrpResponseStatusException.class,
-        () -> task.complete(completeOperation));
+    task.complete(completeOperation);
 
-    assertTrue(ex.getMessage().contains("Cannot Complete a Task in Status[CREATED]"));
+    assertEquals(TaskInstanceStatus.COMPLETED, task.getStatus());
+    assertNotNull(task.getEndedAt());
   }
 
 

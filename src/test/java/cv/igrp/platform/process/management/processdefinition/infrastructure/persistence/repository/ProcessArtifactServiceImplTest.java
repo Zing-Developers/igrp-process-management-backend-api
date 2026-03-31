@@ -46,7 +46,7 @@ class ProcessArtifactServiceImplTest {
         .name(Name.create("Task 1"))
         .processDefinitionId(Code.create("12345678"))
         .key(Code.create("task_1"))
-        .formKey(Code.create("/path/to/form/task_1"))
+        .formKey("/path/to/form/task_1")
         .build();
 
     entity = new ProcessArtifactEntity();
@@ -99,7 +99,7 @@ class ProcessArtifactServiceImplTest {
     assertEquals(entity.getName(), processArtifact.getName().getValue());
     assertEquals(entity.getProcessDefinitionId(), processArtifact.getProcessDefinitionId().getValue());
     assertEquals(entity.getKey(), processArtifact.getKey().getValue());
-    assertEquals(entity.getFormKey(), processArtifact.getFormKey().getValue());
+    assertEquals(entity.getFormKey(), processArtifact.getFormKey());
 
     verify(repository).findAllByProcessDefinitionId(processDefinitionId);
 
@@ -121,7 +121,7 @@ class ProcessArtifactServiceImplTest {
     assertEquals(entity.getName(), a.getName().getValue());
     assertEquals(entity.getProcessDefinitionId(), a.getProcessDefinitionId().getValue());
     assertEquals(entity.getKey(), a.getKey().getValue());
-    assertEquals(entity.getFormKey(), a.getFormKey().getValue());
+    assertEquals(entity.getFormKey(), a.getFormKey());
 
     verify(repository).findById(id.getValue());
   }

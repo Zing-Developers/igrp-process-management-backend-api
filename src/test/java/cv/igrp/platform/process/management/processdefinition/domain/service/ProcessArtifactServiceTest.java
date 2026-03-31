@@ -37,7 +37,7 @@ class ProcessArtifactServiceTest {
         .name(Name.create("Task 1"))
         .processDefinitionId(Code.create("123456789"))
         .key(Code.create("task_1"))
-        .formKey(Code.create("/path/to/form/task_1"))
+        .formKey("/path/to/form/task_1")
         .build();
   }
 

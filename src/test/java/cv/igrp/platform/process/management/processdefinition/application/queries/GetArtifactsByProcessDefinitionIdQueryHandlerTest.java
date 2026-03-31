@@ -49,7 +49,7 @@ public class GetArtifactsByProcessDefinitionIdQueryHandlerTest {
         .name(Name.create("Task 1"))
         .processDefinitionId(Code.create(processDefinitionId))
         .key(Code.create("task_1"))
-        .formKey(Code.create("/path/to/form/task_1"))
+        .formKey("/path/to/form/task_1")
         .build();
 
     ProcessArtifact artifact2 = ProcessArtifact.builder()
@@ -57,7 +57,7 @@ public class GetArtifactsByProcessDefinitionIdQueryHandlerTest {
         .name(Name.create("Task 2"))
         .processDefinitionId(Code.create(processDefinitionId))
         .key(Code.create("task_2"))
-        .formKey(Code.create("/path/to/form/task_2"))
+        .formKey("/path/to/form/task_2")
         .build();
 
     when(processArtifactService.getArtifactsByProcessDefinitionId(Code.create(processDefinitionId)))
@@ -78,12 +78,12 @@ public class GetArtifactsByProcessDefinitionIdQueryHandlerTest {
     assertEquals(artifact1.getId().getValue(), dto1.getId());
     assertEquals(artifact1.getName().getValue(), dto1.getName());
     assertEquals(artifact1.getKey().getValue(), dto1.getKey());
-    assertEquals(artifact1.getFormKey().getValue(), dto1.getFormKey());
+    assertEquals(artifact1.getFormKey(), dto1.getFormKey());
 
     assertEquals(artifact2.getId().getValue(), dto2.getId());
     assertEquals(artifact2.getName().getValue(), dto2.getName());
     assertEquals(artifact2.getKey().getValue(), dto2.getKey());
-    assertEquals(artifact2.getFormKey().getValue(), dto2.getFormKey());
+    assertEquals(artifact2.getFormKey(), dto2.getFormKey());
 
     verify(processArtifactService)
         .getArtifactsByProcessDefinitionId(Code.create(processDefinitionId));

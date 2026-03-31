@@ -29,10 +29,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static cv.igrp.platform.process.management.shared.application.constants.VaribalesOperator.*;
-
 
 @Repository
 public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
@@ -92,21 +88,12 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
 
     Page<TaskInstanceEntity> page = taskInstanceEntityRepository.findAll(spec, pageRequest);
 
-    Stream<TaskInstanceEntity> stream = page.getContent().stream();
+    LOGGER.debug("Task query returned {} results (page {}/{}, totalElements={})",
+        page.getNumberOfElements(), page.getNumber(), page.getTotalPages(), page.getTotalElements());
 
-    if (filter.isFilterByCurrentUser() && !filter.isSuperAdmin()) {
-      stream = stream.filter(t ->
-          userCanSeeTask(
-              t,
-              filter.getUser() != null ? filter.getUser().getValue() : null,
-              filter.getContextUserGroups()
-          )
-      );
-    }
-
-    stream = stream.filter(t -> matchesClientFilter(t, filter.getCandidateGroups()));
-
-    List<TaskInstance> content = stream.map(taskMapper::toModel).toList();
+    List<TaskInstance> content = page.getContent().stream()
+        .map(taskMapper::toModel)
+        .toList();
 
     return new PageableLista<>(
         page.getNumber(),
@@ -185,12 +172,51 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
       });
     }
 
+    // User visibility: assigned to current user OR user is in a candidate group
+    if (filter.isFilterByCurrentUser() && !filter.isSuperAdmin()) {
+      String currentUser = filter.getUser() != null ? filter.getUser().getValue() : null;
+      Set<String> groups = filter.getContextUserGroups();
+
+      LOGGER.debug("Adding visibility spec for user [{}] with groups {}", currentUser, groups);
+
+      spec = spec.and((root, query, cb) -> {
+        List<Predicate> orPredicates = new ArrayList<>();
+
+        if (currentUser != null) {
+          orPredicates.add(cb.equal(root.get("assignedBy"), currentUser));
+        }
+
+        for (String group : groups) {
+          orPredicates.add(cb.like(root.get("candidateGroups"), "%" + group + "%"));
+        }
+
+        if (orPredicates.isEmpty()) {
+          return cb.disjunction();
+        }
+        return cb.or(orPredicates.toArray(new Predicate[0]));
+      });
+    }
+
+    // Client-supplied candidate groups filter
+    if (filter.getCandidateGroups() != null && !filter.getCandidateGroups().isEmpty()) {
+      spec = spec.and((root, query, cb) -> {
+        List<Predicate> groupPredicates = filter.getCandidateGroups().stream()
+            .map(g -> cb.like(root.get("candidateGroups"), "%" + g + "%"))
+            .toList();
+        return cb.or(groupPredicates.toArray(new Predicate[0]));
+      });
+    }
+
     return spec;
   }
 
-  private boolean isPublicTask(TaskInstanceEntity t) {
-    return t.getCandidateGroups() == null || t.getCandidateGroups().isBlank();
-  }
+  /**
+   * A public task has NO assignee and NO candidate groups — available for anyone to claim.
+   */
+//  private boolean isPublicTask(TaskInstanceEntity t) {
+//    return (t.getAssignedBy() == null || t.getAssignedBy().isBlank())
+//        && (t.getCandidateGroups() == null || t.getCandidateGroups().isBlank());
+//  }
 
   private Set<String> splitGroups(String groups) {
     if (groups == null || groups.isBlank()) return Set.of();
@@ -200,30 +226,29 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
   }
 
   private boolean userCanSeeTask(TaskInstanceEntity t, String currentUser, Set<String> userGroups) {
-    // Assigned user always sees the task
+    // 1. Task is assigned to current user
     if (Objects.equals(t.getAssignedBy(), currentUser)) {
       return true;
     }
-    // Public task
-    if (isPublicTask(t)) {
-      return true;
-    }
-    // Group-based visibility
+    // 2. Task has candidate groups — user must be in one of them
     Set<String> taskGroups = splitGroups(t.getCandidateGroups());
-
-    return taskGroups.stream().anyMatch(userGroups::contains);
+    if (!taskGroups.isEmpty()) {
+      return taskGroups.stream().anyMatch(userGroups::contains);
+    }
+    // 3. Unassigned task with no candidate groups — not relevant to this user
+    return false;
   }
 
-  private boolean matchesClientFilter(TaskInstanceEntity t, Set<String> filterGroups) {
-    if (filterGroups == null || filterGroups.isEmpty()) {
-      return true;
-    }
-    if (isPublicTask(t)) {
-      return false;
-    }
-    Set<String> taskGroups = splitGroups(t.getCandidateGroups());
-    return taskGroups.stream().anyMatch(filterGroups::contains);
-  }
+//  private boolean matchesClientFilter(TaskInstanceEntity t, Set<String> filterGroups) {
+//    if (filterGroups == null || filterGroups.isEmpty()) {
+//      return true;
+//    }
+//    if (isPublicTask(t)) {
+//      return false;
+//    }
+//    Set<String> taskGroups = splitGroups(t.getCandidateGroups());
+//    return taskGroups.stream().anyMatch(filterGroups::contains);
+//  }
 
 
   private Predicate buildVariablePredicate(

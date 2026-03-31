@@ -140,7 +140,7 @@ class AreaServiceTest {
 
     areaService.deleteArea(areaId);
 
-    verify(areaRepository).updateStatus(areaId, area.getStatus());
+    verify(areaRepository).delete(areaId);
   }
 
   @Test
@@ -178,7 +178,7 @@ class AreaServiceTest {
 
     areaService.removeProcessDefinition(areaId, processId);
 
-    verify(areaProcessRepository).updateStatus(processId, areaProcess.getStatus());
+    verify(areaProcessRepository).delete(processId);
   }
 
   @Test

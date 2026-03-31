@@ -62,7 +62,7 @@ class DeployProcessCommandHandlerTest {
         .deployedAt(LocalDateTime.now())
         .build();
 
-    when(processDeploymentService.deployProcess(any(ProcessDeployment.class)))
+    when(processDeploymentService.deployProcessAndConfigure(any(ProcessDeployment.class)))
         .thenReturn(deployedModel);
 
     // Act
@@ -85,7 +85,7 @@ class DeployProcessCommandHandlerTest {
     assertTrue(body.isDeployed());
 
     // Verify service call
-    verify(processDeploymentService).deployProcess(any(ProcessDeployment.class));
+    verify(processDeploymentService).deployProcessAndConfigure(any(ProcessDeployment.class));
 
   }
 

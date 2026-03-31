@@ -55,11 +55,8 @@ class CompleteTaskCommandHandlerTest {
 
     // Mock TaskInstance and TaskInstanceDTO
     mockTaskInstance = mock(TaskInstance.class);
-    mockCodeInstance = mock(Code.class);
     mockTaskInstanceDTO = mock(TaskInstanceDTO.class);
 
-    when(taskInstanceService.getTaskById(Identifier.create(id))).thenReturn(mockTaskInstance);
-    when(taskInstanceService.getTaskById(Identifier.create(id)).getTaskKey()).thenReturn(mockCodeInstance);
     when(taskInstanceService.completeTask(any(TaskOperationData.class)))
         .thenReturn(mockTaskInstance);
     when(taskInstanceMapper.toTaskInstanceDTO(mockTaskInstance))
@@ -82,7 +79,7 @@ class CompleteTaskCommandHandlerTest {
 
     // Then
     assertNotNull(response);
-    assertEquals(200, response.getStatusCodeValue());
+    assertEquals(200, response.getStatusCode().value());
     assertSame(mockTaskInstanceDTO, response.getBody());
 
     // Verify

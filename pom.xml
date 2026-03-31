@@ -152,18 +152,6 @@
         </dependency>
 
         <dependency>
-            <groupId>cv.igrp.framework</groupId>
-            <artifactId>process-runtime-auth-igrp</artifactId>
-            <version>0.1.0-beta.20</version>
-        </dependency>
-
-        <dependency>
-            <groupId>cv.igrp.platform.access</groupId>
-            <artifactId>client</artifactId>
-            <version>0.1.0-beta-20260127.094449-21</version>
-        </dependency>
-
-        <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>

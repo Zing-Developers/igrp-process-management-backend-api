@@ -13,7 +13,7 @@ class ProcessArtifactTest {
   private Identifier id;
   private Code key;
   private Name name;
-  private Code formKey;
+  private String formKey;
   private Code processDefinitionId;
 
   @BeforeEach
@@ -21,7 +21,7 @@ class ProcessArtifactTest {
     id = Identifier.generate();
     key = Code.create("task_1");
     name = Name.create("Task 1");
-    formKey = Code.create("/path/to/form/task_1");
+    formKey = "/path/to/form/task_1";
     processDefinitionId = Code.create("123456789");
   }
 
@@ -91,19 +91,16 @@ class ProcessArtifactTest {
   }
 
   @Test
-  void shouldThrowExceptionWhenFormKeyIsNull() {
+  void shouldDefaultFormKeyWhenNull() {
 
-    NullPointerException exception = assertThrows(
-        NullPointerException.class,
-        () -> ProcessArtifact.builder()
-            .name(name)
-            .key(key)
-            .formKey(null)
-            .processDefinitionId(processDefinitionId)
-            .build()
-    );
+    ProcessArtifact artifact = ProcessArtifact.builder()
+        .name(name)
+        .key(key)
+        .formKey(null)
+        .processDefinitionId(processDefinitionId)
+        .build();
 
-    assertEquals("Form Key Id cannot be null!", exception.getMessage());
+    assertEquals(ProcessArtifact.DEFAULT_VALUE, artifact.getFormKey());
   }
 
   @Test

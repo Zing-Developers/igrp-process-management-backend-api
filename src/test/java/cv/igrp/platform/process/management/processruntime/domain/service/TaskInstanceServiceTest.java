@@ -70,11 +70,9 @@ class TaskInstanceServiceTest {
     Code procReleaseId = Code.create("PROC-RELEASE-123");
 
     ProcessInstance processInstance = mock(ProcessInstance.class);
-    when(processInstance.getId()).thenReturn(processInstanceId);
     when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
     when(processInstance.getStartedBy()).thenReturn(startedBy);
     when(processInstance.getProcReleaseId()).thenReturn(procReleaseId);
-    when(processInstance.getPriority()).thenReturn(50);
 
     TaskInstance task = TaskInstance.builder()
         .taskKey(Code.create(taskKey))
@@ -90,8 +88,8 @@ class TaskInstanceServiceTest {
 
     ProcessArtifact artifact = mock(ProcessArtifact.class);
     when(artifact.getKey()).thenReturn(Code.create(taskKey));
-    when(artifact.getFormKey()).thenReturn(Code.create(formKey));
-    when(artifact.getCandidateGroups()).thenReturn(List.of());
+    when(artifact.getFormKey()).thenReturn(formKey);
+    when(artifact.getCandidateGroups()).thenReturn(Set.of());
 
     when(processDefinitionRepository.findAllArtifacts(any()))
         .thenReturn(List.of(artifact));
@@ -264,7 +262,6 @@ class TaskInstanceServiceTest {
     TaskOperationData operation = mock(TaskOperationData.class);
     when(operation.getId()).thenReturn(Identifier.create(taskId));
     when(operation.getCurrentUser()).thenReturn(currentUser);
-    when(operation.getForms()).thenReturn(forms);
     when(operation.getVariables()).thenReturn(variables);
     doNothing().when(operation).validateVariablesAndForms();
 
@@ -289,7 +286,7 @@ class TaskInstanceServiceTest {
 
     verify(task).complete(operation);
     verify(runtimeProcessEngineRepository)
-        .completeTask(externalId, forms, variables);
+        .completeTask(externalId, null, variables);
     verify(processInstanceRepository).save(processInstance);
   }
 

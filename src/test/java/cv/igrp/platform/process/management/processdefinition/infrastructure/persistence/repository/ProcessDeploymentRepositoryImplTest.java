@@ -1,11 +1,11 @@
 package cv.igrp.platform.process.management.processdefinition.infrastructure.persistence.repository;
 
-import cv.igrp.framework.runtime.core.engine.process.ProcessDefinitionAdapter;
-import cv.igrp.framework.runtime.core.engine.process.ProcessManagerAdapter;
-import cv.igrp.framework.runtime.core.engine.process.model.IgrpProcessDefinitionRepresentation;
-import cv.igrp.framework.runtime.core.engine.process.model.ProcessDefinition;
-import cv.igrp.framework.runtime.core.engine.process.model.ProcessFilter;
-import cv.igrp.framework.runtime.core.engine.task.TaskQueryService;
+import cv.igrp.framework.process.runtime.core.engine.process.ProcessDefinitionAdapter;
+import cv.igrp.framework.process.runtime.core.engine.process.ProcessManagerAdapter;
+import cv.igrp.framework.process.runtime.core.engine.process.model.IgrpProcessDefinitionRepresentation;
+import cv.igrp.framework.process.runtime.core.engine.process.model.ProcessDefinition;
+import cv.igrp.framework.process.runtime.core.engine.process.model.ProcessFilter;
+import cv.igrp.framework.process.runtime.core.engine.task.TaskQueryService;
 import cv.igrp.platform.process.management.processdefinition.domain.exception.ProcessDeploymentException;
 import cv.igrp.platform.process.management.processdefinition.domain.filter.ProcessDeploymentFilter;
 import cv.igrp.platform.process.management.processdefinition.domain.models.BpmnXml;
@@ -50,9 +50,7 @@ class ProcessDeploymentRepositoryImplTest {
     ProcessDeploymentMapper processDeploymentMapper = new ProcessDeploymentMapper();
     repository = new ProcessDeploymentRepositoryImpl(
         processDefinitionAdapter,
-        processDeploymentMapper,
-        processManagerAdapter,
-        taskQueryService
+        processDeploymentMapper
     );
     deployment = ProcessDeployment.builder()
         .key(Code.create("deployment_process_key"))
@@ -164,8 +162,8 @@ class ProcessDeploymentRepositoryImplTest {
   void findAllArtifacts_shouldReturnMappedArtifacts() {
     // Arrange
     String processDefinitionId = "123456789";
-    cv.igrp.framework.runtime.core.engine.task.model.ProcessArtifact artifact1 =
-        new cv.igrp.framework.runtime.core.engine.task.model.ProcessArtifact(
+    cv.igrp.framework.process.runtime.core.engine.task.model.ProcessArtifact artifact1 =
+        new cv.igrp.framework.process.runtime.core.engine.task.model.ProcessArtifact(
             "task_1",
             "Task 1",
             "/path/to/form/task_1"
@@ -183,7 +181,7 @@ class ProcessDeploymentRepositoryImplTest {
 
     ProcessArtifact actualArtifact = result.getFirst();
     assertEquals("task_1", actualArtifact.getKey().getValue());
-    assertEquals("/path/to/form/task_1", actualArtifact.getFormKey().getValue());
+    assertEquals("/path/to/form/task_1", actualArtifact.getFormKey());
     assertEquals("Task 1", actualArtifact.getName().getValue());
     assertEquals(processDefinitionId, actualArtifact.getProcessDefinitionId().getValue());
 

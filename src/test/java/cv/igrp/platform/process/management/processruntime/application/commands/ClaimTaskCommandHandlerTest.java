@@ -50,7 +50,7 @@ class ClaimTaskCommandHandlerTest {
 
     // Then
     assertNotNull(response);
-    assertEquals(204, response.getStatusCodeValue());
+    assertEquals(204, response.getStatusCode().value());
 
     // Verify
     verify(taskInstanceService, times(1)).claimTask(any(TaskOperationData.class));

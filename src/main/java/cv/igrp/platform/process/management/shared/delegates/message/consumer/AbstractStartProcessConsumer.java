@@ -98,7 +98,7 @@ public abstract class AbstractStartProcessConsumer {
             (a, b) -> b
         ));
     return ProcessInstance.builder()
-        .procReleaseId(Code.create(dto.getProcessDefinitionId()))
+        .procReleaseId(dto.getProcessDefinitionId() != null ? Code.create(dto.getProcessDefinitionId()) : null)
         .procReleaseKey(Code.create(dto.getProcessKey()))
         .businessKey(dto.getBusinessKey() != null ? Code.create(dto.getBusinessKey()) : null)
         .applicationBase(Code.create(dto.getApplicationBase()))

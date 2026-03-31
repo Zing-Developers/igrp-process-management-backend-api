@@ -2,6 +2,7 @@ package cv.igrp.platform.process.management.shared.config;
 
 import java.util.Optional;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.security.core.Authentication;
@@ -13,10 +14,10 @@ public class ApplicationAuditorAware implements AuditorAware<String> {
   @Value("${spring.profiles.active:}")
   private String activeProfile;
 
-  private static final String SYSTEM_FALLBACK = "system-bot@nosi.cv";
+  private static final String SYSTEM_FALLBACK = "system-bot@irn.mj.pt";
 
   @Override
-  public Optional<String> getCurrentAuditor() {
+  public @NonNull Optional<String> getCurrentAuditor() {
     var preferredUsername = getPreferredUsername();
     return Optional.ofNullable(preferredUsername).filter(s -> !s.isBlank());
   }

@@ -41,6 +41,7 @@ public class CreateAreaCommandHandlerTest {
         "HR Department",
         "Handles HR-related workflows",
         "APP001",
+        null,
         null
     );
 

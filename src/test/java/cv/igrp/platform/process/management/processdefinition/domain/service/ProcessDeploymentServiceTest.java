@@ -120,7 +120,7 @@ class ProcessDeploymentServiceTest {
         .name(Name.create("Task 1"))
         .processDefinitionId(processDefinitionId)
         .key(Code.create("task_1"))
-        .formKey(Code.create("/path/to/form/task_1"))
+        .formKey("/path/to/form/task_1")
         .build();
 
     when(processDeploymentRepository.findAllArtifacts(processDefinitionId.getValue()))

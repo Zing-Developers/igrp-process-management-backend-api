@@ -71,7 +71,7 @@ class GetProcessInstanceByIdQueryHandlerTest {
 
     // Then
     assertNotNull(response);
-    assertEquals(200, response.getStatusCodeValue());
+    assertEquals(200, response.getStatusCode().value());
     assertSame(mockProcessInstanceDTO, response.getBody());
 
     verify(processInstanceService).getProcessInstanceById(UUID.fromString(processInstanceId));

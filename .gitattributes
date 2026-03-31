@@ -3,3 +3,4 @@ docker-compose.yml merge=ours
 /k8s/* merge=ours
 /env/* merge=ours
 Dockerfile merge=ours
+.github/workflows/deploy.yaml merge=ours
