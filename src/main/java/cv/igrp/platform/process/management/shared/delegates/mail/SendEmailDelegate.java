@@ -1,5 +1,6 @@
 package cv.igrp.platform.process.management.shared.delegates.mail;
 
+import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import org.activiti.engine.delegate.DelegateExecution;
 import org.activiti.engine.delegate.Expression;
 import org.activiti.engine.delegate.JavaDelegate;
@@ -43,6 +44,11 @@ public class SendEmailDelegate implements JavaDelegate {
     String body = Objects.nonNull(bodyVariable) ? bodyVariable : Objects.nonNull(emailBody)? (String) emailBody.getValue(execution): null;
     String fromVariable = execution.getVariable("emailFrom", String.class);
     String from = Objects.nonNull(fromVariable) ? fromVariable : Objects.nonNull(emailFrom)? (String) emailFrom.getValue(execution): null;
+
+    to = EnvVarUtil.resolveEnvVars(to, "emailTo");
+    subject = EnvVarUtil.resolveEnvVars(subject, "emailSubject");
+    body = EnvVarUtil.resolveEnvVars(body, "emailBody");
+    from = EnvVarUtil.resolveEnvVars(from, "emailFrom");
 
     validate(to, subject, body);
 

@@ -1,6 +1,7 @@
 package cv.igrp.platform.process.management.shared.delegates.parse;
 
 import com.google.gson.JsonElement;
+import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import cv.igrp.platform.process.management.shared.util.ObjectUtil;
 import org.activiti.engine.delegate.DelegateExecution;
 import org.activiti.engine.delegate.Expression;
@@ -27,8 +28,11 @@ public class IgrpJsonParseDelegate implements JavaDelegate {
     log.info("[igrpJsonParseDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
     String jsonVariable = (String) execution.getVariable("json");
     String payload = Objects.nonNull(jsonVariable)? jsonVariable: Objects.nonNull(json)? json.getValue(execution).toString() : null;
+    payload = EnvVarUtil.resolveEnvVars(payload, "json");
     String isBase64Variable = (String) execution.getVariable("isBase64Encoded");
-    boolean isBase64 = Objects.nonNull(isBase64Variable) ? Boolean.parseBoolean(isBase64Variable) : Objects.nonNull(isBase64Encoded) ? Boolean.parseBoolean((String) isBase64Encoded.getValue(execution)) : Boolean.FALSE;
+    String isBase64Raw = Objects.nonNull(isBase64Variable) ? isBase64Variable : Objects.nonNull(isBase64Encoded) ? (String) isBase64Encoded.getValue(execution) : null;
+    isBase64Raw = EnvVarUtil.resolveEnvVars(isBase64Raw, "isBase64Encoded");
+    boolean isBase64 = Boolean.parseBoolean(isBase64Raw);
 
     if (isBase64) {
       payload = ObjectUtil.decodeBase64ToString(payload);
