@@ -10,6 +10,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 
 import java.util.*;
 import java.time.LocalDateTime;
@@ -49,10 +50,14 @@ public class TaskInstanceEntity extends AuditEntity {
   private String name;
 
 
-  @Column(name="candidate_groups")
-  private String candidateGroups;
-
-
+  @NotAudited
+  @ElementCollection(fetch = FetchType.LAZY)
+  @CollectionTable(
+      name = "t_task_instance_candidate_group",
+      joinColumns = @JoinColumn(name = "task_instance_id")
+  )
+  @Column(name = "group_id", nullable = false)
+  private Set<String> candidateGroups = new HashSet<>();
 
 
   @ManyToOne(fetch = FetchType.LAZY)

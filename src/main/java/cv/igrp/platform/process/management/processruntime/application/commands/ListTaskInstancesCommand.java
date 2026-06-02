@@ -24,6 +24,7 @@ public class ListTaskInstancesCommand implements Command {
   private String applicationBase;
   @NotBlank(message = "The field <candidateGroups> is required")
   private String candidateGroups;
+  private String candidateUsers;
   @NotBlank(message = "The field <user> is required")
   private String user;
   @NotBlank(message = "The field <status> is required")

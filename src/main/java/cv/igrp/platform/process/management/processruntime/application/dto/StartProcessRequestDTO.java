@@ -39,4 +39,7 @@ public class StartProcessRequestDTO  {
   @Valid
   private List<ProcessVariableDTO> variables = new ArrayList<>();
 
+  @Valid
+  private List<ProcessTaskAssignmentRuleDTO> assignmentRules = new ArrayList<>();
+
 }

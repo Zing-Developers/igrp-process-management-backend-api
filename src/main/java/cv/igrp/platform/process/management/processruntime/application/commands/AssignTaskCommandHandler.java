@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 
@@ -42,6 +43,7 @@ public class AssignTaskCommandHandler implements CommandHandler<AssignTaskComman
             .priority(command.getAssigntaskdto().getPriority())
             .note(command.getAssigntaskdto().getNote())
             .candidateGroups(getGroups(command.getAssigntaskdto()))
+            .candidateUsers(getUsers(command.getAssigntaskdto()))
             .build()
     );
     LOGGER.info("User [{}] finished assigning task [{}] to user [{}]", currentUser.getValue(), command.getId(), command.getAssigntaskdto().getUser());
@@ -49,10 +51,21 @@ public class AssignTaskCommandHandler implements CommandHandler<AssignTaskComman
   }
 
   public List<String> getGroups(AssignTaskDTO dto){
-    if(dto.getCandidateGroups() != null && !dto.getCandidateGroups().isEmpty()){
-      return List.of(dto.getCandidateGroups().split(","));
+    return splitCommaSeparated(dto.getCandidateGroups());
+  }
+
+  public List<String> getUsers(AssignTaskDTO dto){
+    return splitCommaSeparated(dto.getCandidateUsers());
+  }
+
+  private List<String> splitCommaSeparated(String value) {
+    if (value == null || value.isBlank()) {
+      return new ArrayList<>();
     }
-    return new ArrayList<>();
+    return Arrays.stream(value.split(","))
+        .map(String::trim)
+        .filter(item -> !item.isBlank())
+        .toList();
   }
 
 }

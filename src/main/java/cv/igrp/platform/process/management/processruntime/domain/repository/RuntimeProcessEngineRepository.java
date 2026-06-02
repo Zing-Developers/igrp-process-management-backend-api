@@ -276,6 +276,15 @@ public interface RuntimeProcessEngineRepository {
   void addCandidateGroup(String taskId, String groupId) throws RuntimeProcessEngineException;
 
   /**
+   * Add a candidate user to a task.
+   *
+   * @param taskId the unique identifier of the task
+   * @param userId the unique identifier of the candidate user
+   * @throws RuntimeProcessEngineException if the task cannot be found or the candidate user cannot be added
+   */
+  void addCandidateUser(String taskId, String userId) throws RuntimeProcessEngineException;
+
+  /**
    * Reschedules the timer job of a running process instance by updating its due date.
    * The timer will fire after the specified number of seconds from now.
    *

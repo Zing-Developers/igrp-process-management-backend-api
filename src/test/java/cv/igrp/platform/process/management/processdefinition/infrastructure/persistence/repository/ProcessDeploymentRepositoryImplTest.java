@@ -1,11 +1,10 @@
 package cv.igrp.platform.process.management.processdefinition.infrastructure.persistence.repository;
 
 import cv.igrp.framework.process.runtime.core.engine.process.ProcessDefinitionAdapter;
-import cv.igrp.framework.process.runtime.core.engine.process.ProcessManagerAdapter;
+import cv.igrp.framework.process.runtime.core.engine.process.ProcessDefinitionRepresentation;
 import cv.igrp.framework.process.runtime.core.engine.process.model.IgrpProcessDefinitionRepresentation;
 import cv.igrp.framework.process.runtime.core.engine.process.model.ProcessDefinition;
 import cv.igrp.framework.process.runtime.core.engine.process.model.ProcessFilter;
-import cv.igrp.framework.process.runtime.core.engine.task.TaskQueryService;
 import cv.igrp.platform.process.management.processdefinition.domain.exception.ProcessDeploymentException;
 import cv.igrp.platform.process.management.processdefinition.domain.filter.ProcessDeploymentFilter;
 import cv.igrp.platform.process.management.processdefinition.domain.models.BpmnXml;
@@ -19,12 +18,19 @@ import cv.igrp.platform.process.management.shared.domain.models.ResourceName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,100 +41,96 @@ class ProcessDeploymentRepositoryImplTest {
   @Mock
   private ProcessDefinitionAdapter processDefinitionAdapter;
 
-  @Mock
-  private ProcessManagerAdapter processManagerAdapter;
-
   private ProcessDeploymentRepositoryImpl repository;
-
   private ProcessDeployment deployment;
-
-  @Mock
-  private TaskQueryService taskQueryService;
 
   @BeforeEach
   void setUp() {
-    ProcessDeploymentMapper processDeploymentMapper = new ProcessDeploymentMapper();
     repository = new ProcessDeploymentRepositoryImpl(
         processDefinitionAdapter,
-        processDeploymentMapper
+        new ProcessDeploymentMapper()
     );
+
     deployment = ProcessDeployment.builder()
-        .key(Code.create("deployment_process_key"))
-        .name(Name.create("Invoicing sample"))
-        .resourceName(ResourceName.create("invoicing.bpmn20.xml"))
+        .key(Code.create("invoice_process"))
+        .name(Name.create("Invoice Process"))
+        .resourceName(ResourceName.create("invoice.bpmn20.xml"))
         .bpmnXml(BpmnXml.create("<definitions />"))
         .applicationBase(Code.create("igrp-app"))
         .build();
   }
 
   @Test
-  void deploy_shouldReturnMappedModel_whenAdapterSucceeds() {
+  void deploy_shouldSendRepresentationToAdapterAndReturnMappedDeployment() {
+    IgrpProcessDefinitionRepresentation deployedRepresentation = IgrpProcessDefinitionRepresentation.builder()
+        .key("invoice_process")
+        .name("Invoice Process")
+        .resourceName("invoice.bpmn20.xml")
+        .bpmnXml("<definitions />")
+        .applicationBase("igrp-app")
+        .releaseId("release-1")
+        .deploymentId("deployment-1")
+        .version("1")
+        .deployed(true)
+        .build();
 
-    // Arrange
-    IgrpProcessDefinitionRepresentation representation =
-        IgrpProcessDefinitionRepresentation.builder()
-            .key("deployment_process_key")
-            .name("Invoicing sample")
-            .resourceName("invoicing.bpmn20.xml")
-            .bpmnXml("<definitions />")
-            .applicationBase("igrp-app")
-            .deploymentId("12345678")
-            .version("1.0")
-            .deployed(true)
-            .build();
+    when(processDefinitionAdapter.deploy(any(ProcessDefinitionRepresentation.class)))
+        .thenReturn(deployedRepresentation);
 
-    when(processDefinitionAdapter.deploy(any(IgrpProcessDefinitionRepresentation.class)))
-        .thenReturn(representation);
-
-    // Act
     ProcessDeployment result = repository.deploy(deployment);
 
-    // Assert
     assertNotNull(result);
-    assertEquals("deployment_process_key", result.getKey().getValue());
-    assertEquals("Invoicing sample", result.getName().getValue());
-    assertEquals("invoicing.bpmn20.xml", result.getResourceName().getValue());
-    assertEquals("12345678", result.getDeploymentId());
+    assertEquals("release-1", result.getId());
+    assertEquals("invoice_process", result.getKey().getValue());
+    assertEquals("Invoice Process", result.getName().getValue());
+    assertEquals("invoice.bpmn20.xml", result.getResourceName().getValue());
+    assertEquals("deployment-1", result.getDeploymentId());
     assertTrue(result.isDeployed());
 
-    verify(processDefinitionAdapter).deploy(any(IgrpProcessDefinitionRepresentation.class));
+    ArgumentCaptor<ProcessDefinitionRepresentation> captor =
+        ArgumentCaptor.forClass(ProcessDefinitionRepresentation.class);
+    verify(processDefinitionAdapter).deploy(captor.capture());
 
+    IgrpProcessDefinitionRepresentation sent =
+        (IgrpProcessDefinitionRepresentation) captor.getValue();
+    assertEquals("invoice_process", sent.key());
+    assertEquals("Invoice Process", sent.name());
+    assertEquals("invoice.bpmn20.xml", sent.resourceName());
+    assertEquals("<definitions />", sent.bpmnXml());
+    assertEquals("igrp-app", sent.applicationBase());
   }
 
   @Test
-  void deploy_shouldThrowProcessDeploymentException_whenAdapterThrows() {
+  void deploy_shouldWrapAdapterFailureInDomainException() {
+    when(processDefinitionAdapter.deploy(any(ProcessDefinitionRepresentation.class)))
+        .thenThrow(new RuntimeException("engine unavailable"));
 
-    // When
-    when(processDefinitionAdapter.deploy(any(IgrpProcessDefinitionRepresentation.class)))
-        .thenThrow(new RuntimeException("Deployment failed"));
-
-    // Act
-    ProcessDeploymentException ex = assertThrows(
+    ProcessDeploymentException exception = assertThrows(
         ProcessDeploymentException.class,
         () -> repository.deploy(deployment)
     );
 
-    // asserts
-    assertTrue(ex.getMessage().contains("Failed to deploy process deployment: " + deployment.getKey().getValue()));
-
-    verify(processDefinitionAdapter).deploy(any(IgrpProcessDefinitionRepresentation.class));
+    assertTrue(exception.getMessage().contains("invoice_process"));
+    verify(processDefinitionAdapter).deploy(any(ProcessDefinitionRepresentation.class));
   }
 
   @Test
-  void getAllDeployments_shouldReturnMappedList() {
-
-    // Arrange
+  void findAll_shouldMapDefinitionsAndForwardFilterValues() {
     ProcessDeploymentFilter filter = ProcessDeploymentFilter.builder()
+        .processName("Invoice")
+        .applicationBase(Code.create("igrp-app"))
+        .groups(Set.of("finance", "approver"))
+        .isSuspended(false)
         .build();
 
     ProcessDefinition processDefinition = new ProcessDefinition(
-        "12345",
-        "Invoicing Process",
-        "invoicing.bpmn20.xml",
-        "invoice_process_key",
-        1,
-        "98765",
-        "Invoicing Process Description",
+        "release-1",
+        "Invoice Process",
+        "invoice.bpmn20.xml",
+        "invoice_process",
+        3,
+        "deployment-1",
+        "Invoice approval flow",
         "igrp-app",
         false
     );
@@ -136,57 +138,112 @@ class ProcessDeploymentRepositoryImplTest {
     when(processDefinitionAdapter.getDeployedProcesses(any(ProcessFilter.class)))
         .thenReturn(List.of(processDefinition));
 
-    // Act
     PageableLista<ProcessDeployment> result = repository.findAll(filter);
 
-    // Assert
     assertNotNull(result);
     assertEquals(1, result.getContent().size());
 
     ProcessDeployment item = result.getContent().getFirst();
-
-    assertEquals(processDefinition.key(), item.getKey().getValue());
-    assertEquals(processDefinition.name(), item.getName().getValue());
-    assertEquals(processDefinition.description(), item.getDescription());
-    assertEquals(processDefinition.applicationBase(), item.getApplicationBase().getValue());
-    assertEquals(processDefinition.resourceName(), item.getResourceName().getValue());
-    assertEquals(String.valueOf(processDefinition.version()), item.getVersion());
-    assertEquals(processDefinition.deploymentId(), item.getDeploymentId());
+    assertEquals("release-1", item.getId());
+    assertEquals("release-1", item.getProcReleaseId().getValue());
+    assertEquals("invoice_process", item.getKey().getValue());
+    assertEquals("Invoice Process", item.getName().getValue());
+    assertEquals("Invoice approval flow", item.getDescription());
+    assertEquals("igrp-app", item.getApplicationBase().getValue());
+    assertEquals("invoice.bpmn20.xml", item.getResourceName().getValue());
+    assertEquals("3", item.getVersion());
+    assertEquals("deployment-1", item.getDeploymentId());
     assertTrue(item.isDeployed());
 
-    verify(processDefinitionAdapter).getDeployedProcesses(any(ProcessFilter.class));
+    ArgumentCaptor<ProcessFilter> captor = ArgumentCaptor.forClass(ProcessFilter.class);
+    verify(processDefinitionAdapter).getDeployedProcesses(captor.capture());
 
+    ProcessFilter sentFilter = captor.getValue();
+    assertEquals("Invoice", sentFilter.getName());
+    assertEquals("igrp-app", sentFilter.getApplicationBase());
+    assertFalse(sentFilter.getSuspended());
+    assertTrue(sentFilter.getGroupsIds().containsAll(List.of("finance", "approver")));
   }
 
   @Test
-  void findAllArtifacts_shouldReturnMappedArtifacts() {
-    // Arrange
-    String processDefinitionId = "123456789";
-    cv.igrp.framework.process.runtime.core.engine.task.model.ProcessArtifact artifact1 =
+  void findAll_shouldUseContextGroupsWhenFilteringByCurrentUser() {
+    ProcessDeploymentFilter filter = ProcessDeploymentFilter.builder()
+        .filterByCurrentUser(true)
+        .contextGroups(Set.of("context-group"))
+        .groups(Set.of("client-group"))
+        .build();
+
+    when(processDefinitionAdapter.getDeployedProcesses(any(ProcessFilter.class)))
+        .thenReturn(List.of());
+
+    repository.findAll(filter);
+
+    ArgumentCaptor<ProcessFilter> captor = ArgumentCaptor.forClass(ProcessFilter.class);
+    verify(processDefinitionAdapter).getDeployedProcesses(captor.capture());
+
+    assertEquals(List.of("context-group"), captor.getValue().getGroupsIds());
+  }
+
+  @Test
+  void findAllArtifacts_shouldMapEngineArtifacts() {
+    String processDefinitionId = "release-1";
+    cv.igrp.framework.process.runtime.core.engine.task.model.ProcessArtifact engineArtifact =
         new cv.igrp.framework.process.runtime.core.engine.task.model.ProcessArtifact(
             "task_1",
-            "Task 1",
-            "/path/to/form/task_1"
+            "Approve invoice",
+            "approve-invoice-form"
         );
 
     when(processDefinitionAdapter.getProcessArtifacts(processDefinitionId))
-        .thenReturn(List.of(artifact1));
+        .thenReturn(List.of(engineArtifact));
 
-    // Act
     List<ProcessArtifact> result = repository.findAllArtifacts(processDefinitionId);
 
-    // Assert
-    assertNotNull(result);
     assertEquals(1, result.size());
-
-    ProcessArtifact actualArtifact = result.getFirst();
-    assertEquals("task_1", actualArtifact.getKey().getValue());
-    assertEquals("/path/to/form/task_1", actualArtifact.getFormKey());
-    assertEquals("Task 1", actualArtifact.getName().getValue());
-    assertEquals(processDefinitionId, actualArtifact.getProcessDefinitionId().getValue());
-
-    verify(processDefinitionAdapter).getProcessArtifacts(processDefinitionId);
-
+    assertEquals("task_1", result.getFirst().getKey().getValue());
+    assertEquals("Approve invoice", result.getFirst().getName().getValue());
+    assertEquals("approve-invoice-form", result.getFirst().getFormKey());
+    assertEquals(processDefinitionId, result.getFirst().getProcessDefinitionId().getValue());
   }
 
+  @Test
+  void findById_shouldMapProcessDefinitionRepresentationWhenPresent() {
+    IgrpProcessDefinitionRepresentation representation = IgrpProcessDefinitionRepresentation.builder()
+        .key("invoice_process")
+        .name("Invoice Process")
+        .description("Invoice approval flow")
+        .resourceName("invoice.bpmn20.xml")
+        .bpmnXml("<definitions />")
+        .applicationBase("igrp-app")
+        .deploymentId("deployment-1")
+        .version("2")
+        .build();
+
+    when(processDefinitionAdapter.getProcessDefinition("release-1"))
+        .thenReturn(Optional.of(representation));
+
+    Optional<ProcessDeployment> result = repository.findById("release-1");
+
+    assertTrue(result.isPresent());
+    assertEquals("invoice_process", result.get().getKey().getValue());
+    assertEquals("Invoice Process", result.get().getName().getValue());
+    assertEquals("Invoice approval flow", result.get().getDescription());
+    assertEquals("igrp-app", result.get().getApplicationBase().getValue());
+    assertEquals("deployment-1", result.get().getDeploymentId());
+  }
+
+  @Test
+  void starterGroupOperations_shouldDelegateToAdapter() {
+    when(processDefinitionAdapter.getCandidateStarterGroups("release-1"))
+        .thenReturn(List.of("finance", "approver"));
+
+    repository.addCandidateStarterGroup("release-1", "finance");
+    repository.removeCandidateStarterGroup("release-1", "approver");
+    Set<String> groups = repository.getCandidateStarterGroups("release-1");
+
+    assertEquals(Set.of("finance", "approver"), groups);
+    verify(processDefinitionAdapter).addCandidateStarterGroup("release-1", "finance");
+    verify(processDefinitionAdapter).removeCandidateStarterGroup("release-1", "approver");
+    verify(processDefinitionAdapter).getCandidateStarterGroups("release-1");
+  }
 }

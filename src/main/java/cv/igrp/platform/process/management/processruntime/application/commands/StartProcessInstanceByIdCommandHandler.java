@@ -43,6 +43,7 @@ public class StartProcessInstanceByIdCommandHandler implements CommandHandler<St
     ProcessInstance processInstance = processInstanceService.startProcessInstanceById(
         UUID.fromString(command.getId()),
         extractVariables(command.getProcessvariablesrequestdto()),
+        mapper.toAssignmentRules(command.getProcessvariablesrequestdto().getAssignmentRules()),
         userContext.getCurrentUser().getValue()
     );
     return ResponseEntity.ok(mapper.toDTO(processInstance));

@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -208,6 +210,28 @@ class TaskInstanceTest {
     assertTrue(ex.getMessage().contains("Cannot Assign a Task in Status[ASSIGNED]"));
   }
 
+  @Test
+  void testAddCandidates_ShouldStoreGroupsAndCreateAssignEvent() {
+
+    var operation = TaskOperationData.builder()
+        .id(taskId)
+        .currentUser(currentUser)
+        .candidateGroups(List.of("group1", "group2"))
+        .note("Assign candidates")
+        .build();
+
+    task.create();
+
+    task.addCandidates(operation);
+
+    assertEquals(TaskInstanceStatus.ASSIGNED, task.getStatus());
+    assertTrue(task.getCandidateGroups().containsAll(Set.of("group1", "group2")));
+
+    var lastEvent = task.getTaskInstanceEvents().getLast();
+    assertEquals(TaskEventType.ASSIGN, lastEvent.getEventType());
+    assertEquals(currentUser, lastEvent.getPerformedBy());
+  }
+
 
   @Test
   void testComplete_ShouldSucceed_WhenTaskIsAssigned() {
@@ -242,15 +266,15 @@ class TaskInstanceTest {
     var completeOperation = TaskOperationData.builder()
         .id(taskId)
         .currentUser(currentUser)
-        .note("Complete from CREATED status")
+        .note("Trying to complete without claim/assign")
         .build();
 
-    task.create();
+    task.create(); // status = CREATED (não ASSIGNED)
 
     task.complete(completeOperation);
 
     assertEquals(TaskInstanceStatus.COMPLETED, task.getStatus());
-    assertNotNull(task.getEndedAt());
+    assertEquals(currentUser, task.getEndedBy());
   }
 
 
@@ -269,6 +293,7 @@ class TaskInstanceTest {
         .name(Name.create("My Task"))
         .formKey(Code.create(oldForm))
         .startedAt(LocalDateTime.now())
+        .candidateGroups(Set.of("group1"))
         .build();
 
     var processInstance = ProcessInstance.builder()
@@ -293,6 +318,7 @@ class TaskInstanceTest {
     assertNotEquals(original, result);
     assertEquals(oldForm, original.getFormKey().getValue());
     assertEquals(newForm, result.getFormKey().getValue());
+    assertEquals(original.getCandidateGroups(), result.getCandidateGroups());
   }
 
 }

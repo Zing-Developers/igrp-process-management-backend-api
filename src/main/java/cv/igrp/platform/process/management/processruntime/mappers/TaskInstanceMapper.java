@@ -54,7 +54,7 @@ public class TaskInstanceMapper {
     taskInstanceEntity.setFormKey(taskInstance.getFormKey()!=null ? taskInstance.getFormKey().getValue() : null);
     taskInstanceEntity.setName(taskInstance.getName().getValue());
     taskInstanceEntity.setExternalId(taskInstance.getExternalId().getValue());
-    taskInstanceEntity.setCandidateGroups(!taskInstance.getCandidateGroups().isEmpty() ? String.join(",", taskInstance.getCandidateGroups()) : null);
+    syncCandidateGroups(taskInstanceEntity, taskInstance.getCandidateGroups());
     taskInstanceEntity.setPriority(taskInstance.getPriority());
     taskInstanceEntity.setStatus(taskInstance.getStatus());
     taskInstanceEntity.setStartedBy(taskInstance.getStartedBy().getValue());
@@ -76,7 +76,7 @@ public class TaskInstanceMapper {
     taskInstanceEntity.setEndedBy(taskInstance.getEndedBy() != null ? taskInstance.getEndedBy().getValue() : null);
     taskInstanceEntity.setEndedAt(taskInstance.getEndedAt());
     taskInstanceEntity.setPriority(taskInstance.getPriority());
-    taskInstanceEntity.setCandidateGroups(!taskInstance.getCandidateGroups().isEmpty() ? String.join(",", taskInstance.getCandidateGroups()) : null);
+    syncCandidateGroups(taskInstanceEntity, taskInstance.getCandidateGroups());
     taskInstanceEntity.setVariables(taskInstance.getVariables());
     taskInstanceEntity.setForms(taskInstance.getForms());
     taskInstanceEntity.setDueDate(taskInstance.getDueDate());
@@ -111,7 +111,7 @@ public class TaskInstanceMapper {
         .assignedBy(taskInstanceEntity.getAssignedBy()!=null ? Code.create(taskInstanceEntity.getAssignedBy()) : null)
         .endedAt(taskInstanceEntity.getEndedAt())
         .endedBy(taskInstanceEntity.getEndedBy()!=null ? Code.create(taskInstanceEntity.getEndedBy()) : null)
-        .candidateGroups(taskInstanceEntity.getCandidateGroups()!=null ? new HashSet<>(List.of(taskInstanceEntity.getCandidateGroups().split(","))) : null)
+        .candidateGroups(taskInstanceEntity.getCandidateGroups()!=null ? new HashSet<>(taskInstanceEntity.getCandidateGroups()) : null)
         .taskInstanceEvents(withEvents ? eventMapper.toEventModelList(taskInstanceEntity.getTaskinstanceevents()) : null)
         .forms(taskInstanceEntity.getForms())
         .variables(taskInstanceEntity.getVariables())
@@ -139,6 +139,7 @@ public class TaskInstanceMapper {
     dto.setFormKey(model.getFormKey()!=null ? model.getFormKey().getValue() : null);
     dto.setName(model.getName().getValue());
     dto.setCandidateGroups(String.join(",", model.getCandidateGroups()));
+    dto.setCandidateUsers(String.join(",", model.getCandidateUsers()));
     dto.setProcessNumber(model.getProcessNumber().getValue());
     dto.setProcessInstanceId(model.getProcessInstanceId().getValue().toString());
     dto.setBusinessKey(model.getBusinessKey()!=null ? model.getBusinessKey().getValue() : null);
@@ -179,6 +180,7 @@ public class TaskInstanceMapper {
     dto.setName(taskInstance.getName().getValue());
     dto.setExternalId(taskInstance.getExternalId().getValue());
     dto.setCandidateGroups(!taskInstance.getCandidateGroups().isEmpty() ? String.join(",", taskInstance.getCandidateGroups()) : null);
+    dto.setCandidateUsers(!taskInstance.getCandidateUsers().isEmpty() ? String.join(",", taskInstance.getCandidateUsers()) : null);
     dto.setProcessInstanceId(taskInstance.getProcessInstanceId().getValue());
     dto.setProcessNumber(taskInstance.getProcessNumber().getValue());
     dto.setProcessKey(taskInstance.getProcessKey() != null ? taskInstance.getProcessKey().getValue() : null);
@@ -288,9 +290,8 @@ public class TaskInstanceMapper {
         .processNumber(command.getProcessNumber() != null ? Code.create(command.getProcessNumber()) : null)
         .applicationBase((command.getApplicationBase() != null && !command.getApplicationBase().isBlank()) ? Code.create(command.getApplicationBase().trim()) : null)
         .processName((command.getProcessName() != null && !command.getProcessName().isBlank()) ? Name.create(command.getProcessName().trim()) : null)
-        .candidateGroups(command.getCandidateGroups() != null
-            ? new HashSet<>(List.of(command.getCandidateGroups().split(",")))
-            : new HashSet<>())
+        .candidateGroups(splitCommaSeparated(command.getCandidateGroups()))
+        .candidateUsers(splitCommaSeparated(command.getCandidateUsers()))
         .user(command.getUser() != null ? Code.create(command.getUser()) : null)
         .status(command.getStatus() != null ? TaskInstanceStatus.valueOf(command.getStatus()) : null)
         .dateFrom(DateUtil.stringToLocalDate.apply(command.getDateFrom()))
@@ -312,6 +313,32 @@ public class TaskInstanceMapper {
             .value(variablesExpressionDTO.getValue())
             .build()
         ).toList();
+  }
+
+  private Set<String> splitCommaSeparated(String value) {
+    if (value == null || value.isBlank()) {
+      return new HashSet<>();
+    }
+    return Arrays.stream(value.split(","))
+        .map(String::trim)
+        .filter(item -> !item.isBlank())
+        .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+  }
+
+  private void syncCandidateGroups(TaskInstanceEntity entity, Set<String> candidateGroups) {
+    if (entity.getCandidateGroups() == null) {
+      entity.setCandidateGroups(new HashSet<>());
+    } else {
+      entity.getCandidateGroups().clear();
+    }
+
+    if (candidateGroups != null) {
+      candidateGroups.stream()
+          .filter(Objects::nonNull)
+          .map(String::trim)
+          .filter(group -> !group.isBlank())
+          .forEach(entity.getCandidateGroups()::add);
+    }
   }
 
 }

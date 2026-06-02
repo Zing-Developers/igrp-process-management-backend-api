@@ -15,8 +15,8 @@ public interface UserProfileRepository {
 
   PageableLista<UserProfile> findAll(UserProfileFilter filter);
 
-  Optional<UserProfile> findBySubject(String id);
+  Optional<UserProfile> findBySubjectOrEmail(String sub, String email);
 
-  List<UserProfile> findBySubject(Set<String> ids);
+  List<UserProfile> findBySubjectOrEmails(Set<String> subs, Set<String> emails);
 
 }

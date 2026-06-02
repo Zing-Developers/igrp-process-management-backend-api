@@ -30,6 +30,7 @@ public class TaskInstanceFilter {
   private List<VariablesExpression> variablesExpressions;
 
   private Set<String> candidateGroups;
+  private Set<String> candidateUsers;
   private Set<String> contextUserGroups;
 
   private final Name name;
@@ -48,6 +49,7 @@ public class TaskInstanceFilter {
       Code applicationBase,
       Name processName,
       Set<String> candidateGroups,
+      Set<String> candidateUsers,
       Code user,
       TaskInstanceStatus status,
       LocalDate dateFrom,
@@ -67,6 +69,7 @@ public class TaskInstanceFilter {
     this.processNumber = processNumber;
     this.processName = processName;
     this.candidateGroups = candidateGroups;
+    this.candidateUsers = candidateUsers == null ? new HashSet<>() : candidateUsers;
     this.user = user;
     this.status = status;
     this.dateFrom = dateFrom;

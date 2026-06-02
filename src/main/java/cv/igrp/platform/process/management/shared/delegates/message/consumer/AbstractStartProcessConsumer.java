@@ -2,9 +2,11 @@ package cv.igrp.platform.process.management.shared.delegates.message.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstance;
+import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRuleRequest;
 import cv.igrp.platform.process.management.processruntime.domain.service.ProcessInstanceService;
 import cv.igrp.platform.process.management.shared.delegates.message.dto.ProcessVariableDTO;
 import cv.igrp.platform.process.management.shared.delegates.message.dto.StartProcessDTO;
+import cv.igrp.platform.process.management.shared.delegates.message.dto.TaskAssignmentRuleDTO;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
@@ -19,7 +21,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -103,8 +105,38 @@ public abstract class AbstractStartProcessConsumer {
         .businessKey(dto.getBusinessKey() != null ? Code.create(dto.getBusinessKey()) : null)
         .applicationBase(Code.create(dto.getApplicationBase()))
         .variables(vars)
+        .assignmentRules(toAssignmentRules(dto.getAssignmentRules()))
         .priority(dto.getPriority())
         .build();
+  }
+
+  private List<TaskAssignmentRuleRequest> toAssignmentRules(List<TaskAssignmentRuleDTO> dtos) {
+    if (dtos == null || dtos.isEmpty()) {
+      return List.of();
+    }
+    return dtos.stream()
+        .filter(dto -> dto.getTaskKey() != null && !dto.getTaskKey().isBlank())
+        .map(dto -> TaskAssignmentRuleRequest.builder()
+            .taskKey(Code.create(dto.getTaskKey().trim()))
+            .assignee(dto.getAssignee() != null && !dto.getAssignee().isBlank()
+                ? Code.create(dto.getAssignee().trim())
+                : null)
+            .candidateUsers(splitCommaSeparated(dto.getCandidateUsers()))
+            .assignmentMode(dto.getAssignmentMode())
+            .priority(dto.getPriority())
+            .build())
+        .toList();
+  }
+
+  private List<String> splitCommaSeparated(String value) {
+    if (value == null || value.isBlank()) {
+      return List.of();
+    }
+    return Arrays.stream(value.split(","))
+        .map(String::trim)
+        .filter(item -> !item.isBlank())
+        .distinct()
+        .toList();
   }
 
   protected List<SimpleGrantedAuthority> extractAuthorities(Jwt jwt) {

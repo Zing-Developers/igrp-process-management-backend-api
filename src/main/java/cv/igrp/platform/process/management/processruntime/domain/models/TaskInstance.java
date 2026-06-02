@@ -40,6 +40,7 @@ public class TaskInstance {
   private Code endedBy;
   private final List<TaskInstanceEvent> taskInstanceEvents;
   private final Set<String> candidateGroups;
+  private final Set<String> candidateUsers;
   private final Map<String, Object> variables;
   private final Map<String,Object> forms;
   private Map<String, Object> processVariables;
@@ -75,6 +76,7 @@ public class TaskInstance {
       Code endedBy,
       List<TaskInstanceEvent> taskInstanceEvents,
       Set<String> candidateGroups,
+      Set<String> candidateUsers,
       Map<String, Object> variables,
       Map<String, Object> forms,
       Map<String, Object> processVariables,
@@ -109,6 +111,9 @@ public class TaskInstance {
     this.forms = forms != null ? forms : new HashMap<>();
     this.candidateGroups = candidateGroups != null
         ? candidateGroups
+        : new HashSet<>();
+    this.candidateUsers = candidateUsers != null
+        ? candidateUsers
         : new HashSet<>();
     this.processVariables = processVariables != null ? processVariables : new HashMap<>();
     this.dueDate = dueDate;
@@ -219,8 +224,23 @@ public class TaskInstance {
     this.processVariables.putAll(variables);
   }
 
-  public void addCandidateGroup(TaskOperationData data) {
+  public void resolveCandidateUsers(Collection<String> users) {
+    this.candidateUsers.clear();
+    if (users == null) {
+      return;
+    }
+    users.stream()
+        .filter(Objects::nonNull)
+        .map(String::trim)
+        .filter(user -> !user.isBlank())
+        .forEach(this.candidateUsers::add);
+  }
 
+  public void addCandidateGroup(TaskOperationData data) {
+    addCandidates(data);
+  }
+
+  public void addCandidates(TaskOperationData data) {
     mergeCandidateGroups(data.getCandidateGroups());
     updateAssignmentMetadata(data.getPriority());
 
