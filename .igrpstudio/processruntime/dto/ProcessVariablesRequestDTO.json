@@ -18,6 +18,20 @@
       "primaryKey": false,
       "collectionType": "list",
       "module": "processruntime"
+    },
+    {
+      "name": "assignmentRules",
+      "objectType": "dto",
+      "type": "ProcessTaskAssignmentRuleDTO",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false,
+      "collectionType": "list",
+      "module": "processruntime"
     }
   ],
   "id": "hljgvtmln7"

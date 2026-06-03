@@ -102,7 +102,8 @@ public class ActivityInstanceService {
   }
 
   private void resolveUserProfiles(ProcessArtifactEvent processTimelineEvent) {
-    userProfileRepository.findBySubject(processTimelineEvent.getAssignee())
+    String assignee = processTimelineEvent.getAssignee();
+    userProfileRepository.findBySubjectOrEmail(assignee, assignee)
         .ifPresent(processTimelineEvent::resolveUserProfileAssignee);
   }
 

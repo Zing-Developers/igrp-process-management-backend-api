@@ -13,10 +13,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,11 +42,12 @@ class AssignTaskCommandHandlerTest {
     String targetUserName = "igrp@nosi.cv";
     String note = "This is a note";
     String candidateGroups = "group1,group2";
+    String candidateUsers = "candidate1@nosi.cv,candidate2@nosi.cv";
     Integer priority = 3;
 
     when(userContext.getCurrentUser()).thenReturn(Code.create(currentUserName));
 
-    AssignTaskDTO dto = new AssignTaskDTO(targetUserName, priority, note, candidateGroups);
+    AssignTaskDTO dto = new AssignTaskDTO(targetUserName, priority, note, candidateGroups, candidateUsers);
     command = new AssignTaskCommand();
     command.setId(taskId);
     command.setAssigntaskdto(dto);
@@ -60,7 +63,10 @@ class AssignTaskCommandHandlerTest {
     assertEquals(204, response.getStatusCode().value());
 
     // verify
-    verify(taskInstanceService, times(1)).assignTask(any(TaskOperationData.class));
+    verify(taskInstanceService, times(1)).assignTask(argThat(data ->
+        data.getCandidateGroups().equals(List.of("group1", "group2"))
+            && data.getCandidateUsers().equals(List.of("candidate1@nosi.cv", "candidate2@nosi.cv"))
+    ));
 
     verifyNoMoreInteractions(taskInstanceService, userContext);
   }

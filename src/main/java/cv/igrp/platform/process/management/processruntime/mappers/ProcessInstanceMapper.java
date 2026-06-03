@@ -4,6 +4,7 @@ import cv.igrp.framework.process.runtime.core.engine.process.model.IGRPProcessSt
 import cv.igrp.platform.process.management.processruntime.application.dto.*;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstance;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessStatistics;
+import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRuleRequest;
 import cv.igrp.platform.process.management.shared.application.constants.ProcessInstanceStatus;
 import cv.igrp.platform.process.management.shared.application.dto.StartProcessDTO;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
@@ -14,6 +15,7 @@ import cv.igrp.platform.process.management.shared.infrastructure.persistence.ent
 import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -107,8 +109,38 @@ public class ProcessInstanceMapper {
         .businessKey(startProcessRequestDTO.getBusinessKey() != null ? Code.create(startProcessRequestDTO.getBusinessKey()) : null)
         .applicationBase(startProcessRequestDTO.getApplicationBase()!= null ? Code.create(startProcessRequestDTO.getApplicationBase()) : null)
         .variables(vars)
+        .assignmentRules(toAssignmentRules(startProcessRequestDTO.getAssignmentRules()))
         .priority(startProcessRequestDTO.getPriority())
         .build();
+  }
+
+  public List<TaskAssignmentRuleRequest> toAssignmentRules(List<ProcessTaskAssignmentRuleDTO> dtos) {
+    if (dtos == null || dtos.isEmpty()) {
+      return List.of();
+    }
+    return dtos.stream()
+        .filter(dto -> dto.getTaskKey() != null && !dto.getTaskKey().isBlank())
+        .map(dto -> TaskAssignmentRuleRequest.builder()
+            .taskKey(Code.create(dto.getTaskKey().trim()))
+            .assignee(dto.getAssignee() != null && !dto.getAssignee().isBlank()
+                ? Code.create(dto.getAssignee().trim())
+                : null)
+            .candidateUsers(splitCommaSeparated(dto.getCandidateUsers()))
+            .assignmentMode(dto.getAssignmentMode())
+            .priority(dto.getPriority())
+            .build())
+        .toList();
+  }
+
+  private List<String> splitCommaSeparated(String value) {
+    if (value == null || value.isBlank()) {
+      return List.of();
+    }
+    return Arrays.stream(value.split(","))
+        .map(String::trim)
+        .filter(item -> !item.isBlank())
+        .distinct()
+        .toList();
   }
 
   public ProcessInstanceDTO toDTO(ProcessInstance processInstance) {

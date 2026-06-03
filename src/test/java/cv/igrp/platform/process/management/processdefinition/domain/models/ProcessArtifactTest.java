@@ -91,8 +91,7 @@ class ProcessArtifactTest {
   }
 
   @Test
-  void shouldDefaultFormKeyWhenNull() {
-
+  void shouldUseDefaultValueWhenFormKeyIsNull() {
     ProcessArtifact artifact = ProcessArtifact.builder()
         .name(name)
         .key(key)
@@ -101,6 +100,7 @@ class ProcessArtifactTest {
         .build();
 
     assertEquals(ProcessArtifact.DEFAULT_VALUE, artifact.getFormKey());
+    assertFalse(artifact.isFormKeySet());
   }
 
   @Test

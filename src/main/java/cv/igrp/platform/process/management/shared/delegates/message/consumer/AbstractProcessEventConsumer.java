@@ -2,8 +2,11 @@ package cv.igrp.platform.process.management.shared.delegates.message.consumer;
 
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRuleRequest;
 import cv.igrp.platform.process.management.processruntime.domain.service.ProcessInstanceService;
 import cv.igrp.platform.process.management.shared.delegates.message.dto.ProcessEventDTO;
+import cv.igrp.platform.process.management.shared.delegates.message.dto.TaskAssignmentRuleDTO;
+import cv.igrp.platform.process.management.shared.domain.models.Code;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
@@ -17,6 +20,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +52,7 @@ public abstract class AbstractProcessEventConsumer {
     }
 
     Map<String, Object> vars = event.getVariables() != null ? event.getVariables() : Collections.emptyMap();
+    List<TaskAssignmentRuleRequest> assignmentRules = toAssignmentRules(event.getAssignmentRules());
 
     try {
 
@@ -73,10 +78,10 @@ public abstract class AbstractProcessEventConsumer {
 
       if (event.getMessageName() != null && !event.getMessageName().isBlank()) {
         LOGGER.info("Correlating message '{}' for businessKey '{}'", event.getMessageName(), event.getBusinessKey());
-        processInstanceService.correlateMessage(event.getBusinessKey(), event.getMessageName(), vars);
+        processInstanceService.correlateMessage(event.getBusinessKey(), event.getMessageName(), vars, assignmentRules);
       } else {
         LOGGER.info("Signaling process instance for businessKey '{}'", event.getBusinessKey());
-        processInstanceService.signal(event.getBusinessKey(), event.getTaskId(), vars);
+        processInstanceService.signal(event.getBusinessKey(), event.getTaskId(), vars, assignmentRules);
       }
 
       LOGGER.info("Processed event successfully for businessKey: {}", event.getBusinessKey());
@@ -93,6 +98,35 @@ public abstract class AbstractProcessEventConsumer {
       LOGGER.error("Failed to parse ProcessEventDTO: {}", e.getMessage());
       return null;
     }
+  }
+
+  private List<TaskAssignmentRuleRequest> toAssignmentRules(List<TaskAssignmentRuleDTO> dtos) {
+    if (dtos == null || dtos.isEmpty()) {
+      return List.of();
+    }
+    return dtos.stream()
+        .filter(dto -> dto.getTaskKey() != null && !dto.getTaskKey().isBlank())
+        .map(dto -> TaskAssignmentRuleRequest.builder()
+            .taskKey(Code.create(dto.getTaskKey().trim()))
+            .assignee(dto.getAssignee() != null && !dto.getAssignee().isBlank()
+                ? Code.create(dto.getAssignee().trim())
+                : null)
+            .candidateUsers(splitCommaSeparated(dto.getCandidateUsers()))
+            .assignmentMode(dto.getAssignmentMode())
+            .priority(dto.getPriority())
+            .build())
+        .toList();
+  }
+
+  private List<String> splitCommaSeparated(String value) {
+    if (value == null || value.isBlank()) {
+      return List.of();
+    }
+    return Arrays.stream(value.split(","))
+        .map(String::trim)
+        .filter(item -> !item.isBlank())
+        .distinct()
+        .toList();
   }
 
   protected List<SimpleGrantedAuthority> extractAuthorities(Jwt jwt) {

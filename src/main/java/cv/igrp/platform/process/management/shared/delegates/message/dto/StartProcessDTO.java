@@ -20,5 +20,6 @@ public class StartProcessDTO {
   private Integer priority ;
 
   private List<ProcessVariableDTO> variables = new ArrayList<>();
+  private List<TaskAssignmentRuleDTO> assignmentRules = new ArrayList<>();
 
 }
