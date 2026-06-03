@@ -15,7 +15,6 @@ import cv.igrp.platform.process.management.shared.infrastructure.persistence.ent
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.TaskInstanceEntityRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
-import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.SetJoin;
@@ -116,59 +115,59 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
 
     LOGGER.debug("Filter: {}", filter);
 
-    Specification<TaskInstanceEntity> spec = (root, query, builder) -> null;
+    Specification<TaskInstanceEntity> spec = (_, _, _) -> null;
 
-    spec = spec.and((root, query, cb) ->
+    spec = spec.and((root, _, cb) ->
         cb.equal(root.get("processInstanceId").get("isArchived"), filter.isArchived()));
 
     if (filter.getProcessInstanceId() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.equal(root.get("processInstanceId").get("id"), filter.getProcessInstanceId().getValue()));
     }
 
     if (filter.getProcessNumber() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.or(cb.equal(root.get("processInstanceId").get("number"), filter.getProcessNumber().getValue()),
               cb.equal(root.get("processInstanceId").get("businessKey"), filter.getProcessNumber().getValue())));
     }
 
     if (filter.getApplicationBase() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.equal(root.get("processInstanceId").get("applicationBase"), filter.getApplicationBase().getValue()));
     }
 
     if (filter.getName() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.like(root.get("name"), "%" + filter.getName().getValue() + "%"));
     }
 
     if (filter.getProcessName() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.like(root.get("processInstanceId").get("name"), "%" + filter.getProcessName().getValue() + "%"));
     }
 
     if (filter.getProcessRealeaseKey() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.equal(root.get("processInstanceId").get("procReleaseKey"), filter.getProcessRealeaseKey().getValue()));
     }
 
     if (filter.getStatus() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.equal(root.get("status"), filter.getStatus().getCode()));
     }
 
     if (filter.getDateFrom() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.greaterThanOrEqualTo(root.get("startedAt"), filter.getDateFrom().atStartOfDay()));
     }
 
     if (filter.getDateTo() != null) {
-      spec = spec.and((root, query, cb) ->
+      spec = spec.and((root, _, cb) ->
           cb.lessThanOrEqualTo(root.get("startedAt"), filter.getDateTo().atTime(LocalTime.MAX)));
     }
 
     if (!filter.getVariablesExpressions().isEmpty()) {
-      spec = spec.and((root, query, cb) -> {
+      spec = spec.and((root, _, cb) -> {
         List<Predicate> predicates = filter.getVariablesExpressions()
             .stream()
             .map(expr -> buildVariablePredicate(expr, root, cb))
@@ -189,7 +188,7 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
     // Client-supplied candidate groups filter
     if (filter.getCandidateGroups() != null && !filter.getCandidateGroups().isEmpty()) {
       spec = spec.and((root, query, cb) ->
-          candidateGroupsPredicate(root, query, cb, filter.getCandidateGroups(), JoinType.INNER));
+          candidateGroupExistsPredicate(root, query, cb, filter.getCandidateGroups()));
     }
 
     if (filter.getCandidateUsers() != null && !filter.getCandidateUsers().isEmpty()) {
@@ -365,19 +364,19 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
 
     // Assigned: ASSIGNED tasks where user is the assignee
     long assigned = countBySpec(statusSpec(TaskInstanceStatus.ASSIGNED)
-        .and((root, query, cb) -> cb.equal(root.get("assignedBy"), currentUser)));
+        .and((root, _, cb) -> cb.equal(root.get("assignedBy"), currentUser)));
 
     // Suspended: SUSPENDED tasks where user is the assignee
     long suspended = countBySpec(statusSpec(TaskInstanceStatus.SUSPENDED)
-        .and((root, query, cb) -> cb.equal(root.get("assignedBy"), currentUser)));
+        .and((root, _, cb) -> cb.equal(root.get("assignedBy"), currentUser)));
 
     // Completed: COMPLETED tasks where user ended them
     long completed = countBySpec(statusSpec(TaskInstanceStatus.COMPLETED)
-        .and((root, query, cb) -> cb.equal(root.get("endedBy"), currentUser)));
+        .and((root, _, cb) -> cb.equal(root.get("endedBy"), currentUser)));
 
     // Canceled: CANCELED tasks where user ended them
     long canceled = countBySpec(statusSpec(TaskInstanceStatus.CANCELED)
-        .and((root, query, cb) -> cb.equal(root.get("endedBy"), currentUser)));
+        .and((root, _, cb) -> cb.equal(root.get("endedBy"), currentUser)));
 
     return TaskStatistics.builder()
         .totalTaskInstances(total)
@@ -390,7 +389,7 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
   }
 
   private Specification<TaskInstanceEntity> statusSpec(TaskInstanceStatus status) {
-    return (root, query, cb) -> cb.equal(root.get("status"), status);
+    return (root, _, cb) -> cb.equal(root.get("status"), status);
   }
 
   private Specification<TaskInstanceEntity> userVisibilitySpec(String currentUser, Set<String> userGroups) {
@@ -401,7 +400,7 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
         orPredicates.add(candidateUserRulePredicate(root, query, cb, currentUser));
       }
       if (!userGroups.isEmpty()) {
-        orPredicates.add(candidateGroupsPredicate(root, query, cb, userGroups, JoinType.LEFT));
+        orPredicates.add(candidateGroupExistsPredicate(root, query, cb, userGroups));
       }
       if (orPredicates.isEmpty()) {
         return cb.disjunction();
@@ -436,23 +435,6 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
     };
   }
 
-  private Predicate candidateGroupsPredicate(
-      Root<TaskInstanceEntity> root,
-      jakarta.persistence.criteria.CriteriaQuery<?> query,
-      CriteriaBuilder cb,
-      Set<String> groups,
-      JoinType joinType
-  ) {
-    query.distinct(true);
-    SetJoin<TaskInstanceEntity, String> candidateGroups = root.joinSet("candidateGroups", joinType);
-    CriteriaBuilder.In<String> in = cb.in(candidateGroups);
-    groups.stream()
-        .filter(Objects::nonNull)
-        .map(String::trim)
-        .filter(group -> !group.isBlank())
-        .forEach(in::value);
-    return in;
-  }
 
   private Predicate candidateUserRulePredicate(
       Root<TaskInstanceEntity> root,
