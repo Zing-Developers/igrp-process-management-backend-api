@@ -1,0 +1,16 @@
+{
+  "type": "enum",
+  "module": "shared",
+  "name": "TaskAssignmentMode",
+  "values": [
+    {
+      "name": "ALWAYS",
+      "attributes": []
+    },
+    {
+      "name": "ONE_TIME",
+      "attributes": []
+    }
+  ],
+  "attributes": []
+}

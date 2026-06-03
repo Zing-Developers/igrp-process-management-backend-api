@@ -24,6 +24,7 @@ import cv.igrp.platform.process.management.processruntime.mappers.ProcessInstanc
 import cv.igrp.platform.process.management.processruntime.mappers.TaskInstanceMapper;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
 import cv.igrp.platform.process.management.shared.domain.models.Name;
+import org.activiti.engine.TaskService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -52,6 +53,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   private final ProcessInstanceTaskStatusMapper processInstanceTaskStatusMapper;
   private final TaskQueryService taskQueryService;
   private final ActivityQueryService activityQueryService;
+  private final TaskService taskService;
 
   public RuntimeProcessEngineRepositoryImpl(
       ProcessDefinitionAdapter processDefinitionAdapter,
@@ -61,7 +63,8 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
       TaskActionService taskActionService,
       ProcessInstanceTaskStatusMapper processInstanceTaskStatusMapper,
       TaskQueryService taskQueryService,
-      ActivityQueryService activityQueryService
+      ActivityQueryService activityQueryService,
+      TaskService taskService
   ) {
     this.processDefinitionAdapter = processDefinitionAdapter;
     this.processManagerAdapter = processManagerAdapter;
@@ -71,6 +74,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
     this.processInstanceTaskStatusMapper = processInstanceTaskStatusMapper;
     this.taskQueryService = taskQueryService;
     this.activityQueryService = activityQueryService;
+    this.taskService = taskService;
   }
 
   @Override
@@ -398,6 +402,19 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
       LOGGER.error("Failed to add candidate group '{}' to task '{}'", groupId, taskId, e);
       throw new RuntimeProcessEngineException(
           String.format("Unable to add candidate group '%s' to task '%s'", groupId, taskId), e
+      );
+    }
+  }
+
+  @Override
+  public void addCandidateUser(String taskId, String userId) throws RuntimeProcessEngineException {
+    try {
+      taskService.addCandidateUser(taskId, userId);
+      LOGGER.info("Added candidate user '{}' to task '{}'", userId, taskId);
+    } catch (Exception e) {
+      LOGGER.error("Failed to add candidate user '{}' to task '{}'", userId, taskId, e);
+      throw new RuntimeProcessEngineException(
+          String.format("Unable to add candidate user '%s' to task '%s'", userId, taskId), e
       );
     }
   }

@@ -21,6 +21,9 @@ import cv.igrp.platform.process.management.processruntime.application.queries.*;
 import cv.igrp.framework.core.domain.CommandBus;
 import cv.igrp.platform.process.management.processruntime.application.commands.*;
 import cv.igrp.platform.process.management.processruntime.application.dto.VariablesFilterDTO;
+import cv.igrp.platform.process.management.processruntime.application.dto.TaskAssignmentRuleListDTO;
+import cv.igrp.platform.process.management.processruntime.application.dto.TaskAssignmentRuleListPageDTO;
+import cv.igrp.platform.process.management.processruntime.application.dto.TaskAssignmentRuleUpdateDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskInstanceListPageDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskInstanceDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.UnclaimTaskDTO;
@@ -30,6 +33,7 @@ import java.util.List;
 import cv.igrp.platform.process.management.shared.application.dto.ConfigParameterDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskVariablesFormsDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskInstanceStatsDTO;
+import cv.igrp.platform.process.management.shared.application.constants.TaskAssignmentMode;
 
 @IgrpController
 @RestController
@@ -71,6 +75,7 @@ public class TaskInstancesController {
     @RequestParam(value = "processReleaseKey", required = false) String processReleaseKey,
     @RequestParam(value = "applicationBase", required = false) String applicationBase,
     @RequestParam(value = "candidateGroups", required = false) String candidateGroups,
+    @RequestParam(value = "candidateUsers", required = false) String candidateUsers,
     @RequestParam(value = "user", required = false) String user,
     @RequestParam(value = "status", required = false) String status,
     @RequestParam(value = "dateFrom", required = false) String dateFrom,
@@ -82,7 +87,7 @@ public class TaskInstancesController {
     @RequestParam(value = "filterByCurrentUser", required = false) boolean filterByCurrentUser)
   {
 
-      final var command = new ListTaskInstancesCommand(listTaskInstancesRequest, processInstanceId, processNumber, processReleaseKey, applicationBase, candidateGroups, user, status, dateFrom, dateTo, page, size, name, processName, filterByCurrentUser);
+      final var command = new ListTaskInstancesCommand(listTaskInstancesRequest, processInstanceId, processNumber, processReleaseKey, applicationBase, candidateGroups, candidateUsers, user, status, dateFrom, dateTo, page, size, name, processName, filterByCurrentUser);
 
        ResponseEntity<TaskInstanceListPageDTO> response = commandBus.send(command);
 
@@ -438,6 +443,109 @@ public class TaskInstancesController {
       ResponseEntity<TaskInstanceStatsDTO> response = queryBus.handle(query);
 
       return response;
+  }
+
+      @GetMapping(
+   value = "assignment-rules"
+  )
+  @Operation(
+    summary = "GET method to handle operations for List task assignment rules",
+    description = "GET method to handle operations for List task assignment rules",
+    responses = {
+      @ApiResponse(
+          responseCode = "200",
+          description = "List task assignment rules",
+          content = @Content(
+              mediaType = "application/json",
+              schema = @Schema(
+                  implementation = TaskAssignmentRuleListPageDTO.class,
+                  type = "object")
+          )
+      )
+    }
+  )
+
+  public ResponseEntity<TaskAssignmentRuleListPageDTO> listTaskAssignmentRules(
+    @RequestParam(value = "processInstanceId", required = false) String processInstanceId,
+    @RequestParam(value = "processDefinitionKey", required = false) String processDefinitionKey,
+    @RequestParam(value = "taskDefinitionKey", required = false) String taskDefinitionKey,
+    @RequestParam(value = "assignee", required = false) String assignee,
+    @RequestParam(value = "candidateUsers", required = false) String candidateUsers,
+    @RequestParam(value = "assignmentMode", required = false) TaskAssignmentMode assignmentMode,
+    @RequestParam(value = "consumed", required = false) Boolean consumed,
+    @RequestParam(value = "active", required = false) Boolean active,
+    @RequestParam(value = "createdByTask", required = false) String createdByTask,
+    @RequestParam(value = "page", required = false) Integer page,
+    @RequestParam(value = "size", required = false) Integer size)
+  {
+
+      final var command = new ListTaskAssignmentRulesCommand(processInstanceId, processDefinitionKey, taskDefinitionKey, assignee, candidateUsers, assignmentMode, consumed, active, createdByTask, page, size);
+
+       ResponseEntity<TaskAssignmentRuleListPageDTO> response = commandBus.send(command);
+
+       return response;
+  }
+
+      @PutMapping(
+   value = "assignment-rules/{id}"
+  )
+  @Operation(
+    summary = "PUT method to handle operations for Update task assignment rule",
+    description = "PUT method to handle operations for Update task assignment rule",
+    responses = {
+      @ApiResponse(
+          responseCode = "200",
+          description = "Task assignment rule updated",
+          content = @Content(
+              mediaType = "application/json",
+              schema = @Schema(
+                  implementation = TaskAssignmentRuleListDTO.class,
+                  type = "object")
+          )
+      )
+    }
+  )
+
+  public ResponseEntity<TaskAssignmentRuleListDTO> updateTaskAssignmentRule(@Valid @RequestBody TaskAssignmentRuleUpdateDTO updateTaskAssignmentRuleRequest
+    , @PathVariable(value = "id") String id)
+  {
+
+      final var command = new UpdateTaskAssignmentRuleCommand(updateTaskAssignmentRuleRequest, id);
+
+       ResponseEntity<TaskAssignmentRuleListDTO> response = commandBus.send(command);
+
+       return response;
+  }
+
+      @DeleteMapping(
+   value = "assignment-rules/{id}"
+  )
+  @Operation(
+    summary = "DELETE method to handle operations for Delete task assignment rule",
+    description = "DELETE method to handle operations for Delete task assignment rule",
+    responses = {
+      @ApiResponse(
+          responseCode = "204",
+          description = "No content",
+          content = @Content(
+              mediaType = "",
+              schema = @Schema(
+                  implementation = String.class,
+                  type = "String")
+          )
+      )
+    }
+  )
+
+  public ResponseEntity<?> deleteTaskAssignmentRule(
+    @PathVariable(value = "id") String id)
+  {
+
+      final var command = new DeleteTaskAssignmentRuleCommand(id);
+
+       ResponseEntity<?> response = commandBus.send(command);
+
+       return response;
   }
 
       @PostMapping(

@@ -2,58 +2,48 @@ package cv.igrp.platform.process.management.shared.config;
 
 import java.util.Optional;
 
-import org.jspecify.annotations.NonNull;
-import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+
 
 public class ApplicationAuditorAware implements AuditorAware<String> {
 
-  @Value("${spring.profiles.active:}")
-  private String activeProfile;
+  private static final Logger LOGGER = LoggerFactory.getLogger(ApplicationAuditorAware.class);
 
-  private static final String SYSTEM_FALLBACK = "system-bot@irn.mj.pt";
+  private static final String SYSTEM_FALLBACK = "system-bot@nosi.cv";
 
   @Override
-  public @NonNull Optional<String> getCurrentAuditor() {
-    var preferredUsername = getPreferredUsername();
-    return Optional.ofNullable(preferredUsername).filter(s -> !s.isBlank());
+  public Optional<String> getCurrentAuditor() {
+    return Optional.ofNullable(getCurrentSubjectName()).filter(s -> !s.isBlank());
   }
 
-  /**
-   * Retrieves a username for auditing purposes.
-   * Priority:
-   * 1) preferred_username claim from JWT if present
-   * 2) Authentication#getName() if an Authentication exists
-   * 3) Fallback to system account (non-empty in non-dev/staging)
-   */
-  public String getPreferredUsername() {
 
-    // In dev/staging we allow empty auditor to avoid noisy data during local testing
-    if ("development".equalsIgnoreCase(activeProfile) || "staging".equalsIgnoreCase(activeProfile)) {
-      return SYSTEM_FALLBACK;
-    }
-
+  private String getCurrentSubjectName() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-    if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth) {
+    if (authentication instanceof JwtAuthenticationToken jwtAuth) {
       Jwt jwt = jwtAuth.getToken();
-      String preferred = jwt.getClaimAsString("preferred_username");
-      if (preferred != null && !preferred.isBlank()) {
-        return preferred;
+      String sub = jwt.getClaimAsString("sub");
+      if (sub != null && !sub.isBlank()) {
+        LOGGER.debug("Resolved auditor from JWT sub: {}", sub);
+        return sub;
       }
     }
 
     if (authentication != null) {
       String name = authentication.getName();
       if (name != null && !name.isBlank()) {
+        LOGGER.debug("Resolved auditor from authentication name: {}", name);
         return name;
       }
     }
 
-    // As a last resort, return a stable system value so auditing doesn't break background processing
+    LOGGER.warn("No authenticated user found, falling back to system account");
     return SYSTEM_FALLBACK;
   }
 

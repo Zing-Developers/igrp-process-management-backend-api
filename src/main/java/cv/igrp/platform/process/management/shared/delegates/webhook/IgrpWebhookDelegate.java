@@ -1,6 +1,7 @@
 package cv.igrp.platform.process.management.shared.delegates.webhook;
 
 import com.google.gson.JsonElement;
+import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import cv.igrp.platform.process.management.shared.util.ObjectUtil;
 import org.activiti.engine.delegate.DelegateExecution;
 import org.activiti.engine.delegate.Expression;
@@ -49,10 +50,13 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     log.info("[IgrpWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
     String baseUrlVariable = (String) execution.getVariable("webhookUrl");
     String baseUrl = Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution).toString() : null;
+    baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
     String pathVariable = (String)  execution.getVariable("webhookUrlPath");
     String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
+    path = EnvVarUtil.resolveEnvVars(path, "webhookUrlPath");
     String queryParams = (String) execution.getVariable("webhookUrlQueryParams");
     String query = Objects.nonNull(queryParams)? queryParams : Objects.nonNull(webhookQueryParams) ? (String) webhookQueryParams.getValue(execution) : null;
+    query = EnvVarUtil.resolveEnvVars(query, "webhookQueryParams");
 
     String url = UriComponentsBuilder.fromUriString(baseUrl)
         .path(path != null ? path : "")
@@ -63,16 +67,20 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     String methodVariable = (String) execution.getVariable("webhookMethod");
     String method = ofNullable(Objects.nonNull(methodVariable)? methodVariable : Objects.nonNull(webhookMethod) ? webhookMethod.getValue(execution) : null)
         .orElseThrow(() -> new IllegalArgumentException("webhookMethod argument is required and was not provided"))
-        .toString().toUpperCase();
+        .toString();
+    method = EnvVarUtil.resolveEnvVars(method, "webhookMethod").toUpperCase();
 
     Object payloadVariable = execution.getVariable("webhookPayload");
     Object payload = Objects.nonNull(payloadVariable) ? payloadVariable : Objects.nonNull(webhookPayload) ? webhookPayload.getValue(execution) : "";
+    if (payload instanceof String payloadStr) {
+      payload = EnvVarUtil.resolveEnvVars(payloadStr, "webhookPayload");
+    }
 
     Object payloadHeader = execution.getVariable("webhookPayloadHeader");
-    Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(
-        ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
-            .orElse("").toString()
-    );
+    String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
+        .orElse("").toString();
+    payloadHeaderStr = EnvVarUtil.resolveEnvVars(payloadHeaderStr, "webhookPayloadHeader");
+    Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
     Object responseBody;
     int statusCode;

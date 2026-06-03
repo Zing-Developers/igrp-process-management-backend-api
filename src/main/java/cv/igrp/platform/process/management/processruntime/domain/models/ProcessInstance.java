@@ -10,7 +10,9 @@ import lombok.ToString;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -42,6 +44,7 @@ public class ProcessInstance {
   private String name;
   private String progress;
   private Map<String, Object> variables;
+  private List<TaskAssignmentRuleRequest> assignmentRules;
   private Integer priority;
 
   private boolean isArchived;
@@ -73,6 +76,7 @@ public class ProcessInstance {
                          String name,
                          String progress,
                          Map<String, Object> variables,
+                         List<TaskAssignmentRuleRequest> assignmentRules,
                          Integer priority,
                          boolean isArchived,
                          UserProfile userProfileStartedBy,
@@ -101,6 +105,7 @@ public class ProcessInstance {
     this.name = name;
     this.progress = progress;
     this.variables = variables == null ? new HashMap<>() : variables;
+    this.assignmentRules = assignmentRules == null ? new ArrayList<>() : new ArrayList<>(assignmentRules);
     this.priority = priority == null ? DEFAULT_PRIORITY : priority;
     this.isArchived = isArchived;
     this.userProfileStartedBy = userProfileStartedBy;
@@ -166,6 +171,12 @@ public class ProcessInstance {
 
   public void addVariables(Map<String,Object> variables) {
     this.variables.putAll(variables);
+  }
+
+  public void addAssignmentRules(List<TaskAssignmentRuleRequest> assignmentRules) {
+    if (assignmentRules != null) {
+      this.assignmentRules.addAll(assignmentRules);
+    }
   }
 
   public void archive(){

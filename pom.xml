@@ -36,9 +36,10 @@
             <url>https://sonatype.nosi.cv/repository/igrp-framework/</url>
         </repository>
     </repositories>
+
     <properties>
         <igrp.version>0.1.0-beta.1</igrp.version>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <spring-cloud.version>2025.0.0</spring-cloud.version>
         <springdoc.version>2.8.9</springdoc.version>
     </properties>
@@ -136,19 +137,19 @@
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-core</artifactId>
-            <version>0.1.0-beta.20</version>
+            <version>0.1.0-beta.23</version>
         </dependency>
 
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-activiti</artifactId>
-            <version>0.1.0-beta.20</version>
+            <version>0.1.0-beta.23</version>
         </dependency>
 
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-auth-core</artifactId>
-            <version>0.1.0-beta.20</version>
+            <version>0.1.0-beta.23</version>
         </dependency>
 
         <dependency>
@@ -207,15 +208,15 @@
         </dependency>
 
         <dependency>
-           <groupId>cv.igrp.framework</groupId>
-           <artifactId>process-runtime-irn-integration</artifactId>
-           <version>0.1.0-beta.22</version>
+            <groupId>cv.igrp.framework</groupId>
+            <artifactId>process-runtime-irn-integration</artifactId>
+            <version>0.1.0-beta.23</version>
         </dependency>
 
         <dependency>
-           <groupId>cv.igrp.framework</groupId>
-           <artifactId>process-runtime-auth-irn</artifactId>
-           <version>0.1.0-beta.22</version>
+            <groupId>cv.igrp.framework</groupId>
+            <artifactId>process-runtime-auth-irn</artifactId>
+            <version>0.1.0-beta.23</version>
         </dependency>
 
     </dependencies>
@@ -274,6 +275,7 @@
             <plugin>
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
+                <version>12.2.2</version>
                 <configuration>
                     <outputDirectory>${project.build.directory}/reports</outputDirectory>
                     <failBuildOnCVSS>10</failBuildOnCVSS>
@@ -290,7 +292,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
+                <version>0.8.14</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>

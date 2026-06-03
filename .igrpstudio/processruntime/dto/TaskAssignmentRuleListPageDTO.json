@@ -1,0 +1,28 @@
+{
+  "type": "dto",
+  "module": "processruntime",
+  "name": "TaskAssignmentRuleListPageDTO",
+  "template": "classic",
+  "enableCustonValidation": false,
+  "extends": {
+    "name": "Page",
+    "module": "shared"
+  },
+  "attributes": [
+    {
+      "name": "content",
+      "objectType": "dto",
+      "type": "TaskAssignmentRuleListDTO",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false,
+      "collectionType": "list",
+      "module": "processruntime"
+    }
+  ],
+  "id": "task-assignment-rule-list-page-dto"
+}

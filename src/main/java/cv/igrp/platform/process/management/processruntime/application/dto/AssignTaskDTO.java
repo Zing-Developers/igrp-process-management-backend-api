@@ -32,4 +32,7 @@ public class AssignTaskDTO  {
   
   private String candidateGroups ;
 
+
+  private String candidateUsers ;
+
 }

@@ -1,5 +1,6 @@
 package cv.igrp.platform.process.management.shared.delegates.webhook;
 
+import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import cv.igrp.platform.process.management.shared.util.MessageUtil;
 import cv.igrp.platform.process.management.shared.util.ObjectUtil;
 import org.activiti.engine.delegate.DelegateExecution;
@@ -49,8 +50,10 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
     log.info("[IgrpProcessWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
     String baseUrlVariable = (String) execution.getVariable("webhookUrl");
     String baseUrl = Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution).toString() : null;
+    baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
     String pathVariable = (String)  execution.getVariable("webhookUrlPath");
     String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
+    path = EnvVarUtil.resolveEnvVars(path, "webhookUrlPath");
 
     String url = UriComponentsBuilder.fromUriString(baseUrl)
         .path(path != null ? path : "")
@@ -60,10 +63,10 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
     String payload = messageUtil.createMessage(execution);
 
     Object payloadHeader = execution.getVariable("webhookPayloadHeader");
-    Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(
-        ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
-            .orElse("").toString()
-    );
+    String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
+        .orElse("").toString();
+    payloadHeaderStr = EnvVarUtil.resolveEnvVars(payloadHeaderStr, "webhookPayloadHeader");
+    Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
     try {
       HttpHeaders headers = new HttpHeaders();

@@ -16,8 +16,9 @@ public class UserProfileService {
   }
 
   public UserProfile createUserProfile(UserProfile userProfile) {
-    Optional<UserProfile> optionalIAMUserProfile= userProfileRepository.findBySubject(
-        userProfile.getSub()
+    Optional<UserProfile> optionalIAMUserProfile= userProfileRepository.findBySubjectOrEmail(
+        userProfile.getSub(),
+        userProfile.getEmail()
     );
     return optionalIAMUserProfile.orElseGet(() -> userProfileRepository.save(userProfile));
   }

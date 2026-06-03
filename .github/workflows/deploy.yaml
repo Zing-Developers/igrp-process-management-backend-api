@@ -44,4 +44,3 @@ jobs:
             -o merge_request.assign="carlos.marques" \
             -o merge_request.reviewer="379" \
             -o merge_request.title="Feature/zing-commits"
-

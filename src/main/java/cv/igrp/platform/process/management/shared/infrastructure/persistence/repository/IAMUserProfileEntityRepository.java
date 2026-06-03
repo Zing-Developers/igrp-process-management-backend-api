@@ -27,8 +27,12 @@ public interface IAMUserProfileEntityRepository extends
 
   Optional<IAMUserProfileEntity> findByUsername(String username);
 
+  Optional<IAMUserProfileEntity> findByEmail(String email);
+
   Optional<IAMUserProfileEntity> findBySub(String id);
 
   List<IAMUserProfileEntity> findBySubIn(Collection<String> ids);
+
+  List<IAMUserProfileEntity> findByEmailIn(Collection<String> emails);
 
 }

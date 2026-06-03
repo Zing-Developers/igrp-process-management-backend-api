@@ -1,5 +1,6 @@
 package cv.igrp.platform.process.management.shared.delegates.message.producer;
 
+import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import cv.igrp.platform.process.management.shared.util.MessageUtil;
 import org.activiti.engine.delegate.DelegateExecution;
 import org.activiti.engine.delegate.Expression;
@@ -36,6 +37,7 @@ public class MessageBrokerSenderDelegate implements JavaDelegate {
     }
 
     String topicValue = topic.getValue(execution).toString();
+    topicValue = EnvVarUtil.resolveEnvVars(topicValue, "topic");
 
     var message = messageUtil.createMessage(execution);
 

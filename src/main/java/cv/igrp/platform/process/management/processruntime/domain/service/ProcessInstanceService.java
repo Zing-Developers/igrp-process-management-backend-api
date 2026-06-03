@@ -6,6 +6,8 @@ import cv.igrp.platform.process.management.processruntime.domain.models.ProcessI
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstanceFilter;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstanceTaskStatus;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessStatistics;
+import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRuleRequest;
+import cv.igrp.platform.process.management.processruntime.domain.models.UserProfile;
 import cv.igrp.platform.process.management.processruntime.domain.repository.ProcessInstanceRepository;
 import cv.igrp.platform.process.management.processruntime.domain.repository.RuntimeProcessEngineRepository;
 import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
@@ -109,23 +111,26 @@ public class ProcessInstanceService {
     addIfNotNull(ids, processInstance.getCanceledBy());
     addIfNotNull(ids, processInstance.getCreatedBy());
 
-    userProfileRepository.findBySubject(ids).forEach(userProfile -> {
+    userProfileRepository.findBySubjectOrEmails(ids, ids).forEach(userProfile -> {
 
-      String sub = userProfile.getSub();
-
-      if (sub.equals(processInstance.getStartedBy())) {
+      if (matches(userProfile, processInstance.getStartedBy())) {
         processInstance.resolveUserProfileStartedBy(userProfile);
       }
-      if (sub.equals(processInstance.getEndedBy())) {
+      if (matches(userProfile, processInstance.getEndedBy())) {
         processInstance.resolveUserProfileEndedBy(userProfile);
       }
-      if (sub.equals(processInstance.getCanceledBy())) {
+      if (matches(userProfile, processInstance.getCanceledBy())) {
         processInstance.resolveUserProfileCancelledBy(userProfile);
       }
-      if (sub.equals(processInstance.getCreatedBy())) {
+      if (matches(userProfile, processInstance.getCreatedBy())) {
         processInstance.resolveUserProfileCreatedBy(userProfile);
       }
     });
+  }
+
+  private boolean matches(UserProfile userProfile, String identifier) {
+    return Objects.equals(identifier, userProfile.getSub())
+        || Objects.equals(identifier, userProfile.getEmail());
   }
 
   private void addIfNotNull(Set<String> ids, String value) {
@@ -135,8 +140,18 @@ public class ProcessInstanceService {
   }
 
   public ProcessInstance startProcessInstanceById(UUID id, Map<String, Object> variables, String user) {
+    return startProcessInstanceById(id, variables, List.of(), user);
+  }
+
+  public ProcessInstance startProcessInstanceById(
+      UUID id,
+      Map<String, Object> variables,
+      List<TaskAssignmentRuleRequest> assignmentRules,
+      String user
+  ) {
     ProcessInstance processInstance = getProcessInstanceById(id);
     processInstance.addVariables(variables);
+    processInstance.addAssignmentRules(assignmentRules);
     return startProcessInstance(processInstance, user);
   }
 
@@ -151,6 +166,7 @@ public class ProcessInstanceService {
         processInstance.getVariables()
     );
 
+    taskInstanceService.registerAssignmentRules(processInstance);
     taskInstanceService.createTaskInstancesByProcess(processInstance);
 
     updateProcessInstanceStatus(process, processInstance);
@@ -168,9 +184,19 @@ public class ProcessInstanceService {
   }
 
   public void correlateMessage(String businessKey, String messageName, Map<String, Object> variables) {
+    correlateMessage(businessKey, messageName, variables, List.of());
+  }
+
+  public void correlateMessage(
+      String businessKey,
+      String messageName,
+      Map<String, Object> variables,
+      List<TaskAssignmentRuleRequest> assignmentRules
+  ) {
 
     ProcessInstance processInstance = processInstanceRepository.findByBusinessKey(businessKey)
         .orElseThrow(() -> IgrpResponseStatusException.notFound("No process instance found with businessKey: " + businessKey));
+    processInstance.addAssignmentRules(assignmentRules);
 
     runtimeProcessEngineRepository.correlateMessage(
         messageName,
@@ -188,9 +214,19 @@ public class ProcessInstanceService {
   }
 
   public void signal(String businessKey, String taskId, Map<String, Object> variables) {
+    signal(businessKey, taskId, variables, List.of());
+  }
+
+  public void signal(
+      String businessKey,
+      String taskId,
+      Map<String, Object> variables,
+      List<TaskAssignmentRuleRequest> assignmentRules
+  ) {
 
     ProcessInstance processInstance = processInstanceRepository.findByBusinessKey(businessKey)
         .orElseThrow(() -> IgrpResponseStatusException.notFound("No process instance found with businessKey: " + businessKey));
+    processInstance.addAssignmentRules(assignmentRules);
 
     runtimeProcessEngineRepository.signal(
         processInstance.getEngineProcessNumber().getValue(),
@@ -245,6 +281,7 @@ public class ProcessInstanceService {
     ProcessInstance createdProcessInstance = createProcessInstance(processInstance, user);
     // Copy variables from processInstance to createdProcessInstance
     createdProcessInstance.addVariables(processInstance.getVariables());
+    createdProcessInstance.addAssignmentRules(processInstance.getAssignmentRules());
     return startProcessInstance(createdProcessInstance, user);
   }
 
