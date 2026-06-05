@@ -2,7 +2,9 @@ package cv.igrp.platform.process.management.shared.delegates.assignment;
 
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
+import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstance;
 import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRule;
+import cv.igrp.platform.process.management.processruntime.domain.repository.ProcessInstanceRepository;
 import cv.igrp.platform.process.management.processruntime.domain.repository.TaskAssignmentRuleRepository;
 import cv.igrp.platform.process.management.shared.application.constants.TaskAssignmentMode;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
@@ -34,10 +36,16 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
 
   private final RestClient restClient;
   private final TaskAssignmentRuleRepository taskAssignmentRuleRepository;
+  private final ProcessInstanceRepository processInstanceRepository;
 
-  public IgrpExternalUserAssignmentDelegate(RestClient restClient, TaskAssignmentRuleRepository taskAssignmentRuleRepository) {
+  public IgrpExternalUserAssignmentDelegate(
+      RestClient restClient,
+      TaskAssignmentRuleRepository taskAssignmentRuleRepository,
+      ProcessInstanceRepository processInstanceRepository
+  ) {
     this.restClient = restClient;
     this.taskAssignmentRuleRepository = taskAssignmentRuleRepository;
+    this.processInstanceRepository = processInstanceRepository;
   }
 
   @Value(value = "${igrp.delegate.webhook.auth-token:}")
@@ -54,10 +62,20 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
   @Override
   public void execute(DelegateExecution execution) {
     String taskId = execution.getCurrentActivityId();
-    String processInstanceId = execution.getProcessInstanceId();
+    String engineProcessInstanceId = execution.getProcessInstanceId();
     String processDefinitionId = execution.getProcessDefinitionId();
+    String businessKey = execution.getProcessInstanceBusinessKey();
 
-    log.info("[ExternalUserAssignment] Executing task: {} from process instance: {}", taskId, processInstanceId);
+    log.info("[ExternalUserAssignment] Executing task: {} from process instance: {} (businessKey: {})",
+        taskId, engineProcessInstanceId, businessKey);
+
+    ProcessInstance processInstance = processInstanceRepository.findByBusinessKey(businessKey)
+        .orElseThrow(() -> new IllegalStateException(
+            "No process instance found for businessKey: " + businessKey));
+    Identifier processInstanceId = processInstance.getId();
+
+    log.info("[ExternalUserAssignment] Resolved application processInstanceId: {} from businessKey: {}",
+        processInstanceId.getValue(), businessKey);
 
     String url = resolveField(execution, "apiUrl", apiUrl);
     url = EnvVarUtil.resolveEnvVars(url, "apiUrl");
@@ -113,7 +131,7 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
 
     List<TaskAssignmentRule> existingRules = taskAssignmentRuleRepository
         .findActiveByProcessInstanceAndTaskDefinition(
-            Identifier.create(processInstanceId),
+            processInstanceId,
             Code.create(targetTask)
         );
 
@@ -132,7 +150,7 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
     } else {
       taskAssignmentRuleRepository.save(TaskAssignmentRule.builder()
           .processDefinitionKey(Code.create(processDefinitionKey))
-          .processInstanceId(Identifier.create(processInstanceId))
+          .processInstanceId(processInstanceId)
           .taskDefinitionKey(Code.create(targetTask))
           .assignee(Code.create(userIdentifier))
           .assignmentMode(mode)
@@ -141,12 +159,12 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
           .build()
       );
       log.info("[ExternalUserAssignment] Created new rule: processInstance={}, targetTask={}, assignee={}, mode={}",
-          processInstanceId, targetTask, userIdentifier, mode);
+          processInstanceId.getValue(), targetTask, userIdentifier, mode);
     }
 
     if (outputVar != null && !outputVar.isBlank()) {
       execution.getEngineServices().getRuntimeService().setVariable(
-          processInstanceId, outputVar, userIdentifier);
+          engineProcessInstanceId, outputVar, userIdentifier);
     }
   }
 
