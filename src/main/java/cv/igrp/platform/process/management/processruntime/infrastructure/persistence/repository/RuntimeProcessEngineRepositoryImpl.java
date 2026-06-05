@@ -267,6 +267,32 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   }
 
   @Override
+  public Map<String, Map<String, Object>> getProcessVariablesBatch(Collection<String> processInstanceIds) {
+    if (processInstanceIds == null || processInstanceIds.isEmpty()) {
+      return Map.of();
+    }
+    try {
+      Map<String, List<ProcessVariableInstance>> batchResult =
+          processManagerAdapter.getProcessVariablesBatch(processInstanceIds);
+
+      Map<String, Map<String, Object>> result = new HashMap<>();
+      batchResult.forEach((processId, variables) -> {
+        Map<String, Object> varsMap = variables.stream()
+            .filter(p -> p.name() != null && p.value() != null)
+            .collect(Collectors.toMap(
+                ProcessVariableInstance::name,
+                ProcessVariableInstance::value,
+                (a, b) -> b));
+        result.put(processId, varsMap);
+      });
+      return result;
+    } catch (Exception e) {
+      LOGGER.error("Failed to batch-retrieve process variables for {} processes", processInstanceIds.size(), e);
+      return Map.of();
+    }
+  }
+
+  @Override
   public void setTaskPriority(String taskInstanceId, int priority) throws RuntimeProcessEngineException {
     try {
       taskActionService.setTaskPriority(taskInstanceId, priority);

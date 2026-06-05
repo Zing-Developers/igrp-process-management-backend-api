@@ -8,6 +8,8 @@ Each delegate expression corresponds to a specific implementation logic. For exa
 *	JSON Parser Delegate (`${igrpJsonParseDelegate}`): Parses raw or Base64-encoded JSON data.
 *	Email Delegate (`${igrpSendEmailDelegate}`): Sends emails based on configured parameters.
 *	Message Broker Delegate (`${igrpMessageBrokerSenderDelegate}`): Sends messages to Kafka or other message brokers.
+*	External User Assignment Delegate (`${igrpExternalUserAssignmentDelegate}`): Calls an external API, extracts a user identifier from the response using a JSONPath expression, and creates a task assignment rule to automatically assign a target user task to that user.
+
 These delegates allow dynamic and flexible integration with external systems, enabling data exchange, notifications, and event-driven communication within the process flow. Proper configuration of parameters and variable mapping ensures that data is correctly handled and passed between tasks.
 
 ## 2. Walkthrough
@@ -104,3 +106,96 @@ Then on the service task execution it will send the process data to the message 
 If you don’t have a message broker available, an alternative is to use `${igrpProcessWebhookDelegate}`. It does the same thing as the message broker delegate, but through webhook. You only need to provide the URL (required), path and headers (if they are present). On execution, it triggers an HTTP POST request with the process data as payload to the provided URL with the provided headers
 
 ![Process Webhook Delegate Service Task Configuration](../assets/images/delegates/Imagem23.png)
+
+7. To dynamically assign a user task based on an external API response, the delegate expression is `${igrpExternalUserAssignmentDelegate}`.
+
+This delegate is designed for scenarios where the assignee of a user task is determined by an external system. For example, a backoffice API may return which user should handle a specific request. The delegate calls that API, extracts the user identifier (e.g., email) from the JSON response using a JSONPath expression, and creates a `TaskAssignmentRule` so the target user task is automatically assigned to that user when it is activated.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `apiUrl` | Expression | Yes | — | The full URL of the external API endpoint. Supports process variable expressions (`${variableName}`) and environment variable placeholders (`$[ENV_VAR]`). Example: `$[BACKEND_URL]/api/v1/requests/by-service-id/${serviceId}` |
+| `apiMethod` | Expression | No | `GET` | The HTTP method to use. Supported values: `GET`, `POST`, `PUT`, `DELETE`. |
+| `apiPayload` | Expression | No | — | The request body for `POST` and `PUT` requests. Supports `${variableName}` and `$[ENV_VAR]` placeholders. |
+| `jsonPathExpression` | Expression | Yes | — | A JSONPath expression used to extract the user identifier from the API response. Example: `$.data.assignedUserEmail` |
+| `targetTaskKey` | Expression | Yes | — | The task definition key (ID) of the user task that should be assigned to the resolved user. This must match the ID of a user task defined in the BPMN process. |
+| `assignmentMode` | Expression | No | `ONE_TIME` | Determines how the assignment rule behaves. `ONE_TIME` means the rule is consumed after it is applied once. `ALWAYS` means the rule persists and is reapplied each time the target task is activated. |
+| `outputVariable` | Expression | No | — | An optional process variable name where the extracted user identifier will be stored. Useful when you need to reference the resolved user in subsequent tasks or expressions. |
+
+### Authentication
+
+The delegate uses the global webhook authentication token configured via the application property `igrp.delegate.webhook.auth-token`. If this property is set, the delegate sends it as a `Bearer` token in the `Authorization` header of the HTTP request. No additional authentication configuration is needed on the delegate itself.
+
+### How It Works
+
+1. The delegate reads all configured parameters from the BPMN expression fields (with fallback to process variables of the same name).
+2. All `$[ENV_VAR]` placeholders are resolved using system environment variables.
+3. An HTTP request is made to the configured `apiUrl` using the specified `apiMethod`.
+4. The JSON response body is parsed using the `jsonPathExpression` to extract the user identifier.
+5. The delegate checks if an active, unconsumed `TaskAssignmentRule` with an assignee already exists for the same `(processInstanceId, targetTaskKey)` combination:
+   - **If found:** The existing rule's assignee is **updated** to the new user identifier (no duplicate rule is created). This handles retries, loops, or re-entry scenarios safely.
+   - **If not found:** A new `TaskAssignmentRule` is created and persisted with the extracted user as the direct assignee.
+6. When the target user task is activated later in the process, the assignment rule is automatically applied, assigning the task to the resolved user.
+7. Optionally, the extracted identifier is also stored in a process variable (if `outputVariable` is configured).
+
+### Error Handling
+
+- If the API call fails (HTTP error or connection failure), the error is logged and a transient variable `<taskId>Error` is set on the execution. The delegate returns without creating an assignment rule.
+- If the JSONPath expression does not match any value in the response, or returns a null/blank value, the error is logged and a transient variable `<taskId>Error` is set. No assignment rule is created.
+- Required parameters (`apiUrl`, `jsonPathExpression`, `targetTaskKey`) throw an `IllegalArgumentException` if not provided.
+
+### Example Configuration
+
+**Scenario:** A service task calls a backoffice API to determine which user should review a request. The API returns a JSON response containing the assigned user's email. The delegate extracts this email and assigns the next user task (`reviewRequest`) to that user.
+
+**Service Task Configuration:**
+- Delegate Expression: `${igrpExternalUserAssignmentDelegate}`
+
+**Parameters:**
+
+| Parameter | Value |
+|-----------|-------|
+| `apiUrl` | `$[BACKOFFICE_API_URL]/api/v1/requests/by-service-id/${serviceId}` |
+| `apiMethod` | `GET` |
+| `jsonPathExpression` | `$.data.assignedUserEmail` |
+| `targetTaskKey` | `reviewRequest` |
+| `assignmentMode` | `ONE_TIME` |
+| `outputVariable` | `assignedReviewerEmail` |
+
+**Example API Response:**
+```json
+{
+  "isSuccessfull": true,
+  "Message": "Request found",
+  "data": {
+    "assignedUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "assignedUserName": "John Doe",
+    "assignedUserEmail": "john.doe@example.com"
+  }
+}
+```
+
+With the JSONPath expression `$.data.assignedUserEmail`, the delegate extracts `john.doe@example.com` and creates an assignment rule so the `reviewRequest` user task is assigned to that user. The email is also stored in the process variable `assignedReviewerEmail` for use in subsequent tasks (e.g., sending a notification email).
+
+### JSONPath Expression Examples
+
+The JSONPath expression allows you to extract values from any JSON response structure:
+
+| Response Structure | JSONPath Expression | Extracted Value |
+|---|---|---|
+| `{"data": {"email": "user@example.com"}}` | `$.data.email` | `user@example.com` |
+| `{"result": {"user": {"contact": "user@example.com"}}}` | `$.result.user.contact` | `user@example.com` |
+| `{"users": [{"email": "first@example.com"}]}` | `$.users[0].email` | `first@example.com` |
+| `{"assignee": "user@example.com"}` | `$.assignee` | `user@example.com` |
+
+### Environment Variable Placeholders
+
+The `$[ENV_VAR]` syntax allows you to reference system environment variables in the parameter values. This is useful for configuring environment-specific URLs without hardcoding them in the BPMN process definition.
+
+| Placeholder | Example Env Value | Usage |
+|---|---|---|
+| `$[BACKEND_URL]` | `https://api.example.com` | `$[BACKEND_URL]/api/v1/users` |
+| `$[API_BASE_PATH]` | `/prc-cvt-requests-management` | `$[BACKEND_URL]$[API_BASE_PATH]/api/v1/requests` |
+
+These placeholders are resolved before the HTTP request is made. If an environment variable is not found, the delegate throws a `RuntimeException` with a clear error message indicating which variable is missing.

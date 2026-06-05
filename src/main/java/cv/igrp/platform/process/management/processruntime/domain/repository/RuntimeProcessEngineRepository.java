@@ -6,6 +6,7 @@ import cv.igrp.platform.process.management.processruntime.domain.exception.Runti
 import cv.igrp.platform.process.management.processruntime.domain.models.*;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -175,6 +176,14 @@ public interface RuntimeProcessEngineRepository {
    */
   Map<String, Object> getProcessVariables(String processInstanceId)
       throws RuntimeProcessEngineException;
+
+  /**
+   * Retrieves process variables for multiple process instances in a single batch operation.
+   *
+   * @param processInstanceIds the unique identifiers of the process instances
+   * @return a map of processInstanceId to its variables map (never {@code null}, may contain empty maps for failed lookups)
+   */
+  Map<String, Map<String, Object>> getProcessVariablesBatch(Collection<String> processInstanceIds);
 
   /**
    * Updates the priority of a task.
