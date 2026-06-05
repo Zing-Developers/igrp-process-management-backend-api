@@ -1,6 +1,8 @@
 package cv.igrp.platform.process.management.shared.delegates.assignment;
 
+import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstance;
 import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRule;
+import cv.igrp.platform.process.management.processruntime.domain.repository.ProcessInstanceRepository;
 import cv.igrp.platform.process.management.processruntime.domain.repository.TaskAssignmentRuleRepository;
 import cv.igrp.platform.process.management.shared.application.constants.TaskAssignmentMode;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
@@ -21,6 +23,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -35,6 +38,7 @@ class IgrpExternalUserAssignmentDelegateTest {
 
   @Mock private RestClient restClient;
   @Mock private TaskAssignmentRuleRepository taskAssignmentRuleRepository;
+  @Mock private ProcessInstanceRepository processInstanceRepository;
   @Mock private DelegateExecution execution;
   @Mock private ProcessEngineConfiguration processEngineConfiguration;
   @Mock private RuntimeService runtimeService;
@@ -46,6 +50,10 @@ class IgrpExternalUserAssignmentDelegateTest {
   @Mock(answer = org.mockito.Answers.RETURNS_SELF) private RestClient.RequestBodySpec bodySpec;
 
   private IgrpExternalUserAssignmentDelegate delegate;
+
+  private static final String APP_PROCESS_INSTANCE_ID = "c58c94a5-c6f5-4ac2-829e-6ce902528d4a";
+  private static final String ENGINE_PROCESS_INSTANCE_ID = "bae8ff66-60f2-11f1-aede-96097e7fe1f2";
+  private static final String BUSINESS_KEY = "b0dfe9be-abbc-430c-9ae2-f179bb76f6a2";
 
   private static final String RESPONSE_JSON = """
       {
@@ -60,7 +68,7 @@ class IgrpExternalUserAssignmentDelegateTest {
 
   @BeforeEach
   void setUp() {
-    delegate = new IgrpExternalUserAssignmentDelegate(restClient, taskAssignmentRuleRepository);
+    delegate = new IgrpExternalUserAssignmentDelegate(restClient, taskAssignmentRuleRepository, processInstanceRepository);
   }
 
   @Test
@@ -192,7 +200,7 @@ class IgrpExternalUserAssignmentDelegateTest {
 
     delegate.execute(execution);
 
-    verify(runtimeService).setVariable("3fa85f64-5717-4562-b3fc-2c963f66afa6", "resolvedEmail", "john.doe@example.com");
+    verify(runtimeService).setVariable(ENGINE_PROCESS_INSTANCE_ID, "resolvedEmail", "john.doe@example.com");
   }
 
   @Test
@@ -239,7 +247,7 @@ class IgrpExternalUserAssignmentDelegateTest {
     TaskAssignmentRule existingRule = TaskAssignmentRule.builder()
         .id(existingRuleId)
         .processDefinitionKey(Code.create("myProcess"))
-        .processInstanceId(Identifier.create("3fa85f64-5717-4562-b3fc-2c963f66afa6"))
+        .processInstanceId(Identifier.create(APP_PROCESS_INSTANCE_ID))
         .taskDefinitionKey(Code.create("reviewTask"))
         .assignee(Code.create("old.user@example.com"))
         .assignmentMode(TaskAssignmentMode.ONE_TIME)
@@ -271,7 +279,7 @@ class IgrpExternalUserAssignmentDelegateTest {
 
     TaskAssignmentRule candidateOnlyRule = TaskAssignmentRule.builder()
         .processDefinitionKey(Code.create("myProcess"))
-        .processInstanceId(Identifier.create("3fa85f64-5717-4562-b3fc-2c963f66afa6"))
+        .processInstanceId(Identifier.create(APP_PROCESS_INSTANCE_ID))
         .taskDefinitionKey(Code.create("reviewTask"))
         .candidateUsers(Set.of("candidate1@example.com"))
         .assignmentMode(TaskAssignmentMode.ONE_TIME)
@@ -290,11 +298,21 @@ class IgrpExternalUserAssignmentDelegateTest {
 
   private void setupExecution() {
     when(execution.getCurrentActivityId()).thenReturn("serviceTask1");
-    when(execution.getProcessInstanceId()).thenReturn("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+    when(execution.getProcessInstanceId()).thenReturn(ENGINE_PROCESS_INSTANCE_ID);
     when(execution.getProcessDefinitionId()).thenReturn("myProcess:1:deploy-1");
+    when(execution.getProcessInstanceBusinessKey()).thenReturn(BUSINESS_KEY);
     lenient().when(execution.getVariable(anyString())).thenReturn(null);
     lenient().when(execution.getEngineServices()).thenReturn(processEngineConfiguration);
     lenient().when(processEngineConfiguration.getRuntimeService()).thenReturn(runtimeService);
+
+    ProcessInstance processInstance = ProcessInstance.builder()
+        .id(Identifier.create(APP_PROCESS_INSTANCE_ID))
+        .procReleaseKey(Code.create("myProcess"))
+        .businessKey(Code.create(BUSINESS_KEY))
+        .build();
+    lenient().when(processInstanceRepository.findByBusinessKey(BUSINESS_KEY))
+        .thenReturn(Optional.of(processInstance));
+
     lenient().when(taskAssignmentRuleRepository.findActiveByProcessInstanceAndTaskDefinition(any(), any()))
         .thenReturn(List.of());
   }
