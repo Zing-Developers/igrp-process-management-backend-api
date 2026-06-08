@@ -137,19 +137,19 @@
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-core</artifactId>
-            <version>0.1.0-beta.24</version>
+            <version>0.1.0-beta.25</version>
         </dependency>
 
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-activiti</artifactId>
-            <version>0.1.0-beta.24</version>
+            <version>0.1.0-beta.25</version>
         </dependency>
 
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-auth-core</artifactId>
-            <version>0.1.0-beta.24</version>
+            <version>0.1.0-beta.25</version>
         </dependency>
 
         <dependency>
@@ -215,13 +215,13 @@
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-irn-integration</artifactId>
-            <version>0.1.0-beta.24</version>
+            <version>0.1.0-beta.25</version>
         </dependency>
 
         <dependency>
             <groupId>cv.igrp.framework</groupId>
             <artifactId>process-runtime-auth-irn</artifactId>
-            <version>0.1.0-beta.24</version>
+            <version>0.1.0-beta.25</version>
         </dependency>
 
     </dependencies>
