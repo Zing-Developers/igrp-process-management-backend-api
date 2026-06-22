@@ -60,12 +60,14 @@ public class ProcessDeploymentService {
           .forEach(processDeploymentFilter::addContextGroup);
     }
     PageableLista<ProcessDeployment> pageableLista = processDeploymentRepository.findAll(processDeploymentFilter);
-    // Enrich with candidate groups
-    pageableLista.getContent()
-        .forEach(processDeployment -> {
-          processDeploymentRepository.getCandidateStarterGroups(processDeployment.getId())
-              .forEach(processDeployment::addCandidateGroups);
-        });
+    // Enrich with candidate groups — single batch call
+    List<String> ids = pageableLista.getContent().stream()
+        .map(ProcessDeployment::getId)
+        .toList();
+    Map<String, Set<String>> groupsMap = processDeploymentRepository.getCandidateStarterGroupsBatch(ids);
+    pageableLista.getContent().forEach(deployment ->
+        groupsMap.getOrDefault(deployment.getId(), Set.of())
+            .forEach(deployment::addCandidateGroups));
     return pageableLista;
   }
 

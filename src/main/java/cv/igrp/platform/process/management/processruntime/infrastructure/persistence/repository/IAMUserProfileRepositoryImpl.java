@@ -10,12 +10,10 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 @Repository
 public class IAMUserProfileRepositoryImpl implements UserProfileRepository {
@@ -60,19 +58,17 @@ public class IAMUserProfileRepositoryImpl implements UserProfileRepository {
 
   @Override
   public List<UserProfile> findBySubjectOrEmails(Set<String> subs, Set<String> emails) {
-    Map<UUID, UserProfile> profiles = new LinkedHashMap<>();
+    Set<String> allIdentifiers = new HashSet<>();
+    if (!CollectionUtils.isEmpty(subs)) allIdentifiers.addAll(subs);
+    if (!CollectionUtils.isEmpty(emails)) allIdentifiers.addAll(emails);
 
-    if (!CollectionUtils.isEmpty(subs)) {
-      repository.findBySubIn(subs)
-          .forEach(entity -> profiles.put(entity.getId(), mapper.toModel(entity)));
+    if (allIdentifiers.isEmpty()) {
+      return List.of();
     }
 
-    if (!CollectionUtils.isEmpty(emails)) {
-      repository.findByEmailIn(emails)
-          .forEach(entity -> profiles.putIfAbsent(entity.getId(), mapper.toModel(entity)));
-    }
-
-    return List.copyOf(profiles.values());
+    return repository.findBySubInOrEmailIn(allIdentifiers).stream()
+        .map(mapper::toModel)
+        .toList();
   }
 
 }

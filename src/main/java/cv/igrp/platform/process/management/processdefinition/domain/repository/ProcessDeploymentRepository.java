@@ -6,7 +6,9 @@ import cv.igrp.platform.process.management.processdefinition.domain.models.Proce
 import cv.igrp.platform.process.management.processdefinition.domain.models.ProcessDeployment;
 import cv.igrp.platform.process.management.shared.domain.models.PageableLista;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -72,6 +74,8 @@ public interface ProcessDeploymentRepository {
    * @return a set of unique identifiers representing the candidate starter groups for the specified process definition
    */
   Set<String> getCandidateStarterGroups(String processDefinitionId);
+
+  Map<String, Set<String>> getCandidateStarterGroupsBatch(Collection<String> processDefinitionIds);
 
   /**
    * Retrieves a process deployment record by its unique identifier.

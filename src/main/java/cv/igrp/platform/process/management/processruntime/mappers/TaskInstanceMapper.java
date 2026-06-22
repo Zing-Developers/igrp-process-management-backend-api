@@ -55,6 +55,7 @@ public class TaskInstanceMapper {
     taskInstanceEntity.setName(taskInstance.getName().getValue());
     taskInstanceEntity.setExternalId(taskInstance.getExternalId().getValue());
     syncCandidateGroups(taskInstanceEntity, taskInstance.getCandidateGroups());
+    syncCandidateUsers(taskInstanceEntity, taskInstance.getCandidateUsers());
     taskInstanceEntity.setPriority(taskInstance.getPriority());
     taskInstanceEntity.setStatus(taskInstance.getStatus());
     taskInstanceEntity.setStartedBy(taskInstance.getStartedBy().getValue());
@@ -77,6 +78,7 @@ public class TaskInstanceMapper {
     taskInstanceEntity.setEndedAt(taskInstance.getEndedAt());
     taskInstanceEntity.setPriority(taskInstance.getPriority());
     syncCandidateGroups(taskInstanceEntity, taskInstance.getCandidateGroups());
+    syncCandidateUsers(taskInstanceEntity, taskInstance.getCandidateUsers());
     taskInstanceEntity.setVariables(taskInstance.getVariables());
     taskInstanceEntity.setForms(taskInstance.getForms());
     taskInstanceEntity.setDueDate(taskInstance.getDueDate());
@@ -112,6 +114,7 @@ public class TaskInstanceMapper {
         .endedAt(taskInstanceEntity.getEndedAt())
         .endedBy(taskInstanceEntity.getEndedBy()!=null ? Code.create(taskInstanceEntity.getEndedBy()) : null)
         .candidateGroups(taskInstanceEntity.getCandidateGroups()!=null ? new HashSet<>(taskInstanceEntity.getCandidateGroups()) : null)
+        .candidateUsers(taskInstanceEntity.getCandidateUsers()!=null ? new HashSet<>(taskInstanceEntity.getCandidateUsers()) : null)
         .taskInstanceEvents(withEvents ? eventMapper.toEventModelList(taskInstanceEntity.getTaskinstanceevents()) : null)
         .forms(taskInstanceEntity.getForms())
         .variables(taskInstanceEntity.getVariables())
@@ -338,6 +341,22 @@ public class TaskInstanceMapper {
           .map(String::trim)
           .filter(group -> !group.isBlank())
           .forEach(entity.getCandidateGroups()::add);
+    }
+  }
+
+  private void syncCandidateUsers(TaskInstanceEntity entity, Set<String> candidateUsers) {
+    if (entity.getCandidateUsers() == null) {
+      entity.setCandidateUsers(new HashSet<>());
+    } else {
+      entity.getCandidateUsers().clear();
+    }
+
+    if (candidateUsers != null) {
+      candidateUsers.stream()
+          .filter(Objects::nonNull)
+          .map(String::trim)
+          .filter(user -> !user.isBlank())
+          .forEach(entity.getCandidateUsers()::add);
     }
   }
 

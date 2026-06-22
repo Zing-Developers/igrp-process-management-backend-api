@@ -1,6 +1,6 @@
 # Security Recommendations
 
-Reviewed on 2026-05-23 for the iGRP Platform Process Management API.
+Reviewed on 2026-06-02 for the iGRP Platform Process Management API.
 
 This is a static project review. Validate every recommendation against the target production environment, identity provider, deployment platform, and data-classification rules.
 
@@ -8,27 +8,63 @@ This is a static project review. Validate every recommendation against the targe
 
 | Priority | Area | Recommendation |
 | --- | --- | --- |
+| P0 | JWT decoder | Fail startup when the OIDC provider is unreachable instead of silently disabling JWT validation. |
 | P0 | CORS | Restrict allowed origins and avoid credentials with wildcard origins. |
 | P0 | Message consumers | Do not process unauthenticated broker messages as admin/system by default. |
 | P0 | Task/process access | Enforce authorization on task search, claim, assign, complete, import, deploy, and admin-style operations. |
 | P0 | Webhooks | Add SSRF protections, host allowlists, HTTPS enforcement, timeouts, and response-size limits. |
 | P1 | Secrets | Remove default secrets and use Kubernetes/Docker secrets or a vault. |
+| P1 | K8s credentials | Replace hardcoded plaintext credentials in deployment manifests with Secret references. |
 | P1 | Logging/errors | Stop logging sensitive payloads and sanitize ProblemDetail responses. |
+| P1 | Error responses | Do not return internal exception messages, PSQL details, or parser internals to API clients. |
 | P1 | Dependencies/images | Align security dependency versions with the Spring Boot BOM and scan dependencies/images. |
 | P1 | Transport security | Require TLS for ingress, Kafka, webhooks, IAM calls, and mail where applicable. |
+| P1 | Kafka transport | Default Kafka security protocol to SASL_SSL instead of PLAINTEXT. |
+| P2 | Profile defaults | Default active profile to production instead of development to prevent accidental ddl-auto=update and show-sql in production. |
 | P2 | Swagger/actuator | Keep docs and operational endpoints disabled or protected outside development. |
 | P2 | Input limits | Add strict validation for variable filters, JSON payload size, dates, enum values, and webhook headers. |
+| P2 | Dockerfile | Pin container image tags, review keystore password usage, and run as non-root. |
 
 ## Authentication And Authorization
+
+### JWT decoder must fail closed on startup
+
+`JwtDecoderConfiguration` catches all exceptions during `NimbusJwtDecoder` construction and returns a lambda that throws `JwtException` for every token. If the OIDC provider (Keycloak) is unreachable at startup, the application will permanently reject all JWTs until restarted, with no health indicator or metric reporting this state.
+
+**File:** `src/main/java/cv/igrp/platform/process/management/shared/security/util/JwtDecoderConfiguration.java:22-30`
+
+```java
+} catch (Exception e) {
+  return token -> {
+    throw new JwtException("JWT validation temporarily disabled (Keycloak unavailable)");
+  };
+}
+```
+
+Risk:
+
+- Silent authentication failure with no alerting; operational pressure to bypass auth checks.
+- No metric or health indicator signals this degraded state.
+
+Recommended actions:
+
+- Remove the try/catch. Let the startup fail fast when the auth server is unreachable.
+- Use Spring Boot readiness probes (`/actuator/health/readiness`) to signal not-ready.
+- If lazy initialization is needed, perform OIDC discovery inside the `decode()` call with retry logic, not a catch-all at bean creation.
 
 ### Restrict CORS in production
 
 `SecurityConfig` currently allows all origins with credentials enabled:
 
-- `configuration.addAllowedOriginPattern(CorsConfiguration.ALL)`
-- `configuration.setAllowCredentials(true)`
+```java
+configuration.addAllowedOriginPattern(CorsConfiguration.ALL);   // "*"
+configuration.addAllowedHeader(CorsConfiguration.ALL);
+configuration.setAllowCredentials(true);
+```
 
-That combination is dangerous for browser clients because any origin pattern may be accepted while credentialed requests are allowed.
+**File:** `src/main/java/cv/igrp/platform/process/management/shared/security/SecurityConfig.java:58-71`
+
+That combination is dangerous for browser clients because any origin pattern may be accepted while credentialed requests are allowed. An attacker-controlled site can make authenticated cross-origin requests using the victim's auth context.
 
 Recommended actions:
 
@@ -37,6 +73,26 @@ Recommended actions:
 - Keep `allowCredentials=false` unless browser credentials are truly required.
 - Keep allowed methods and headers minimal.
 - Add integration tests that verify disallowed origins are rejected.
+
+### Fail closed when authorization enrichment fails
+
+`SecurityConfig#jwtAuthenticationConverter` catches authorization-service errors and still grants `ROLE_ACTIVITI_USER`:
+
+```java
+} catch (Exception e) {
+    LOGGER.error("Failed to enrich authorities for [email={}, sub={}]: {}", email, sub, e.getMessage(), e);
+    authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + ActivitiConstants.ROLE_ACTIVITI_USER));
+}
+```
+
+**File:** `src/main/java/cv/igrp/platform/process/management/shared/security/SecurityConfig.java:150-154`
+
+Recommended actions:
+
+- Fail closed for endpoints that need permissions.
+- If availability requires degraded access, grant only a minimal role with no write privileges.
+- Track authorization enrichment failures as security alerts.
+- Cache authorization lookups carefully with short TTL and user/token scoping.
 
 ### Add method-level authorization
 
@@ -71,24 +127,28 @@ Recommended actions:
 - Add a service-level guard that forces visibility rules even if a controller or command forgets them.
 - Add tests proving users cannot list or inspect tasks outside their assignments/groups.
 
-### Fail closed when authorization enrichment fails
-
-`SecurityConfig#jwtAuthenticationConverter` catches authorization-service errors and still grants `ROLE_ACTIVITI_USER`.
-
-Recommended actions:
-
-- Fail closed for endpoints that need permissions.
-- If availability requires degraded access, grant only a minimal role with no write privileges.
-- Track authorization enrichment failures as security alerts.
-- Cache authorization lookups carefully with short TTL and user/token scoping.
-
 ### Review broker message authentication
 
 `AbstractStartProcessConsumer` and `AbstractProcessEventConsumer` use a system authentication with `ROLE_ACTIVITI_USER` and `ROLE_ACTIVITI_ADMIN` when no `Authorization` header exists. Their fallback `extractAuthorities` also grants admin/user roles when roles are missing.
 
+**Files:**
+- `src/main/java/cv/igrp/platform/process/management/shared/delegates/message/consumer/AbstractStartProcessConsumer.java:153-158`
+- `src/main/java/cv/igrp/platform/process/management/shared/delegates/message/consumer/AbstractProcessEventConsumer.java:143-148`
+
+```java
+protected Authentication systemAuthentication() {
+    return new UsernamePasswordAuthenticationToken(
+        "system-bot", null,
+        List.of(new SimpleGrantedAuthority("ROLE_ACTIVITI_USER"),
+                new SimpleGrantedAuthority("ROLE_ACTIVITI_ADMIN"))
+    );
+}
+```
+
 Risk:
 
 - Any producer that can write to the topic/queue may start or signal processes with admin-like authority.
+- Kafka `security.protocol` defaults to `PLAINTEXT`, so there is no broker-level authentication.
 
 Recommended actions:
 
@@ -109,16 +169,28 @@ Recommended actions:
 igrp.delegate.webhook.auth-token=${IGRP_DELEGATE_WEBHOOK_AUTH_TOKEN:delegate-secret-token}
 ```
 
+**File:** `src/main/resources/application.properties:62`
+
+Any deployment that does not set `IGRP_DELEGATE_WEBHOOK_AUTH_TOKEN` will authenticate to external webhook endpoints with this publicly visible credential.
+
 Recommended actions:
 
-- Remove the default token value.
-- Fail startup in staging/production when a required secret is missing.
+- Remove the default token value so startup fails when the secret is missing.
 - Rotate any token that may have used the default.
 - Keep tokens out of logs, process variables, and Postman exports.
 
 ### Use secrets for Kubernetes credentials
 
-`k8s/deployment.yaml` contains placeholder database credentials directly in env values.
+`k8s/deployment.yaml` contains hardcoded plaintext database credentials directly in env values:
+
+```yaml
+- name: SPRING_DATASOURCE_USERNAME
+  value: "myuser"
+- name: SPRING_DATASOURCE_PASSWORD
+  value: "mypassword"
+```
+
+**File:** `k8s/deployment.yaml:32-35`
 
 Recommended actions:
 
@@ -134,9 +206,33 @@ Recommended actions:
 Recommended actions:
 
 - Keep `.env.example` clearly fake and non-reusable.
-- Avoid realistic passwords like `softwaredeveloper` or `password`.
+- Replace realistic passwords like `softwaredeveloper` with obviously fake placeholders like `CHANGE_ME_STRONG_PASSWORD_HERE`.
 - Set `LOGGING_LEVEL_APP` and `LOGGING_LEVEL_SPRING_WEB` examples to `INFO`.
 - Include required secret names without values where possible.
+
+### Default active profile should be production-safe
+
+`application.properties` defaults to the development profile:
+
+```properties
+spring.profiles.active=${SPRING_ACTIVE_PROFILE:development}
+```
+
+**File:** `src/main/resources/application.properties:10`
+
+The development profile enables `spring.jpa.hibernate.ddl-auto=update` and `spring.jpa.show-sql=true`. Any deployment that fails to set `SPRING_ACTIVE_PROFILE` runs with auto-DDL and SQL logging active.
+
+**File:** `src/main/resources/application-development.properties:33-35`
+
+Risk:
+
+- Accidental schema modification in production if the environment variable is missing.
+- SQL query logging may expose sensitive parameter values in log aggregators.
+
+Recommended actions:
+
+- Make the production profile the safe default, or fail startup if `SPRING_ACTIVE_PROFILE` is not set.
+- Never use `ddl-auto=update` as a fallback for unset profiles.
 
 ## Webhook And SSRF Controls
 
@@ -177,22 +273,49 @@ Recommended actions:
 
 Observed sensitive logging patterns include:
 
-- Full broker messages in consumers.
+- Full broker messages in consumers at INFO level.
 - Full webhook payloads at debug level.
 - Webhook response bodies in info/warn logs.
 - Full DTO content after process start.
 - Full authorities at debug level.
+- Super admin grant logged with user email at INFO level.
+
+**Files:**
+- `src/main/java/cv/igrp/platform/process/management/shared/delegates/message/consumer/AbstractStartProcessConsumer.java:47`
+- `src/main/java/cv/igrp/platform/process/management/shared/delegates/message/consumer/AbstractProcessEventConsumer.java:46`
+
+```java
+LOGGER.info("Received message: {}", message);      // full Kafka payload at INFO
+LOGGER.info("Received process event: {}", message); // full Kafka payload at INFO
+```
 
 Recommended actions:
 
-- Mask tokens, passwords, authorization headers, emails where required, business keys if sensitive, variables/forms, and webhook payloads.
 - Log IDs and correlation IDs instead of full payloads.
+- Move payload logging to DEBUG level only.
+- Mask tokens, passwords, authorization headers, emails, business keys, variables/forms, and webhook payloads.
 - Add structured logging with a redaction policy.
 - Keep debug logging disabled in shared environments.
 
 ### Sanitize API error responses
 
-`GlobalExceptionHandler` sometimes returns exception messages or database-specific details to clients.
+`GlobalExceptionHandler` returns internal exception messages or database-specific details to clients in multiple handlers.
+
+**File:** `src/main/java/cv/igrp/platform/process/management/shared/domain/exceptions/GlobalExceptionHandler.java`
+
+Issues found:
+
+1. **NullPointerException** (line 68-77): `problemDetail.setTitle(ex.getMessage())` — NPE messages with helpful NullPointerExceptions (JDK 14+) contain internal field names, method names, and class paths.
+
+2. **IllegalStateException** (line 79-89): `problemDetail.setTitle(ex.getMessage())` — same internal detail leakage.
+
+3. **IllegalArgumentException** (line 36-46): `problemDetail.setTitle(ex.getMessage())` — may contain internal parameter names or values.
+
+4. **DataIntegrityViolationException** (line 148-175): `problem.setDetail(ex.getMostSpecificCause().getMessage())` — for non-FK errors, the raw PSQL error message (including table names, column names, constraint names, and potentially data values) is returned to the client.
+
+5. **HttpMessageNotReadableException** (line 121-146): `problem.setDetail(ex.getMessage())` — returns Jackson parser internals, class paths, and deserialization details.
+
+6. **RuntimeProcessEngineException** (line 198-206) and **ProcessDeploymentException** (line 208-216): Both set `problemDetail.setTitle(ex.getMessage())` — may expose internal engine state.
 
 Recommended actions:
 
@@ -201,73 +324,31 @@ Recommended actions:
 - Avoid returning stack trace locations, raw SQL errors, or malformed JSON parser internals.
 - Keep validation errors user-friendly, but do not echo sensitive submitted values.
 
-## Deployment Security
-
-### Pin and scan container images
-
-The Dockerfile uses `cgr.dev/chainguard/maven:latest-dev` and `cgr.dev/chainguard/jre:latest`.
-
-Recommended actions:
-
-- Pin exact tags or digests.
-- Scan application images with Trivy, Grype, or the organization-approved scanner.
-- Generate an SBOM during CI.
-- Verify the runtime image runs as non-root.
-- Use read-only root filesystem where possible.
-
-### Harden Kubernetes manifests
-
-Recommended additions:
-
-- TLS-enabled ingress and HSTS.
-- Readiness and liveness probes.
-- `securityContext` with `runAsNonRoot`, `allowPrivilegeEscalation: false`, dropped capabilities, and seccomp profile.
-- NetworkPolicies that limit DB, broker, IAM, and webhook egress.
-- Resource requests/limits matched to load tests.
-- Separate service accounts with least privilege.
-
-### Protect actuator and Swagger
-
-Production disables Swagger in `application-production.properties`, which is good. Staging enables Swagger by default unless `ENABLE_SWAGGER` is false.
-
-Recommended actions:
-
-- Keep Swagger disabled or authenticated outside development.
-- Keep `/actuator/health` public only if it does not expose details.
-- Protect `/actuator/prometheus` by auth, network policy, or internal-only ingress.
-- Disable `show-details` for unauthenticated health responses.
-
-## Dependency And Build Security
-
-### Align dependency versions
-
-The project uses Spring Boot's dependency management but also pins `spring-security-oauth2-client` to `6.3.7`.
-
-Recommended actions:
-
-- Avoid overriding Spring Security versions unless there is a documented compatibility reason.
-- Let the Spring Boot BOM manage Spring Security where possible.
-- If overriding, document why and check for CVEs.
-
-### Tighten vulnerability gates
-
-OWASP Dependency Check is configured with `failBuildOnCVSS=10`.
-
-Recommended actions:
-
-- Lower the threshold for release branches, for example fail on `CVSS >= 7` or organization policy.
-- Add dependency updates through Renovate, Dependabot, or equivalent.
-- Scan Docker images and OS packages, not only Maven dependencies.
-- Keep private repository dependencies monitored for advisories.
-
 ## Transport And Data Protection
 
-### Require TLS for all external connections
+### Require TLS for Kafka connections
+
+Kafka `security.protocol` defaults to `PLAINTEXT` in the base configuration:
+
+```properties
+spring.kafka.properties.security.protocol=${SPRING_KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+```
+
+**File:** `src/main/resources/application.properties:44`
+
+All Kafka messages — including process event data and bearer tokens in `Authorization` headers — are transmitted in cleartext. The SASL JAAS config is always loaded even when the protocol is PLAINTEXT.
+
+Recommended actions:
+
+- Change the default to `SASL_SSL` for the base/production configuration.
+- Override to `PLAINTEXT` only in the development profile.
+- Ensure SASL JAAS config is conditionally loaded only when SASL is active.
+
+### Require TLS for all other external connections
 
 Recommended actions:
 
 - Use HTTPS for IAM, access-management APIs, webhooks, and OTLP where supported.
-- Use `SASL_SSL` or `SSL` for Kafka in shared/prod environments.
 - Use TLS for PostgreSQL when traffic crosses nodes or networks where encryption is required.
 - Keep SMTP STARTTLS enabled and verify certificate behavior.
 
@@ -283,6 +364,93 @@ Recommended actions:
 - Restrict DB access to audit/history tables.
 - Consider field-level encryption for high-risk values.
 
+## Deployment Security
+
+### Pin and scan container images
+
+The Dockerfile uses `maven:3.9.9-eclipse-temurin-23` and `eclipse-temurin:23-jre`.
+
+**File:** `Dockerfile`
+
+The Dockerfile also imports custom CA certificates into the JVM truststore using the well-known default password `changeit`:
+
+```dockerfile
+-storepass changeit -noprompt \
+```
+
+**File:** `Dockerfile:21`
+
+Recommended actions:
+
+- Pin exact tags or digests for reproducible builds.
+- Scan application images with Trivy, Grype, or the organization-approved scanner.
+- Generate an SBOM during CI.
+- Verify the runtime image runs as non-root (add `USER` directive).
+- Use read-only root filesystem where possible.
+- Pass the keystore password as a build argument, or document why `changeit` is acceptable (CA truststore only, no private keys).
+
+### Harden Kubernetes manifests
+
+**File:** `k8s/deployment.yaml`
+
+Recommended additions:
+
+- TLS-enabled ingress and HSTS.
+- Readiness and liveness probes.
+- `securityContext` with `runAsNonRoot`, `allowPrivilegeEscalation: false`, dropped capabilities, and seccomp profile.
+- NetworkPolicies that limit DB, broker, IAM, and webhook egress.
+- Resource requests/limits matched to load tests (currently set but should be validated).
+- Separate service accounts with least privilege.
+
+### Protect actuator and Swagger
+
+Production disables Swagger in `application-production.properties`, which is good. Staging defaults Swagger to enabled:
+
+```properties
+springdoc.swagger-ui.enabled=${ENABLE_SWAGGER:true}
+```
+
+**File:** `src/main/resources/application-staging.properties:30`
+
+The Swagger UI endpoints (`/swagger-ui/**`, `/v3/api-docs/**`) are `permitAll()` in SecurityConfig, meaning full API documentation is visible to unauthenticated visitors.
+
+Recommended actions:
+
+- Default Swagger to disabled in staging (set to `false`).
+- Keep `/actuator/health` public only if it does not expose details.
+- Protect `/actuator/prometheus` by auth, network policy, or internal-only ingress.
+- Disable `show-details` for unauthenticated health responses.
+- Consider running the management server on a separate port for internal-only access.
+
+## Dependency And Build Security
+
+### Align dependency versions
+
+The project uses Spring Boot's dependency management but also pins `spring-security-oauth2-client` to a specific version.
+
+Recommended actions:
+
+- Avoid overriding Spring Security versions unless there is a documented compatibility reason.
+- Let the Spring Boot BOM manage Spring Security where possible.
+- If overriding, document why and check for CVEs.
+
+### Tighten vulnerability gates
+
+OWASP Dependency Check is configured with `failBuildOnCVSS=10`, meaning only a perfect CVSS 10.0 score fails the build. Every CRITICAL (9.x), HIGH, and MEDIUM vulnerability passes silently.
+
+**File:** `pom.xml:281`
+
+```xml
+<failBuildOnCVSS>10</failBuildOnCVSS>
+```
+
+Recommended actions:
+
+- Lower the threshold for release branches, for example fail on `CVSS >= 7`.
+- Add dependency updates through Renovate, Dependabot, or equivalent.
+- Scan Docker images and OS packages, not only Maven dependencies.
+- Keep private repository dependencies monitored for advisories.
+
 ## Input Validation
 
 Recommended actions:
@@ -297,10 +465,15 @@ Recommended actions:
 
 ## Suggested Next Steps
 
-1. Restrict CORS origins and add tests.
-2. Remove admin/system fallback for unauthenticated broker messages.
-3. Enforce task/process visibility for non-admin users.
-4. Remove default webhook token and move deployment secrets to `Secret` references.
-5. Add SSRF protections and timeouts to webhook delegates.
-6. Sanitize logs and public error responses.
-7. Pin container images and tighten dependency/image scanning gates.
+1. Remove the try/catch in `JwtDecoderConfiguration` — fail startup when the OIDC provider is unreachable.
+2. Restrict CORS origins and add tests.
+3. Remove admin/system fallback for unauthenticated broker messages.
+4. Enforce task/process visibility for non-admin users.
+5. Remove default webhook token and move deployment secrets to `Secret` references.
+6. Replace hardcoded credentials in `k8s/deployment.yaml` with Kubernetes Secret references.
+7. Sanitize all `GlobalExceptionHandler` responses — stop returning `ex.getMessage()` to clients.
+8. Add SSRF protections and timeouts to webhook delegates.
+9. Default Kafka security protocol to `SASL_SSL` and active profile to production.
+10. Pin container images, add non-root `USER` directive, and lower OWASP CVSS threshold to 7.
+11. Sanitize logs — move payload logging to DEBUG, redact tokens and PII.
+12. Disable Swagger in staging by default.

@@ -9,6 +9,7 @@ import cv.igrp.platform.process.management.shared.application.constants.ProcessI
 import cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus;
 import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
 import cv.igrp.platform.process.management.shared.domain.models.*;
+import cv.igrp.platform.process.management.shared.security.util.UserContext;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,12 @@ class TaskInstanceServiceTest {
 
   @Mock
   private ProcessDefinitionRepository processDefinitionRepository;
+
+  @Mock
+  private UserProfileRepository userProfileRepository;
+
+  @Mock
+  private UserContext userContext;
 
   @Spy
   @InjectMocks
@@ -526,6 +533,54 @@ class TaskInstanceServiceTest {
     assertEquals(stats, result);
 
    */
+  }
+
+  /* ============================================================
+   *  getAllTaskInstances — batch behavior
+   * ============================================================ */
+
+  @Test
+  void getAllTaskInstances_shouldUseBatchMethodsForVariablesAndProfiles() {
+
+    // Setup filter (no current-user filtering)
+    TaskInstanceFilter filter = mock(TaskInstanceFilter.class);
+    when(filter.isFilterByCurrentUser()).thenReturn(false);
+
+    // Setup task event
+    TaskInstanceEvent event = mock(TaskInstanceEvent.class);
+    when(event.getPerformedBy()).thenReturn(Code.create("performer@nosi.cv"));
+
+    // Setup task instance
+    TaskInstance task = mock(TaskInstance.class);
+    when(task.getEngineProcessNumber()).thenReturn("ENG-001");
+    when(task.getStartedBy()).thenReturn(Code.create("starter@nosi.cv"));
+    when(task.getEndedBy()).thenReturn(null);
+    when(task.getAssignedBy()).thenReturn(Code.create("assignee@nosi.cv"));
+    when(task.getTaskInstanceEvents()).thenReturn(List.of(event));
+
+    PageableLista<TaskInstance> page = new PageableLista<>(0, 10, 1L, 1, true, true, List.of(task));
+    when(taskInstanceRepository.findAll(filter)).thenReturn(page);
+
+    // Mock batch process variables
+    when(runtimeProcessEngineRepository.getProcessVariablesBatch(any()))
+        .thenReturn(Map.of("ENG-001", Map.of("var1", "val1")));
+
+    // Mock batch user profiles
+    when(userProfileRepository.findBySubjectOrEmails(any(), any()))
+        .thenReturn(List.of());
+
+    // Execute
+    taskInstanceService.getAllTaskInstances(filter);
+
+    // Verify batch process variables called once
+    verify(runtimeProcessEngineRepository).getProcessVariablesBatch(any());
+
+    // Verify batch user profiles called once
+    verify(userProfileRepository).findBySubjectOrEmails(any(), any());
+
+    // Verify individual methods are NEVER called in the list path
+    verify(runtimeProcessEngineRepository, never()).getProcessVariables(anyString());
+    verify(userProfileRepository, never()).findBySubjectOrEmail(anyString(), anyString());
   }
 
 }

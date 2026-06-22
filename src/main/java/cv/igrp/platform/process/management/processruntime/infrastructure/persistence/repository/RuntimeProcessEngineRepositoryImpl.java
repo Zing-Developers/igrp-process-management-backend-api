@@ -267,6 +267,52 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   }
 
   @Override
+  public Map<String, Map<String, Object>> getProcessVariablesBatch(Collection<String> processInstanceIds) {
+    if (processInstanceIds == null || processInstanceIds.isEmpty()) {
+      return Map.of();
+    }
+    try {
+      Map<String, List<ProcessVariableInstance>> batchResult =
+          processManagerAdapter.getProcessVariablesBatch(processInstanceIds);
+
+      Map<String, Map<String, Object>> result = new HashMap<>();
+      batchResult.forEach((processId, variables) -> {
+        Map<String, Object> varsMap = variables.stream()
+            .filter(p -> p.name() != null && p.value() != null)
+            .collect(Collectors.toMap(
+                ProcessVariableInstance::name,
+                ProcessVariableInstance::value,
+                (a, b) -> b));
+        result.put(processId, varsMap);
+      });
+      return result;
+    } catch (Exception e) {
+      LOGGER.error("Failed to batch-retrieve process variables for {} processes", processInstanceIds.size(), e);
+      return Map.of();
+    }
+  }
+
+  @Override
+  public Map<String, List<ProcessInstanceTaskStatus>> getProcessInstanceTaskStatusBatch(Collection<String> processInstanceIds) {
+    if (processInstanceIds == null || processInstanceIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, List<ProcessInstanceTaskStatus>> result = new HashMap<>();
+    for (String processInstanceId : processInstanceIds) {
+      try {
+        List<ProcessInstanceTaskStatus> statuses = taskQueryService.getUserTaskProgress(processInstanceId).stream()
+            .map(processInstanceTaskStatusMapper::toModel)
+            .collect(Collectors.toList());
+        result.put(processInstanceId, statuses);
+      } catch (Exception e) {
+        LOGGER.error("Failed to retrieve task status for process instance ID: {}", processInstanceId, e);
+        result.put(processInstanceId, List.of());
+      }
+    }
+    return result;
+  }
+
+  @Override
   public void setTaskPriority(String taskInstanceId, int priority) throws RuntimeProcessEngineException {
     try {
       taskActionService.setTaskPriority(taskInstanceId, priority);

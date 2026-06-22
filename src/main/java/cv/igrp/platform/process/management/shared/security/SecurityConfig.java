@@ -31,6 +31,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.cors.CorsConfiguration;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 import static cv.igrp.platform.process.management.shared.security.util.IgrpAuthorizationConstants.ROLE_PREFIX;
@@ -54,7 +55,7 @@ public class SecurityConfig {
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http, IAMUserProfileSyncFilter iamUserProfileSyncFilter) throws Exception {
 
-    http.cors(cors -> cors.configurationSource(request -> {
+    http.cors(cors -> cors.configurationSource(_ -> {
       var configuration = new CorsConfiguration();
       configuration.addAllowedOriginPattern(CorsConfiguration.ALL);
       configuration.addAllowedMethod(HttpMethod.GET);
@@ -85,7 +86,7 @@ public class SecurityConfig {
             .anyRequest()
             .authenticated()  // Require authentication for all other requests
         )
-        .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+        .exceptionHandling(ex -> ex.authenticationEntryPoint((_, response, _) -> {
           response.addHeader(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=\"Restricted Content\"");
           response.sendError(HttpStatus.UNAUTHORIZED.value(), HttpStatus.UNAUTHORIZED.getReasonPhrase());
         }));
@@ -114,8 +115,8 @@ public class SecurityConfig {
       final String sub = jwt.getSubject();
 
       HttpServletRequest request =
-          ((ServletRequestAttributes) RequestContextHolder
-              .getRequestAttributes())
+          ((ServletRequestAttributes) Objects.requireNonNull(RequestContextHolder
+              .getRequestAttributes()))
               .getRequest();
 
       Set<GrantedAuthority> authorities = new HashSet<>();
@@ -134,9 +135,7 @@ public class SecurityConfig {
 
         authorizationService
             .getPermissions(token, request)
-            .forEach(p -> {
-              authorities.add(new SimpleGrantedAuthority(p));
-            });
+            .forEach(p -> authorities.add(new SimpleGrantedAuthority(p)));
 
         // Activiti Admin or User role
         if (authorizationService.isSuperAdmin(token, request)) {
@@ -170,7 +169,7 @@ public class SecurityConfig {
 
   @Bean
   public UserDetailsService userDetailsService() {
-    return username -> {
+    return _ -> {
       throw new UsernameNotFoundException("UserDetailsService not used with JWT/Keycloak");
     };
   }

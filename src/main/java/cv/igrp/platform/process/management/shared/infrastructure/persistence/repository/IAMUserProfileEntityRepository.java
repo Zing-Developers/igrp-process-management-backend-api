@@ -10,9 +10,12 @@ import org.springframework.http.HttpStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.history.RevisionRepository;
+import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface IAMUserProfileEntityRepository extends
@@ -34,5 +37,8 @@ public interface IAMUserProfileEntityRepository extends
   List<IAMUserProfileEntity> findBySubIn(Collection<String> ids);
 
   List<IAMUserProfileEntity> findByEmailIn(Collection<String> emails);
+
+  @Query("SELECT e FROM IAMUserProfileEntity e WHERE e.sub IN :identifiers OR e.email IN :identifiers")
+  List<IAMUserProfileEntity> findBySubInOrEmailIn(@Param("identifiers") Set<String> identifiers);
 
 }

@@ -18,6 +18,7 @@ import cv.igrp.platform.process.management.shared.domain.models.PageableLista;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -61,11 +62,41 @@ public class ProcessInstanceService {
     }
 
     PageableLista<ProcessInstance> pageableLista = processInstanceRepository.findAll(filter);
-    pageableLista.getContent().forEach(processInstance -> {
-      setProcessInstanceProgress(processInstance);
-      addProcessVariables(processInstance);
-      resolveUserProfiles(processInstance);
-    });
+    List<ProcessInstance> instances = pageableLista.getContent();
+
+    if (!instances.isEmpty()) {
+      Set<String> engineNumbers = instances.stream()
+          .map(p -> p.getEngineProcessNumber().getValue())
+          .filter(Objects::nonNull)
+          .collect(Collectors.toCollection(LinkedHashSet::new));
+
+      // Batch progress
+      Map<String, List<ProcessInstanceTaskStatus>> taskStatusMap =
+          runtimeProcessEngineRepository.getProcessInstanceTaskStatusBatch(engineNumbers);
+
+      // Batch variables
+      Map<String, Map<String, Object>> variablesMap =
+          runtimeProcessEngineRepository.getProcessVariablesBatch(engineNumbers);
+
+      for (ProcessInstance processInstance : instances) {
+        String engineNumber = processInstance.getEngineProcessNumber().getValue();
+
+        List<ProcessInstanceTaskStatus> statuses = taskStatusMap.getOrDefault(engineNumber, List.of());
+        int totalTasks = statuses.size();
+        long completedTasks = statuses.stream()
+            .filter(s -> s.getStatus() == TaskInstanceStatus.COMPLETED)
+            .count();
+        processInstance.setProgress(totalTasks, (int) completedTasks);
+
+        Map<String, Object> vars = variablesMap.get(engineNumber);
+        if (vars != null) {
+          processInstance.addVariables(vars);
+        }
+      }
+
+      // Batch user profiles
+      resolveAllUserProfiles(instances);
+    }
 
     return pageableLista;
   }
@@ -126,6 +157,40 @@ public class ProcessInstanceService {
         processInstance.resolveUserProfileCreatedBy(userProfile);
       }
     });
+  }
+
+  private void resolveAllUserProfiles(List<ProcessInstance> instances) {
+    if (instances == null || instances.isEmpty()) {
+      return;
+    }
+    Set<String> allIds = new HashSet<>();
+    for (ProcessInstance p : instances) {
+      addIfNotNull(allIds, p.getStartedBy());
+      addIfNotNull(allIds, p.getEndedBy());
+      addIfNotNull(allIds, p.getCanceledBy());
+      addIfNotNull(allIds, p.getCreatedBy());
+    }
+    if (allIds.isEmpty()) {
+      return;
+    }
+    List<UserProfile> profiles = userProfileRepository.findBySubjectOrEmails(allIds, allIds);
+    Map<String, UserProfile> lookup = new HashMap<>();
+    for (UserProfile p : profiles) {
+      if (p.getSub() != null) lookup.put(p.getSub(), p);
+      if (p.getEmail() != null) lookup.put(p.getEmail(), p);
+    }
+    for (ProcessInstance instance : instances) {
+      applyProfile(lookup, instance.getStartedBy(), instance::resolveUserProfileStartedBy);
+      applyProfile(lookup, instance.getEndedBy(), instance::resolveUserProfileEndedBy);
+      applyProfile(lookup, instance.getCanceledBy(), instance::resolveUserProfileCancelledBy);
+      applyProfile(lookup, instance.getCreatedBy(), instance::resolveUserProfileCreatedBy);
+    }
+  }
+
+  private void applyProfile(Map<String, UserProfile> lookup, String identifier, java.util.function.Consumer<UserProfile> setter) {
+    if (identifier == null) return;
+    UserProfile profile = lookup.get(identifier);
+    if (profile != null) setter.accept(profile);
   }
 
   private boolean matches(UserProfile userProfile, String identifier) {
