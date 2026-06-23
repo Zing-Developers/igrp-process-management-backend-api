@@ -28,6 +28,7 @@ public class TaskInstanceFilter {
   private final Integer size;
   private Code user;
   private List<VariablesExpression> variablesExpressions;
+  private List<String> engineProcessNumbers;
 
   private Set<String> candidateGroups;
   private Set<String> candidateUsers;
@@ -57,6 +58,7 @@ public class TaskInstanceFilter {
       Integer page,
       Integer size,
       List<VariablesExpression> variablesExpressions,
+      List<String> engineProcessNumbers,
       Name name,
       Code processReleaseKey,
       boolean filterByCurrentUser,
@@ -77,6 +79,7 @@ public class TaskInstanceFilter {
     this.page = page == null ? 0 : page;
     this.size = size == null ? 50 : size;
     this.variablesExpressions = variablesExpressions ==  null ? new ArrayList<>() : variablesExpressions;
+    this.engineProcessNumbers = engineProcessNumbers == null ? new ArrayList<>() : engineProcessNumbers;
     this.candidateGroups = candidateGroups == null ? new HashSet<>() : candidateGroups;
     this.name = name;
     this.processRealeaseKey = processReleaseKey;
@@ -88,6 +91,10 @@ public class TaskInstanceFilter {
 
   public void addContextUserGroup(String group){
     this.contextUserGroups.add(group);
+  }
+
+  public void includeEngineProcessNumber(String engineProcessNumber){
+    this.engineProcessNumbers.add(engineProcessNumber);
   }
 
   public void bindCurrentUser(Code user, boolean isSuperAdmin){

@@ -167,11 +167,19 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
 
     if (!filter.getVariablesExpressions().isEmpty()) {
       spec = spec.and((root, _, cb) -> {
-        List<Predicate> predicates = filter.getVariablesExpressions()
+        // Task-local variables (JSONB column) — all expressions ANDed together
+        Predicate jsonbMatch = cb.and(filter.getVariablesExpressions()
             .stream()
             .map(expr -> buildVariablePredicate(expr, root, cb))
-            .toList();
-        return cb.and(predicates.toArray(new Predicate[0]));
+            .toArray(Predicate[]::new));
+        // Process variables — resolved by the engine into matching engine process numbers.
+        // Empty list means the engine matched nothing, so the process side contributes nothing
+        // and the result depends solely on the task-local match.
+        Predicate processMatch = filter.getEngineProcessNumbers().isEmpty()
+            ? cb.disjunction()
+            : root.get("processInstanceId").get("engineProcessNumber").in(filter.getEngineProcessNumbers());
+        // A task matches if EITHER its process variables OR its task-local variables match.
+        return cb.or(processMatch, jsonbMatch);
       });
     }
 

@@ -253,6 +253,15 @@ public class TaskInstanceService {
           .forEach(filter::addContextUserGroup);
     }
 
+    // Resolve process-variable filters via the engine into matching engine process numbers.
+    // The repository OR-combines these with the task-local (JSONB) variable predicate.
+    if (!filter.getVariablesExpressions().isEmpty()) {
+      List<ProcessInstance> engineProcessInstances =
+          runtimeProcessEngineRepository.getAllProcessInstancesByVariables(filter.getVariablesExpressions());
+      engineProcessInstances.forEach(pi ->
+          filter.includeEngineProcessNumber(pi.getEngineProcessNumber().getValue()));
+    }
+
     PageableLista<TaskInstance> taskInstances = taskInstanceRepository.findAll(filter);
 
     // Enrich with process variables — single batch call

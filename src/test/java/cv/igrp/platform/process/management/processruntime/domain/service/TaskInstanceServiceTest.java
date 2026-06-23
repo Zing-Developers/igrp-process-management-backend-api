@@ -4,6 +4,7 @@ import cv.igrp.platform.process.management.processdefinition.domain.models.Proce
 import cv.igrp.platform.process.management.processdefinition.domain.repository.ProcessDefinitionRepository;
 import cv.igrp.platform.process.management.processruntime.domain.models.*;
 import cv.igrp.platform.process.management.shared.application.constants.TaskAssignmentMode;
+import cv.igrp.platform.process.management.shared.application.constants.VaribalesOperator;
 import cv.igrp.platform.process.management.processruntime.domain.repository.*;
 import cv.igrp.platform.process.management.shared.application.constants.ProcessInstanceStatus;
 import cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus;
@@ -542,9 +543,10 @@ class TaskInstanceServiceTest {
   @Test
   void getAllTaskInstances_shouldUseBatchMethodsForVariablesAndProfiles() {
 
-    // Setup filter (no current-user filtering)
+    // Setup filter (no current-user filtering, no variable filtering)
     TaskInstanceFilter filter = mock(TaskInstanceFilter.class);
     when(filter.isFilterByCurrentUser()).thenReturn(false);
+    when(filter.getVariablesExpressions()).thenReturn(List.of());
 
     // Setup task event
     TaskInstanceEvent event = mock(TaskInstanceEvent.class);
@@ -581,6 +583,62 @@ class TaskInstanceServiceTest {
     // Verify individual methods are NEVER called in the list path
     verify(runtimeProcessEngineRepository, never()).getProcessVariables(anyString());
     verify(userProfileRepository, never()).findBySubjectOrEmail(anyString(), anyString());
+  }
+
+  @Test
+  void getAllTaskInstances_shouldDelegateVariableFilteringToEngine_andCollectEngineProcessNumbers() {
+
+    VariablesExpression expression = VariablesExpression.builder()
+        .name("status")
+        .operator(VaribalesOperator.EQUALS)
+        .value("ACTIVE")
+        .build();
+
+    TaskInstanceFilter filter = TaskInstanceFilter.builder()
+        .variablesExpressions(new ArrayList<>(List.of(expression)))
+        .build();
+
+    ProcessInstance engineMatch = mock(ProcessInstance.class);
+    when(engineMatch.getEngineProcessNumber()).thenReturn(Code.create("ENG-001"));
+
+    when(runtimeProcessEngineRepository.getAllProcessInstancesByVariables(filter.getVariablesExpressions()))
+        .thenReturn(List.of(engineMatch));
+
+    PageableLista<TaskInstance> page = new PageableLista<>(0, 50, 0L, 0, true, true, List.of());
+    when(taskInstanceRepository.findAll(filter)).thenReturn(page);
+
+    taskInstanceService.getAllTaskInstances(filter);
+
+    // Engine was queried for process variables, and the matching engine process number was
+    // collected onto the filter so the repository can restrict tasks by their parent process.
+    verify(runtimeProcessEngineRepository).getAllProcessInstancesByVariables(filter.getVariablesExpressions());
+    assertTrue(filter.getEngineProcessNumbers().contains("ENG-001"));
+  }
+
+  @Test
+  void getAllTaskInstances_shouldLeaveEngineProcessNumbersEmpty_whenEngineReturnsNoMatches() {
+
+    VariablesExpression expression = VariablesExpression.builder()
+        .name("status")
+        .operator(VaribalesOperator.EQUALS)
+        .value("ACTIVE")
+        .build();
+
+    TaskInstanceFilter filter = TaskInstanceFilter.builder()
+        .variablesExpressions(new ArrayList<>(List.of(expression)))
+        .build();
+
+    when(runtimeProcessEngineRepository.getAllProcessInstancesByVariables(filter.getVariablesExpressions()))
+        .thenReturn(List.of());
+
+    PageableLista<TaskInstance> page = new PageableLista<>(0, 50, 0L, 0, true, true, List.of());
+    when(taskInstanceRepository.findAll(filter)).thenReturn(page);
+
+    taskInstanceService.getAllTaskInstances(filter);
+
+    // No process-variable matches: the repository falls back to the task-local (JSONB) predicate only.
+    verify(runtimeProcessEngineRepository).getAllProcessInstancesByVariables(filter.getVariablesExpressions());
+    assertTrue(filter.getEngineProcessNumbers().isEmpty());
   }
 
 }

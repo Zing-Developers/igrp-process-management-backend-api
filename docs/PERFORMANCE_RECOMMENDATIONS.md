@@ -28,6 +28,10 @@ This project is a Spring Boot 3 / Java 25 service with JPA/PostgreSQL, Activiti 
 | P2 | Connection pool | Tune HikariCP and PostgreSQL limits per pod replica count. | Open |
 | P2 | Process list sorting | `ProcessInstanceRepositoryImpl#findAll` has no deterministic sort order. | Open |
 | P2 | Kafka consumer config | No explicit concurrency, max-poll-records, or DLQ settings. | Open |
+| P2 | N+1 queries — single task detail | `getTaskById()` resolves user profiles per event instead of batching. | Open |
+| P2 | Serial loop — process task status batch | `getProcessInstanceTaskStatusBatch()` loops serially per process instance. | Open |
+| P2 | Serial loop — artifact saves on import | `importProcessDefinition()` saves each artifact individually in a loop. | Open |
+| P2 | Serial loop — group assignment | `updateProcessDefinitionAssignment()` and import call `addCandidateStarterGroup()` per group in a loop. | Open |
 | P3 | N+1 queries — runtime priorities | Per-task `setTaskPriority()` during task creation; low impact (1-3 tasks typically). | Open |
 | P3 | Audit/history retention | Review Activiti `history-level=full` and Envers retention for production volume. | Open |
 | P3 | Build/runtime | Pin image tags, set JVM container memory flags, right-size Docker memory limit. | Open |
@@ -136,6 +140,76 @@ Recommended actions:
 
 - Use `saveAll(List<TaskAssignmentRule>)` for batch inserts.
 - Configure `spring.jpa.properties.hibernate.jdbc.batch_size=20` to enable JDBC batching.
+
+### TaskInstanceService.getTaskById — per-event user profile resolution (P2)
+
+**File:** `TaskInstanceService.java:241-242`
+
+```java
+resolveUserProfiles(taskInstance);
+taskInstance.getTaskInstanceEvents().forEach(this::resolveUserProfiles);
+```
+
+The list endpoint (`getAllTaskInstances`) was fixed to use batch resolution via `resolveAllUserProfiles()`, but the single-task detail endpoint (`getTaskById`) still resolves user profiles per event individually. A task with 10 events triggers 10+ separate `findBySubjectOrEmail` queries.
+
+Recommended actions:
+
+- Collect all user identifiers from the task and its events, then resolve in a single `findBySubjectOrEmails` batch call, mirroring the pattern already used in `getAllTaskInstances`.
+
+### RuntimeProcessEngineRepositoryImpl.getProcessInstanceTaskStatusBatch — serial loop (P2)
+
+**File:** `RuntimeProcessEngineRepositoryImpl.java:296-313`
+
+```java
+for (String processInstanceId : processInstanceIds) {
+    List<ProcessInstanceTaskStatus> statuses = taskQueryService.getUserTaskProgress(processInstanceId).stream()
+        .map(processInstanceTaskStatusMapper::toModel)
+        .collect(Collectors.toList());
+    result.put(processInstanceId, statuses);
+}
+```
+
+Same pattern as the already-documented `getCandidateStarterGroupsBatch`: the method name suggests batch operation, but it loops serially calling `getUserTaskProgress()` per process instance. Loading 50 process instances results in 50 sequential calls.
+
+Recommended actions:
+
+- If the runtime engine supports a batch task progress API, use it.
+- Otherwise, use `CompletableFuture` with a bounded thread pool to parallelize the calls.
+- The loop is contained in the infrastructure layer, so callers are already batch-aware.
+
+### ProcessDeploymentService.importProcessDefinition — sequential artifact saves (P2)
+
+**File:** `ProcessDeploymentService.java:179-190`
+
+```java
+processPackage.getArtifacts().forEach(processArtifact -> {
+    // ... build artifact ...
+    processDefinitionRepository.saveArtifact(newProcessArtifact);
+});
+```
+
+Each artifact is saved individually in a loop. A process with 20 artifacts triggers 20 sequential DB inserts.
+
+Recommended actions:
+
+- Add a `saveAllArtifacts(List<ProcessArtifact>)` method to the repository.
+- Use `saveAll()` with Hibernate JDBC batching (`hibernate.jdbc.batch_size`).
+
+### ProcessDeploymentService — sequential group assignment (P2)
+
+**File:** `ProcessDeploymentService.java:103-115` and `192-195`
+
+```java
+Arrays.stream(groups.split(","))
+    .forEach(group -> processDeploymentRepository.addCandidateStarterGroup(processDefinitionId, group));
+```
+
+Both `updateProcessDefinitionAssignment()` and `importProcessDefinition()` call `addCandidateStarterGroup()` per group in a loop. Assigning 10 groups means 10 sequential external API calls.
+
+Recommended actions:
+
+- Add a `addCandidateStarterGroups(String processDefinitionId, Set<String> groups)` batch method if the framework adapter supports it.
+- Otherwise, parallelize with `CompletableFuture` as with the task status batch.
 
 ---
 
@@ -582,10 +656,13 @@ Recommended actions:
    - ~~Batch candidate starter groups in `ProcessDeploymentService#getAllDeployments`.~~ **DONE.**
    - ~~Persist `candidateUsers` to task entity to eliminate per-task `resolveCandidateUsers` N+1 query.~~ **DONE.**
 
-3. **Week 3 — Consumer and statistics fixes:**
+3. **Week 3 — Consumer, statistics, and serial loop fixes:**
    - Move `@Transactional` to method level on Kafka/RabbitMQ consumers.
    - Replace statistics 6-query pattern with `GROUP BY` or cached aggregate.
    - Add Kafka consumer concurrency and DLQ configuration.
+   - Batch user profile resolution in `getTaskById()` (mirrors existing list pattern).
+   - Batch artifact saves and group assignments in `importProcessDefinition()`.
+   - Parallelize or batch `getProcessInstanceTaskStatusBatch()` if runtime API supports it.
 
 4. **Week 4 — Cleanup and hardening:**
    - Add page size validation and max limits on all list endpoints.
