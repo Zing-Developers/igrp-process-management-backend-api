@@ -60,6 +60,16 @@ public class TaskInstanceEntity extends AuditEntity {
   private Set<String> candidateGroups = new HashSet<>();
 
 
+  @NotAudited
+  @ElementCollection(fetch = FetchType.LAZY)
+  @CollectionTable(
+      name = "t_task_instance_candidate_user",
+      joinColumns = @JoinColumn(name = "task_instance_id")
+  )
+  @Column(name = "user_id", nullable = false)
+  private Set<String> candidateUsers = new HashSet<>();
+
+
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "process_instance_id", referencedColumnName = "id")
   private ProcessInstanceEntity processInstanceId;

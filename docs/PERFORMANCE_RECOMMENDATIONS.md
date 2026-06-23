@@ -1,32 +1,40 @@
 # Performance Recommendations
 
-Reviewed on 2026-06-02 for the iGRP Platform Process Management API.
+Reviewed on 2026-06-08 for the iGRP Platform Process Management API.
 
 This project is a Spring Boot 3 / Java 25 service with JPA/PostgreSQL, Activiti runtime integration, Kafka/RabbitMQ delegates, Caffeine cache dependencies, Flyway, Envers auditing, OpenTelemetry, Docker, and Kubernetes manifests.
 
 ## Priority Summary
 
-| Priority | Area | Recommendation |
-| --- | --- | --- |
-| P0 | N+1 queries | Batch process-variable and user-profile resolution in task and process list endpoints. |
-| P0 | Webhook/runtime timeouts | Configure `RestClient` connect and read timeouts globally; current default is infinite. |
-| P0 | Auth per-request overhead | Cache authorization groups, permissions, and super-admin checks; currently 3 remote calls per request. |
-| P1 | Statistics queries | Replace 6+ individual COUNT queries with grouped aggregate or cached result. |
-| P1 | Database indexes | Add Flyway-managed indexes for the most common task/process filters and sorts. |
-| P1 | Class-level @Transactional on consumers | Move `@Transactional` from class to method level on Kafka/RabbitMQ consumers. |
-| P1 | Unbounded archive queries | `archiveProcess`/`unArchiveProcess` load all instances without pagination and save individually. |
-| P1 | IAM profile sync filter | DB read/write on every authenticated request without caching. |
-| P2 | Page size validation | Add max limits for `page`, `size`, variable filters, and string query params. |
-| P2 | JSONB filtering | Limit dynamic JSONB variable searches; add expression indexes for high-value paths. |
-| P2 | Deployment list enrichment | Batch-load candidate starter groups instead of per-deployment query. |
-| P2 | Email sending | `mailSender.send()` blocks process-engine thread; consider async. |
-| P2 | Event publishing | `applicationEventPublisher.publishEvent()` is synchronous by default. |
-| P2 | Cache usage | Apply `@Cacheable` selectively; Caffeine is configured but no caching annotations exist. |
-| P2 | Connection pool | Tune HikariCP and PostgreSQL limits per pod replica count. |
-| P2 | Process list sorting | `ProcessInstanceRepositoryImpl#findAll` has no deterministic sort order. |
-| P2 | Kafka consumer config | No explicit concurrency, max-poll-records, or DLQ settings. |
-| P3 | Audit/history retention | Review Activiti `history-level=full` and Envers retention for production volume. |
-| P3 | Build/runtime | Pin image tags, set JVM container memory flags, right-size Docker memory limit. |
+| Priority | Area | Recommendation | Status |
+| --- | --- | --- | --- |
+| P0 | N+1 queries — task list | Batch process-variable and user-profile resolution in task list endpoint. | **RESOLVED** |
+| P0 | N+1 queries — process list | Batch progress, variables, and user-profile resolution in process list endpoint. | **RESOLVED** |
+| P0 | N+1 queries — candidate users | Persist `candidateUsers` to DB instead of per-task `task_assignment_rule` query. | **RESOLVED** |
+| P0 | Webhook/runtime timeouts | Configure `RestClient` connect and read timeouts globally; current default is infinite. | Open |
+| P0 | Auth per-request overhead | Cache authorization groups, permissions, and super-admin checks; currently 3 remote calls per request. | Open |
+| P1 | N+1 queries — timeline events | Batch task-instance and user-profile resolution in `ActivityInstanceService`. | **RESOLVED** |
+| P1 | Statistics queries | Replace 6+ individual COUNT queries with grouped aggregate or cached result. | Open |
+| P1 | Database indexes | Add Flyway-managed indexes for the most common task/process filters and sorts. | Open |
+| P1 | Class-level @Transactional on consumers | Move `@Transactional` from class to method level on Kafka/RabbitMQ consumers. | Open |
+| P1 | Unbounded archive queries | `archiveProcess`/`unArchiveProcess` load all instances without pagination and save individually. | Open |
+| P1 | IAM profile sync filter | DB read/write on every authenticated request without caching. | Open |
+| P2 | Page size validation | Add max limits for `page`, `size`, variable filters, and string query params. | Open |
+| P2 | JSONB filtering | Limit dynamic JSONB variable searches; add expression indexes for high-value paths. | Open |
+| P2 | N+1 queries — deployment list | Batch-load candidate starter groups instead of per-deployment query. | **RESOLVED** |
+| P2 | Email sending | `mailSender.send()` blocks process-engine thread; consider async. | Open |
+| P2 | Event publishing | `applicationEventPublisher.publishEvent()` is synchronous by default. | Open |
+| P2 | Cache usage | Apply `@Cacheable` selectively; Caffeine is configured but no caching annotations exist. | Open |
+| P2 | Connection pool | Tune HikariCP and PostgreSQL limits per pod replica count. | Open |
+| P2 | Process list sorting | `ProcessInstanceRepositoryImpl#findAll` has no deterministic sort order. | Open |
+| P2 | Kafka consumer config | No explicit concurrency, max-poll-records, or DLQ settings. | Open |
+| P2 | N+1 queries — single task detail | `getTaskById()` resolves user profiles per event instead of batching. | Open |
+| P2 | Serial loop — process task status batch | `getProcessInstanceTaskStatusBatch()` loops serially per process instance. | Open |
+| P2 | Serial loop — artifact saves on import | `importProcessDefinition()` saves each artifact individually in a loop. | Open |
+| P2 | Serial loop — group assignment | `updateProcessDefinitionAssignment()` and import call `addCandidateStarterGroup()` per group in a loop. | Open |
+| P3 | N+1 queries — runtime priorities | Per-task `setTaskPriority()` during task creation; low impact (1-3 tasks typically). | Open |
+| P3 | Audit/history retention | Review Activiti `history-level=full` and Envers retention for production volume. | Open |
+| P3 | Build/runtime | Pin image tags, set JVM container memory flags, right-size Docker memory limit. | Open |
 
 ## Hot Paths Observed
 
@@ -43,66 +51,84 @@ This project is a Spring Boot 3 / Java 25 service with JPA/PostgreSQL, Activiti 
 
 ## N+1 Query Patterns (P0)
 
-### TaskInstanceService.getAllTaskInstances — per-task runtime calls
+### TaskInstanceService.getAllTaskInstances — per-task runtime calls — RESOLVED
 
-**File:** `TaskInstanceService.java:258-280`
+**File:** `TaskInstanceService.java:247-278`
 
-After loading a page of tasks, the service loops through each unique `engineProcessNumber` and calls `runtimeProcessEngineRepository.getProcessVariables()` individually. It then resolves user profiles per task and per task event.
+**Resolved on 2026-06-08.** Previously, the service looped through each task to call `getProcessVariables()` individually and resolved user profiles per task and per event. This caused ~250 external calls for a page of 50 tasks.
 
-```
-for (String engineProcessNumber : engineProcessNumbers) {       // N calls
-    Map<String, Object> variables = runtimeProcessEngineRepository.getProcessVariables(engineProcessNumber);
-    ...
-}
-taskInstances.getContent().forEach(taskInstance -> {
-    resolveUserProfiles(taskInstance);                           // 1 DB call per task
-    taskInstance.getTaskInstanceEvents().forEach(this::resolveUserProfiles); // 1 DB call per event
-});
-```
+**What was done:**
 
-Impact: A page of 50 tasks with 3 events each = 50 runtime calls + 50 profile queries + 150 event profile queries = ~250 external calls.
+- Process variables now use `runtimeProcessEngineRepository.getProcessVariablesBatch()` — a single batch call per page.
+- User profiles now use `resolveAllUserProfiles()` — collects all user identifiers (startedBy, endedBy, assignedBy, event performedBy) across the entire page and resolves in a single `findBySubjectOrEmails` call.
 
-Recommended actions:
+All per-task queries in this loop have been eliminated.
 
-- Add a bulk `getProcessVariablesBatch(List<String> engineProcessNumbers)` method to the runtime repository.
-- Collect all user identifiers (startedBy, endedBy, assignedBy, event performedBy) across the entire page and resolve in a single `findBySubjectOrEmails` call.
-- Avoid resolving event-level user profiles on list responses unless events are explicitly requested.
+### ProcessInstanceService.getAllProcessInstances — three calls per instance — RESOLVED
 
-### ProcessInstanceService.getAllProcessInstances — three calls per instance
+**File:** `ProcessInstanceService.java:47-86`
 
-**File:** `ProcessInstanceService.java:64-68`
+**Resolved on 2026-06-08.** Previously, the service called `setProcessInstanceProgress()`, `addProcessVariables()`, and `resolveUserProfiles()` individually per instance (150 calls for 50 instances).
+
+**What was done:**
+
+- Progress uses `runtimeProcessEngineRepository.getProcessInstanceTaskStatusBatch()` — collects all engine numbers, single batch call, distributes results.
+- Variables use `runtimeProcessEngineRepository.getProcessVariablesBatch()` — same pattern as task list.
+- User profiles use `resolveAllUserProfiles()` — collects all user identifiers across the page and resolves in a single `findBySubjectOrEmails` call.
+
+### ProcessDeploymentService.getAllDeployments — per-deployment group query — RESOLVED
+
+**File:** `ProcessDeploymentService.java:57-70`
+
+**Resolved on 2026-06-08.** Previously called `getCandidateStarterGroups()` per deployment.
+
+**What was done:**
+
+- Uses `processDeploymentRepository.getCandidateStarterGroupsBatch()` — collects all deployment IDs, single batch call, distributes results. Note: the batch implementation currently loops internally in the repository since the framework adapter does not support a native batch API. The loop is contained in the infrastructure layer.
+
+### TaskInstanceService.resolveCandidateUsers — per-task assignment rule query — RESOLVED
+
+**File:** `TaskInstanceService.java` (previously lines 272, 594-605)
+
+**Resolved on 2026-06-08.** Previously, `candidateUsers` was not persisted on `TaskInstanceEntity`. The only way to populate it was by querying `task_assignment_rule` per task inside the `getAllTaskInstances` loop (50 DB queries per page) and again in `getTaskById`.
+
+**What was done:**
+
+- Added `candidateUsers` `@ElementCollection` to `TaskInstanceEntity` with a new `t_task_instance_candidate_user` join table (Flyway V4 migration), mirroring the existing `candidateGroups` pattern.
+- `TaskInstance.addCandidates()` now merges candidate users (via `mergeCandidateUsers()`) in addition to candidate groups, so users are stored on the domain model during task assignment.
+- `TaskInstanceMapper` maps `candidateUsers` bidirectionally: `toModel()` loads from entity, `toNewTaskEntity()`/`toTaskEntity()` sync back via `syncCandidateUsers()`.
+- Removed the per-task `resolveCandidateUsers()` calls from both `getAllTaskInstances()` and `getTaskById()`, along with the private method itself.
+- Updated `candidateUserRulePredicate` in `TaskInstanceRepositoryImpl` to query from the entity's `candidateUsers` collection instead of `TaskAssignmentRuleEntity`, matching the `candidateGroupExistsPredicate` pattern.
+
+### ActivityInstanceService.getProcessTimelineEvents — per-event queries — RESOLVED
+
+**File:** `ActivityInstanceService.java:77-102`
+
+**Resolved on 2026-06-08.** Previously had two N+1 patterns: per-event `findByExternalId()` task lookup and per-event `resolveUserProfiles()`.
+
+**What was done:**
+
+- Task lookup uses `taskInstanceRepository.findAllByExternalIds()` — collects all task IDs, single `WHERE externalId IN (...)` query, distributes results via map.
+- User profiles use `resolveAllUserProfiles()` — collects all assignee identifiers, single `findBySubjectOrEmails` call, distributes via lookup map.
+
+### TaskInstanceService.updateRuntimePriorities — per-task priority update (P3)
+
+**File:** `TaskInstanceService.java:625-631`
 
 ```java
-pageableLista.getContent().forEach(processInstance -> {
-    setProcessInstanceProgress(processInstance);    // 1 runtime call per instance
-    addProcessVariables(processInstance);            // 1 runtime call per instance
-    resolveUserProfiles(processInstance);            // 1 DB call per instance
-});
+tasks.forEach(task ->
+    runtimeProcessEngineRepository.setTaskPriority(
+        task.getExternalId().getValue(),
+        processInstance.getPriority()
+    )
+);
 ```
 
-Impact: A page of 50 process instances = 150 external calls.
+Per-task `setTaskPriority()` call to the runtime engine. Low impact — only called during task creation (not a list endpoint), and typically involves 1-3 tasks.
 
 Recommended actions:
 
-- Batch `getProcessInstanceTaskStatus` and `getProcessVariables` into a single bulk call per page.
-- Collect all user identifiers across the page and resolve in one query.
-
-### ProcessDeploymentService.getAllDeployments — per-deployment group query
-
-**File:** `ProcessDeploymentService.java:64-68`
-
-```java
-pageableLista.getContent().forEach(processDeployment -> {
-    processDeploymentRepository.getCandidateStarterGroups(processDeployment.getId())
-        .forEach(processDeployment::addCandidateGroups);
-});
-```
-
-Impact: One query per deployment per page.
-
-Recommended actions:
-
-- Add a batch method `getCandidateStarterGroupsBatch(List<String> deploymentIds)` returning `Map<String, List<String>>`.
+- If the runtime engine supports batch priority updates, add a batch method. Otherwise, accept the current pattern.
 
 ### TaskInstanceService.registerAssignmentRules — individual saves in loop
 
@@ -114,6 +140,76 @@ Recommended actions:
 
 - Use `saveAll(List<TaskAssignmentRule>)` for batch inserts.
 - Configure `spring.jpa.properties.hibernate.jdbc.batch_size=20` to enable JDBC batching.
+
+### TaskInstanceService.getTaskById — per-event user profile resolution (P2)
+
+**File:** `TaskInstanceService.java:241-242`
+
+```java
+resolveUserProfiles(taskInstance);
+taskInstance.getTaskInstanceEvents().forEach(this::resolveUserProfiles);
+```
+
+The list endpoint (`getAllTaskInstances`) was fixed to use batch resolution via `resolveAllUserProfiles()`, but the single-task detail endpoint (`getTaskById`) still resolves user profiles per event individually. A task with 10 events triggers 10+ separate `findBySubjectOrEmail` queries.
+
+Recommended actions:
+
+- Collect all user identifiers from the task and its events, then resolve in a single `findBySubjectOrEmails` batch call, mirroring the pattern already used in `getAllTaskInstances`.
+
+### RuntimeProcessEngineRepositoryImpl.getProcessInstanceTaskStatusBatch — serial loop (P2)
+
+**File:** `RuntimeProcessEngineRepositoryImpl.java:296-313`
+
+```java
+for (String processInstanceId : processInstanceIds) {
+    List<ProcessInstanceTaskStatus> statuses = taskQueryService.getUserTaskProgress(processInstanceId).stream()
+        .map(processInstanceTaskStatusMapper::toModel)
+        .collect(Collectors.toList());
+    result.put(processInstanceId, statuses);
+}
+```
+
+Same pattern as the already-documented `getCandidateStarterGroupsBatch`: the method name suggests batch operation, but it loops serially calling `getUserTaskProgress()` per process instance. Loading 50 process instances results in 50 sequential calls.
+
+Recommended actions:
+
+- If the runtime engine supports a batch task progress API, use it.
+- Otherwise, use `CompletableFuture` with a bounded thread pool to parallelize the calls.
+- The loop is contained in the infrastructure layer, so callers are already batch-aware.
+
+### ProcessDeploymentService.importProcessDefinition — sequential artifact saves (P2)
+
+**File:** `ProcessDeploymentService.java:179-190`
+
+```java
+processPackage.getArtifacts().forEach(processArtifact -> {
+    // ... build artifact ...
+    processDefinitionRepository.saveArtifact(newProcessArtifact);
+});
+```
+
+Each artifact is saved individually in a loop. A process with 20 artifacts triggers 20 sequential DB inserts.
+
+Recommended actions:
+
+- Add a `saveAllArtifacts(List<ProcessArtifact>)` method to the repository.
+- Use `saveAll()` with Hibernate JDBC batching (`hibernate.jdbc.batch_size`).
+
+### ProcessDeploymentService — sequential group assignment (P2)
+
+**File:** `ProcessDeploymentService.java:103-115` and `192-195`
+
+```java
+Arrays.stream(groups.split(","))
+    .forEach(group -> processDeploymentRepository.addCandidateStarterGroup(processDefinitionId, group));
+```
+
+Both `updateProcessDefinitionAssignment()` and `importProcessDefinition()` call `addCandidateStarterGroup()` per group in a loop. Assigning 10 groups means 10 sequential external API calls.
+
+Recommended actions:
+
+- Add a `addCandidateStarterGroups(String processDefinitionId, Set<String> groups)` batch method if the framework adapter supports it.
+- Otherwise, parallelize with `CompletableFuture` as with the task status batch.
 
 ---
 
@@ -553,14 +649,20 @@ Recommended actions:
    - Cache authorization calls in `SecurityConfig` (eliminates 3 remote calls/request).
 
 2. **Week 2 — N+1 query fixes:**
-   - Batch process variable loading in `TaskInstanceService#getAllTaskInstances`.
-   - Batch user-profile resolution across full page in both task and process list flows.
-   - Batch process progress + variables in `ProcessInstanceService#getAllProcessInstances`.
+   - ~~Batch process variable loading in `TaskInstanceService#getAllTaskInstances`.~~ **DONE.**
+   - ~~Batch user-profile resolution across full page in both task and process list flows.~~ **DONE.**
+   - ~~Batch process progress + variables in `ProcessInstanceService#getAllProcessInstances`.~~ **DONE.**
+   - ~~Batch timeline event enrichment in `ActivityInstanceService#getProcessTimelineEvents`.~~ **DONE.**
+   - ~~Batch candidate starter groups in `ProcessDeploymentService#getAllDeployments`.~~ **DONE.**
+   - ~~Persist `candidateUsers` to task entity to eliminate per-task `resolveCandidateUsers` N+1 query.~~ **DONE.**
 
-3. **Week 3 — Consumer and statistics fixes:**
+3. **Week 3 — Consumer, statistics, and serial loop fixes:**
    - Move `@Transactional` to method level on Kafka/RabbitMQ consumers.
    - Replace statistics 6-query pattern with `GROUP BY` or cached aggregate.
    - Add Kafka consumer concurrency and DLQ configuration.
+   - Batch user profile resolution in `getTaskById()` (mirrors existing list pattern).
+   - Batch artifact saves and group assignments in `importProcessDefinition()`.
+   - Parallelize or batch `getProcessInstanceTaskStatusBatch()` if runtime API supports it.
 
 4. **Week 4 — Cleanup and hardening:**
    - Add page size validation and max limits on all list endpoints.

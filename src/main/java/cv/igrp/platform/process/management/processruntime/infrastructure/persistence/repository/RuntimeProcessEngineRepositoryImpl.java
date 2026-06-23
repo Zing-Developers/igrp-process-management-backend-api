@@ -293,6 +293,26 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   }
 
   @Override
+  public Map<String, List<ProcessInstanceTaskStatus>> getProcessInstanceTaskStatusBatch(Collection<String> processInstanceIds) {
+    if (processInstanceIds == null || processInstanceIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, List<ProcessInstanceTaskStatus>> result = new HashMap<>();
+    for (String processInstanceId : processInstanceIds) {
+      try {
+        List<ProcessInstanceTaskStatus> statuses = taskQueryService.getUserTaskProgress(processInstanceId).stream()
+            .map(processInstanceTaskStatusMapper::toModel)
+            .collect(Collectors.toList());
+        result.put(processInstanceId, statuses);
+      } catch (Exception e) {
+        LOGGER.error("Failed to retrieve task status for process instance ID: {}", processInstanceId, e);
+        result.put(processInstanceId, List.of());
+      }
+    }
+    return result;
+  }
+
+  @Override
   public void setTaskPriority(String taskInstanceId, int priority) throws RuntimeProcessEngineException {
     try {
       taskActionService.setTaskPriority(taskInstanceId, priority);

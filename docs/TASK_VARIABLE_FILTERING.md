@@ -11,19 +11,32 @@ variables, the interaction with user-visibility rules, and known limitations.
 
 ## 1. Overview
 
-Every task instance persists its snapshot of process variables as a single `JSONB`
-column on the `t_task_instance` table. Clients can search tasks by one or more
-**variable expressions** — a triple of `(name, operator, value)` — sent in the
-request body. The backend converts each expression into a JPA
-`Specification<TaskInstanceEntity>` predicate that uses PostgreSQL's
-`jsonb_extract_path_text` function to read the variable value at a dotted path and
-compares it with the appropriate SQL operator for the value's Java type.
+Clients can search tasks by one or more **variable expressions** — a triple of
+`(name, operator, value)` — sent in the request body. A task matches if **either**
+of two sources matches:
 
-All variable predicates are combined with **logical AND** (there is currently no
-OR / NOT grouping in the public contract).
+1. **Process variables** — resolved by the process engine. The service asks the
+   engine which process instances satisfy the variable expressions
+   (`getAllProcessInstancesByVariables`), collects their engine process numbers onto
+   the filter, and the repository restricts tasks to those parent processes.
+2. **Task-local variables** — the snapshot persisted on the `JSONB` `variables`
+   column of `t_task_instance` (written when a task is completed/saved). The backend
+   converts each expression into a JPA `Specification<TaskInstanceEntity>` predicate
+   using PostgreSQL's `jsonb_extract_path_text` to read the value at a dotted path
+   and compares it with the SQL operator for the value's Java type.
 
-Process instances can be filtered by variables too, but the filtering is delegated
-to the process engine (not the database) — see §8.
+The two sources are combined with **logical OR**: a task surfaces if its parent
+process variables match **or** its task-local variables match. Within each source,
+the individual expressions are combined with **logical AND** (there is no OR / NOT
+grouping of expressions in the public contract).
+
+> Note: this OR combination was restored in this change. A prior refactor
+> (`674e8fc`) had reduced task filtering to the task-local JSONB column only, which
+> silently ignored process variables — the common case, since the JSONB column is
+> empty until a task is completed.
+
+Process instances can be filtered by variables too, with the filtering delegated to
+the process engine (not the database) — see §8.
 
 ---
 
@@ -130,6 +143,15 @@ processes is resolved by asking the process engine for the set of matching
 process numbers, then constraining the main JPA query with that set —
 see [ProcessInstanceService.java:45](../src/main/java/cv/igrp/platform/process/management/processruntime/domain/service/ProcessInstanceService.java)
 and [RuntimeProcessEngineRepositoryImpl.java:406](../src/main/java/cv/igrp/platform/process/management/processruntime/infrastructure/persistence/repository/RuntimeProcessEngineRepositoryImpl.java).
+
+The **task** search reuses this same engine resolution for its process-variable
+half: `TaskInstanceService.getAllTaskInstances` calls
+`runtimeProcessEngineRepository.getAllProcessInstancesByVariables(...)` and feeds the
+matching engine process numbers into `TaskInstanceFilter.engineProcessNumbers`. The
+repository then OR-combines an `engineProcessNumber IN (...)` predicate (process
+variables) with the task-local JSONB predicate (§5.1). When the engine returns no
+matches, the engine-number list stays empty and the result depends solely on the
+task-local match.
 
 ---
 
@@ -316,15 +338,20 @@ POST /process-instances/search?applicationBase=myapp
 
 ## 8. End-to-End Flow
 
-### 8.1 Tasks (database-native)
+### 8.1 Tasks (hybrid: engine + database)
 
 ```
-TaskInstancesController.listTaskInstances           (controller)
-   └─> ListTaskInstancesCommandHandler              (CQRS handler)
-        └─> TaskInstanceService.getAllTaskInstances (visibility rules)
-             └─> TaskInstanceRepositoryImpl.findAll (JPA Specification)
-                  └─> buildSpecification            (compose predicates)
-                       └─> buildVariablePredicate   (per variable expression)
+TaskInstancesController.listTaskInstances             (controller)
+   └─> ListTaskInstancesCommandHandler                (CQRS handler)
+        └─> TaskInstanceService.getAllTaskInstances   (visibility rules)
+             ├─> runtimeProcessEngineRepository.getAllProcessInstancesByVariables
+             │       └─> filter.includeEngineProcessNumber(...)  (process-variable matches)
+             └─> TaskInstanceRepositoryImpl.findAll   (JPA Specification)
+                  └─> buildSpecification               (compose predicates)
+                       └─> cb.or(                       (a task matches if EITHER side matches)
+                            engineProcessNumber IN (...) ,   // process variables
+                            cb.and(buildVariablePredicate(expr) ...)  // task-local JSONB
+                          )
                             ├─> buildJsonPathExpression  (JSONB path)
                             └─> buildOperatorPredicate   (type-aware operator)
 ```

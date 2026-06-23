@@ -98,6 +98,8 @@ public interface RuntimeProcessEngineRepository {
   List<ProcessInstanceTaskStatus> getProcessInstanceTaskStatus(String processInstanceId)
       throws RuntimeProcessEngineException;
 
+  Map<String, List<ProcessInstanceTaskStatus>> getProcessInstanceTaskStatusBatch(Collection<String> processInstanceIds);
+
   /**
    * Retrieves all currently active task instances for a process instance.
    *

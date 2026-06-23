@@ -17,9 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Implementation of {@link ProcessDeploymentRepository} that delegates to
@@ -129,6 +127,18 @@ public class ProcessDeploymentRepositoryImpl implements ProcessDeploymentReposit
   public Set<String> getCandidateStarterGroups(String processDefinitionId) {
     List<String> groups = processDefinitionAdapter.getCandidateStarterGroups(processDefinitionId);
     return Set.copyOf(groups);
+  }
+
+  @Override
+  public Map<String, Set<String>> getCandidateStarterGroupsBatch(Collection<String> processDefinitionIds) {
+    if (processDefinitionIds == null || processDefinitionIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, Set<String>> result = new HashMap<>();
+    for (String id : processDefinitionIds) {
+      result.put(id, getCandidateStarterGroups(id));
+    }
+    return result;
   }
 
   @Override

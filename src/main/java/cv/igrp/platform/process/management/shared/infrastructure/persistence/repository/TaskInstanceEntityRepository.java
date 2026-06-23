@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.repository.history.RevisionRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,5 +19,7 @@ public interface TaskInstanceEntityRepository extends
 {
 
   Optional<TaskInstanceEntity> findByExternalId(String processInstanceId);
+
+  List<TaskInstanceEntity> findAllByExternalIdIn(Collection<String> externalIds);
 
 }

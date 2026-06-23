@@ -242,6 +242,7 @@ public class TaskInstance {
 
   public void addCandidates(TaskOperationData data) {
     mergeCandidateGroups(data.getCandidateGroups());
+    mergeCandidateUsers(data.getCandidateUsers());
     updateAssignmentMetadata(data.getPriority());
 
     createTaskInstanceEvent(
@@ -258,6 +259,18 @@ public class TaskInstance {
     newGroups.stream()
         .filter(g -> !this.candidateGroups.contains(g))
         .forEach(this.candidateGroups::add);
+  }
+
+  private void mergeCandidateUsers(List<String> newUsers) {
+    if (newUsers == null || newUsers.isEmpty()) {
+      return;
+    }
+    newUsers.stream()
+        .filter(Objects::nonNull)
+        .map(String::trim)
+        .filter(u -> !u.isBlank())
+        .filter(u -> !this.candidateUsers.contains(u))
+        .forEach(this.candidateUsers::add);
   }
 
   private void updateAssignmentMetadata(Integer priority) {

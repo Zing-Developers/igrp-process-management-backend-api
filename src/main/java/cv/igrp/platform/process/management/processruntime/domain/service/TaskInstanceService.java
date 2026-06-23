@@ -234,7 +234,6 @@ public class TaskInstanceService {
 
   public TaskInstance getTaskById(Identifier id) {
     TaskInstance taskInstance = getByIdWihEvents(id);
-    resolveCandidateUsers(taskInstance);
     // Enrich with process variables
     Map<String, Object> variables = runtimeProcessEngineRepository.getProcessVariables(taskInstance.getEngineProcessNumber());
     taskInstance.addProcessVariables(variables);
@@ -254,6 +253,15 @@ public class TaskInstanceService {
           .forEach(filter::addContextUserGroup);
     }
 
+    // Resolve process-variable filters via the engine into matching engine process numbers.
+    // The repository OR-combines these with the task-local (JSONB) variable predicate.
+    if (!filter.getVariablesExpressions().isEmpty()) {
+      List<ProcessInstance> engineProcessInstances =
+          runtimeProcessEngineRepository.getAllProcessInstancesByVariables(filter.getVariablesExpressions());
+      engineProcessInstances.forEach(pi ->
+          filter.includeEngineProcessNumber(pi.getEngineProcessNumber().getValue()));
+    }
+
     PageableLista<TaskInstance> taskInstances = taskInstanceRepository.findAll(filter);
 
     // Enrich with process variables — single batch call
@@ -269,7 +277,6 @@ public class TaskInstanceService {
       if (vars != null) {
         task.addProcessVariables(vars);
       }
-      resolveCandidateUsers(task);
     }
 
     // Resolve all user profiles in a single batch query
@@ -589,19 +596,6 @@ public class TaskInstanceService {
       );
       taskAssignmentRuleRepository.markConsumed(rule.getId(), taskInstance.getId());
     }
-  }
-
-  private void resolveCandidateUsers(TaskInstance taskInstance) {
-    if (taskInstance.getProcessInstanceId() == null || taskInstance.getTaskKey() == null) {
-      return;
-    }
-    taskInstance.resolveCandidateUsers(
-        taskAssignmentRuleRepository.findCandidateUsersForTask(
-            taskInstance.getId(),
-            taskInstance.getProcessInstanceId(),
-            taskInstance.getTaskKey()
-        )
-    );
   }
 
   private List<String> normalizeCandidateGroups(Set<String> candidateGroups) {

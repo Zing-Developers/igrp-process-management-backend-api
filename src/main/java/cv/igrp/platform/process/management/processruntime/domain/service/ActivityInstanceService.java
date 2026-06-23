@@ -11,6 +11,7 @@ import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponse
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ActivityInstanceService {
@@ -81,12 +82,16 @@ public class ActivityInstanceService {
         type
     );
 
-    // Enrich the timeline events with task variables
+    // Enrich the timeline events with task variables — single batch query
+    Set<String> taskIds = timelineEvents.stream()
+        .map(ProcessArtifactEvent::getTaskId)
+        .filter(Objects::nonNull)
+        .collect(Collectors.toSet());
+    Map<String, TaskInstance> tasksByExternalId = taskInstanceRepository.findAllByExternalIds(taskIds);
     timelineEvents.forEach(timelineEvent -> {
       if (timelineEvent.getTaskId() != null) {
-        Optional<TaskInstance> optTaskInstance = taskInstanceRepository.findByExternalId(timelineEvent.getTaskId());
-        if (optTaskInstance.isPresent()) {
-          TaskInstance taskInstance = optTaskInstance.get();
+        TaskInstance taskInstance = tasksByExternalId.get(timelineEvent.getTaskId());
+        if (taskInstance != null) {
           Map<String, Object> variables = new HashMap<>();
           variables.put(VariableTag.VARIABLES.getCode(), taskInstance.getVariables());
           variables.put(VariableTag.FORMS.getCode(), taskInstance.getForms());
@@ -95,16 +100,39 @@ public class ActivityInstanceService {
       }
     });
 
-    // Resolve user profiles
-    timelineEvents.forEach(this::resolveUserProfiles);
+    // Resolve user profiles — single batch query
+    resolveAllUserProfiles(timelineEvents);
 
     return timelineEvents;
   }
 
-  private void resolveUserProfiles(ProcessArtifactEvent processTimelineEvent) {
-    String assignee = processTimelineEvent.getAssignee();
-    userProfileRepository.findBySubjectOrEmail(assignee, assignee)
-        .ifPresent(processTimelineEvent::resolveUserProfileAssignee);
+  private void resolveAllUserProfiles(List<ProcessArtifactEvent> events) {
+    if (events == null || events.isEmpty()) {
+      return;
+    }
+    Set<String> allIds = new HashSet<>();
+    events.forEach(event -> {
+      if (event.getAssignee() != null) {
+        allIds.add(event.getAssignee());
+      }
+    });
+    if (allIds.isEmpty()) {
+      return;
+    }
+    List<UserProfile> profiles = userProfileRepository.findBySubjectOrEmails(allIds, allIds);
+    Map<String, UserProfile> lookup = new HashMap<>();
+    for (UserProfile p : profiles) {
+      if (p.getSub() != null) lookup.put(p.getSub(), p);
+      if (p.getEmail() != null) lookup.put(p.getEmail(), p);
+    }
+    events.forEach(event -> {
+      if (event.getAssignee() != null) {
+        UserProfile profile = lookup.get(event.getAssignee());
+        if (profile != null) {
+          event.resolveUserProfileAssignee(profile);
+        }
+      }
+    });
   }
 
   private ProcessInstance getProcessInstanceById(UUID processInstanceId) {
