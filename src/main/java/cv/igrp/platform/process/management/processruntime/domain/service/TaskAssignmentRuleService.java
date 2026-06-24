@@ -27,14 +27,22 @@ public class TaskAssignmentRuleService {
     return repository.findAll(filter);
   }
 
-  public TaskAssignmentRule updateAssignment(String id, Code assignee, Set<String> candidateUsers) {
+  public TaskAssignmentRule updateAssignment(
+      String id,
+      Code assignee,
+      Set<String> candidateUsers,
+      Set<String> candidateGroups
+  ) {
     LOGGER.info(
-        "Updating task assignment rule [{}] with assignee [{}] and candidateUsers [{}]",
+        "Updating task assignment rule [{}] with assignee [{}], candidateUsers [{}] and candidateGroups [{}]",
         id,
         assignee != null ? assignee.getValue() : null,
-        candidateUsers
+        candidateUsers,
+        candidateGroups
     );
-    var updatedRule = repository.updateAssignment(Identifier.create(id), assignee, candidateUsers);
+    // Priority is left untouched (null) on manual rule updates; it is only set by automated
+    // assignment delegates that resolve it from an external source.
+    var updatedRule = repository.updateAssignment(Identifier.create(id), assignee, candidateUsers, candidateGroups, null);
     LOGGER.info(
         "Updated task assignment rule [{}]; active [{}], consumed [{}]",
         id,

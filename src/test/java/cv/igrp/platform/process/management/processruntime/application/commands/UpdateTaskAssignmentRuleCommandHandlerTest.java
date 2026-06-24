@@ -35,27 +35,30 @@ class UpdateTaskAssignmentRuleCommandHandlerTest {
   @Test
   void handle_shouldUpdateRuleAndReturnDTO() {
     String id = UUID.randomUUID().toString();
-    var request = new TaskAssignmentRuleUpdateDTO("demo@nosi.cv", "user1@nosi.cv");
+    var request = new TaskAssignmentRuleUpdateDTO("demo@nosi.cv", "user1@nosi.cv", "group1");
     var command = new UpdateTaskAssignmentRuleCommand(request, id);
     var assignee = Code.create("demo@nosi.cv");
     var candidateUsers = Set.of("user1@nosi.cv");
+    var candidateGroups = Set.of("group1");
     var rule = TaskAssignmentRule.builder()
         .processDefinitionKey(Code.create("process-a"))
         .taskDefinitionKey(Code.create("task-a"))
         .assignee(assignee)
         .candidateUsers(candidateUsers)
+        .candidateGroups(candidateGroups)
         .build();
     var dto = new TaskAssignmentRuleListDTO();
 
     when(mapper.toAssignee(request)).thenReturn(assignee);
     when(mapper.toCandidateUsers(request)).thenReturn(candidateUsers);
-    when(service.updateAssignment(id, assignee, candidateUsers)).thenReturn(rule);
+    when(mapper.toCandidateGroups(request)).thenReturn(candidateGroups);
+    when(service.updateAssignment(id, assignee, candidateUsers, candidateGroups)).thenReturn(rule);
     when(mapper.toListDTO(rule)).thenReturn(dto);
 
     var response = handler.handle(command);
 
     assertEquals(200, response.getStatusCodeValue());
     assertSame(dto, response.getBody());
-    verify(service).updateAssignment(id, assignee, candidateUsers);
+    verify(service).updateAssignment(id, assignee, candidateUsers, candidateGroups);
   }
 }

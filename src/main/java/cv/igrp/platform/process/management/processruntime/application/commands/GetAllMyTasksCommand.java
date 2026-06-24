@@ -36,5 +36,6 @@ public class GetAllMyTasksCommand implements Command {
   private String processReleaseKey;
   @NotBlank(message = "The field <name> is required")
   private String name;
+  private Integer priority;
 
 }

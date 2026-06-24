@@ -87,6 +87,15 @@ public class TaskAssignmentRuleEntity extends AuditEntity {
   @Column(name = "user_id", nullable = false)
   private Set<String> candidateUsers = new HashSet<>();
 
+  @NotAudited
+  @ElementCollection(fetch = FetchType.LAZY)
+  @CollectionTable(
+      name = "t_task_assignment_rule_candidate_group",
+      joinColumns = @JoinColumn(name = "assignment_rule_id")
+  )
+  @Column(name = "group_id", nullable = false)
+  private Set<String> candidateGroups = new HashSet<>();
+
   @NotNull(message = "assignmentMode is mandatory")
   @Enumerated(EnumType.STRING)
   @Column(name = "assignment_mode", nullable = false)

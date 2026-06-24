@@ -126,6 +126,7 @@ public class ProcessInstanceMapper {
                 ? Code.create(dto.getAssignee().trim())
                 : null)
             .candidateUsers(splitCommaSeparated(dto.getCandidateUsers()))
+            .candidateGroups(splitCommaSeparated(dto.getCandidateGroups()))
             .assignmentMode(dto.getAssignmentMode())
             .priority(dto.getPriority())
             .build())

@@ -62,6 +62,7 @@ Source: [TaskInstancesController.java:48](../src/main/java/cv/igrp/platform/proc
 | `candidateGroups`     | String  | Comma-separated list of groups the task is offered to.                |
 | `user`                | String  | Assignee user code.                                                   |
 | `status`              | String  | `CREATED`, `ASSIGNED`, `SUSPENDED`, `COMPLETED`, `CANCELED`.          |
+| `priority`            | Integer | Exact match on task priority. Applies to both `/search` and `/me`.    |
 | `dateFrom` / `dateTo` | String  | ISO date range on task creation.                                      |
 | `page` / `size`       | Integer | Pagination (defaults: `page=0`, `size=50`).                           |
 | `name`                | String  | Task name contains.                                                   |

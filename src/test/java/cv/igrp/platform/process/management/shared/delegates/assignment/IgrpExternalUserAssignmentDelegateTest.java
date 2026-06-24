@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,7 +62,8 @@ class IgrpExternalUserAssignmentDelegateTest {
         "data": {
           "assignedUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
           "assignedUserName": "John Doe",
-          "assignedUserEmail": "john.doe@example.com"
+          "assignedUserEmail": "john.doe@example.com",
+          "priority": 3
         }
       }
       """;
@@ -263,7 +265,9 @@ class IgrpExternalUserAssignmentDelegateTest {
     verify(taskAssignmentRuleRepository).updateAssignment(
         eq(existingRuleId),
         argThat(code -> "john.doe@example.com".equals(code.getValue())),
-        eq(Set.of())
+        eq(Set.of()),
+        eq(Set.of()),
+        isNull()
     );
     verify(taskAssignmentRuleRepository, never()).save(any(TaskAssignmentRule.class));
   }
@@ -292,8 +296,77 @@ class IgrpExternalUserAssignmentDelegateTest {
 
     delegate.execute(execution);
 
-    verify(taskAssignmentRuleRepository, never()).updateAssignment(any(), any(), any());
+    verify(taskAssignmentRuleRepository, never()).updateAssignment(any(), any(), any(), any(), any());
     verify(taskAssignmentRuleRepository).save(any(TaskAssignmentRule.class));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void priorityIsExtractedFromResponseAndSetOnNewRule() {
+    setupExecution();
+    setupExpressionField("apiUrl", "https://api.example.com/requests/123");
+    setupExpressionField("jsonPathExpression", "$.data.assignedUserEmail");
+    setupExpressionField("priorityJsonPathExpression", "$.data.priority");
+    setupExpressionField("targetTaskKey", "reviewTask");
+    setupGetRequest(RESPONSE_JSON);
+
+    delegate.execute(execution);
+
+    ArgumentCaptor<TaskAssignmentRule> captor = ArgumentCaptor.forClass(TaskAssignmentRule.class);
+    verify(taskAssignmentRuleRepository).save(captor.capture());
+    assertEquals(3, captor.getValue().getPriority());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void priorityIsNullWhenPriorityJsonPathNotConfigured() {
+    setupExecution();
+    setupExpressionField("apiUrl", "https://api.example.com/requests/123");
+    setupExpressionField("jsonPathExpression", "$.data.assignedUserEmail");
+    setupExpressionField("targetTaskKey", "reviewTask");
+    setupGetRequest(RESPONSE_JSON);
+
+    delegate.execute(execution);
+
+    ArgumentCaptor<TaskAssignmentRule> captor = ArgumentCaptor.forClass(TaskAssignmentRule.class);
+    verify(taskAssignmentRuleRepository).save(captor.capture());
+    assertNull(captor.getValue().getPriority());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void priorityIsPassedWhenUpdatingExistingRule() {
+    setupExecution();
+    setupExpressionField("apiUrl", "https://api.example.com/requests/123");
+    setupExpressionField("jsonPathExpression", "$.data.assignedUserEmail");
+    setupExpressionField("priorityJsonPathExpression", "$.data.priority");
+    setupExpressionField("targetTaskKey", "reviewTask");
+    setupGetRequest(RESPONSE_JSON);
+
+    Identifier existingRuleId = Identifier.generate();
+    TaskAssignmentRule existingRule = TaskAssignmentRule.builder()
+        .id(existingRuleId)
+        .processDefinitionKey(Code.create("myProcess"))
+        .processInstanceId(Identifier.create(APP_PROCESS_INSTANCE_ID))
+        .taskDefinitionKey(Code.create("reviewTask"))
+        .assignee(Code.create("old.user@example.com"))
+        .assignmentMode(TaskAssignmentMode.ONE_TIME)
+        .consumed(false)
+        .active(true)
+        .build();
+
+    when(taskAssignmentRuleRepository.findActiveByProcessInstanceAndTaskDefinition(any(), any()))
+        .thenReturn(List.of(existingRule));
+
+    delegate.execute(execution);
+
+    verify(taskAssignmentRuleRepository).updateAssignment(
+        eq(existingRuleId),
+        argThat(code -> "john.doe@example.com".equals(code.getValue())),
+        eq(Set.of()),
+        eq(Set.of()),
+        eq(3)
+    );
   }
 
   private void setupExecution() {
@@ -327,6 +400,7 @@ class IgrpExternalUserAssignmentDelegateTest {
       case "apiMethod" -> delegate.apiMethod = expr;
       case "apiPayload" -> delegate.apiPayload = expr;
       case "jsonPathExpression" -> delegate.jsonPathExpression = expr;
+      case "priorityJsonPathExpression" -> delegate.priorityJsonPathExpression = expr;
       case "targetTaskKey" -> delegate.targetTaskKey = expr;
       case "assignmentMode" -> delegate.assignmentMode = expr;
       case "outputVariable" -> delegate.outputVariable = expr;

@@ -155,6 +155,11 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
           cb.equal(root.get("status"), filter.getStatus().getCode()));
     }
 
+    if (filter.getPriority() != null) {
+      spec = spec.and((root, _, cb) ->
+          cb.equal(root.get("priority"), filter.getPriority()));
+    }
+
     if (filter.getDateFrom() != null) {
       spec = spec.and((root, _, cb) ->
           cb.greaterThanOrEqualTo(root.get("startedAt"), filter.getDateFrom().atStartOfDay()));
@@ -525,7 +530,7 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
         .collect(Collectors.toMap(
             TaskInstanceEntity::getExternalId,
             taskMapper::toModel,
-            (a, b) -> b
+            (_, b) -> b
         ));
   }
 

@@ -29,6 +29,7 @@ class TaskAssignmentRuleMapperTest {
         "task-a",
         "demo@nosi.cv",
         "user1@nosi.cv, user2@nosi.cv",
+        "group1, group2",
         TaskAssignmentMode.ALWAYS,
         true,
         false,
@@ -44,6 +45,7 @@ class TaskAssignmentRuleMapperTest {
     assertEquals("task-a", filter.getTaskDefinitionKey().getValue());
     assertEquals("demo@nosi.cv", filter.getAssignee().getValue());
     assertTrue(filter.getCandidateUsers().containsAll(List.of("user1@nosi.cv", "user2@nosi.cv")));
+    assertTrue(filter.getCandidateGroups().containsAll(List.of("group1", "group2")));
     assertEquals(TaskAssignmentMode.ALWAYS, filter.getAssignmentMode());
     assertEquals(true, filter.getConsumed());
     assertEquals(false, filter.getActive());
@@ -103,23 +105,27 @@ class TaskAssignmentRuleMapperTest {
 
   @Test
   void toAssigneeAndCandidateUsers_shouldParseUpdateDTO() {
-    var dto = new TaskAssignmentRuleUpdateDTO(" demo@nosi.cv ", " user1@nosi.cv, user2@nosi.cv ");
+    var dto = new TaskAssignmentRuleUpdateDTO(" demo@nosi.cv ", " user1@nosi.cv, user2@nosi.cv ", " group1, group2 ");
 
     var assignee = mapper.toAssignee(dto);
     var candidateUsers = mapper.toCandidateUsers(dto);
+    var candidateGroups = mapper.toCandidateGroups(dto);
 
     assertEquals("demo@nosi.cv", assignee.getValue());
     assertTrue(candidateUsers.containsAll(List.of("user1@nosi.cv", "user2@nosi.cv")));
+    assertTrue(candidateGroups.containsAll(List.of("group1", "group2")));
   }
 
   @Test
   void toAssigneeAndCandidateUsers_shouldReturnEmptyValuesForBlankDTO() {
-    var dto = new TaskAssignmentRuleUpdateDTO(" ", " ");
+    var dto = new TaskAssignmentRuleUpdateDTO(" ", " ", " ");
 
     var assignee = mapper.toAssignee(dto);
     var candidateUsers = mapper.toCandidateUsers(dto);
+    var candidateGroups = mapper.toCandidateGroups(dto);
 
     assertEquals(null, assignee);
     assertTrue(candidateUsers.isEmpty());
+    assertTrue(candidateGroups.isEmpty());
   }
 }

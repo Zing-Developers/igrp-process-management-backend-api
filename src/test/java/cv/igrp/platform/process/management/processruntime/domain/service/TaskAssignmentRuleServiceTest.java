@@ -52,18 +52,20 @@ class TaskAssignmentRuleServiceTest {
     UUID id = UUID.randomUUID();
     var assignee = Code.create("demo@nosi.cv");
     var candidateUsers = Set.of("user1@nosi.cv");
+    var candidateGroups = Set.of("group1");
     var expected = TaskAssignmentRule.builder()
         .processDefinitionKey(Code.create("process-a"))
         .taskDefinitionKey(Code.create("task-a"))
         .assignee(assignee)
         .candidateUsers(candidateUsers)
+        .candidateGroups(candidateGroups)
         .build();
-    when(repository.updateAssignment(Identifier.create(id), assignee, candidateUsers)).thenReturn(expected);
+    when(repository.updateAssignment(Identifier.create(id), assignee, candidateUsers, candidateGroups, null)).thenReturn(expected);
 
-    var result = service.updateAssignment(id.toString(), assignee, candidateUsers);
+    var result = service.updateAssignment(id.toString(), assignee, candidateUsers, candidateGroups);
 
     assertSame(expected, result);
-    verify(repository).updateAssignment(Identifier.create(id), assignee, candidateUsers);
+    verify(repository).updateAssignment(Identifier.create(id), assignee, candidateUsers, candidateGroups, null);
   }
 
   @Test

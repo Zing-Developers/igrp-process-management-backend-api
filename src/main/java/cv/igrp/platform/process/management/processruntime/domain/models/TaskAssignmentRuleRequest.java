@@ -14,6 +14,7 @@ public class TaskAssignmentRuleRequest {
   private final Code taskKey;
   private final Code assignee;
   private final List<String> candidateUsers;
+  private final List<String> candidateGroups;
   private final TaskAssignmentMode assignmentMode;
   private final Integer priority;
 
@@ -22,12 +23,14 @@ public class TaskAssignmentRuleRequest {
       Code taskKey,
       Code assignee,
       List<String> candidateUsers,
+      List<String> candidateGroups,
       TaskAssignmentMode assignmentMode,
       Integer priority
   ) {
     this.taskKey = Objects.requireNonNull(taskKey, "Task key cannot be null!");
     this.assignee = assignee;
     this.candidateUsers = candidateUsers == null ? List.of() : candidateUsers;
+    this.candidateGroups = candidateGroups == null ? List.of() : candidateGroups;
     this.assignmentMode = assignmentMode == null ? TaskAssignmentMode.ONE_TIME : assignmentMode;
     this.priority = priority != null && priority > 0 ? priority : null;
   }
@@ -42,5 +45,9 @@ public class TaskAssignmentRuleRequest {
 
   public boolean hasCandidateUsers() {
     return !candidateUsers.isEmpty();
+  }
+
+  public boolean hasCandidateGroups() {
+    return !candidateGroups.isEmpty();
   }
 }

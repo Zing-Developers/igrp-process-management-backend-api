@@ -30,7 +30,8 @@ public class UpdateTaskAssignmentRuleCommandHandler
     var rule = service.updateAssignment(
         command.getId(),
         mapper.toAssignee(command.getTaskAssignmentRuleUpdateDTO()),
-        mapper.toCandidateUsers(command.getTaskAssignmentRuleUpdateDTO())
+        mapper.toCandidateUsers(command.getTaskAssignmentRuleUpdateDTO()),
+        mapper.toCandidateGroups(command.getTaskAssignmentRuleUpdateDTO())
     );
     return ResponseEntity.ok(mapper.toListDTO(rule));
   }

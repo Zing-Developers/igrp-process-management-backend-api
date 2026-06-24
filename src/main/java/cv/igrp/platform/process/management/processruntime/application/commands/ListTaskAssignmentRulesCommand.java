@@ -16,6 +16,7 @@ public class ListTaskAssignmentRulesCommand implements Command {
   private String taskDefinitionKey;
   private String assignee;
   private String candidateUsers;
+  private String candidateGroups;
   private TaskAssignmentMode assignmentMode;
   private Boolean consumed;
   private Boolean active;

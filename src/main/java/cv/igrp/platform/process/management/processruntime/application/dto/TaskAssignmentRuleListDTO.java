@@ -20,6 +20,7 @@ public class TaskAssignmentRuleListDTO {
   private String taskDefinitionKey;
   private String assignee;
   private String candidateUsers;
+  private String candidateGroups;
   private TaskAssignmentMode assignmentMode;
   private Integer priority;
   private boolean consumed;

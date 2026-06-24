@@ -13,6 +13,7 @@ public class TaskAssignmentRuleDTO {
   private String taskKey;
   private String assignee;
   private String candidateUsers;
+  private String candidateGroups;
   private TaskAssignmentMode assignmentMode;
   private Integer priority;
 }

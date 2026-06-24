@@ -55,6 +55,7 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
   public Expression apiMethod;
   public Expression apiPayload;
   public Expression jsonPathExpression;
+  public Expression priorityJsonPathExpression;
   public Expression targetTaskKey;
   public Expression assignmentMode;
   public Expression outputVariable;
@@ -97,6 +98,12 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
       throw new IllegalArgumentException("jsonPathExpression is required and was not provided");
     }
 
+    // Optional: a JSONPath that extracts the task priority from the same API response.
+    String priorityPath = resolveField(execution, "priorityJsonPathExpression", priorityJsonPathExpression);
+    if (priorityPath != null) {
+      priorityPath = EnvVarUtil.resolveEnvVars(priorityPath, "priorityJsonPathExpression");
+    }
+
     String targetTask = resolveField(execution, "targetTaskKey", targetTaskKey);
     targetTask = EnvVarUtil.resolveEnvVars(targetTask, "targetTaskKey");
     if (targetTask == null || targetTask.isBlank()) {
@@ -125,7 +132,10 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
       return;
     }
 
-    log.info("[ExternalUserAssignment] Resolved user identifier: {} for target task: {}", userIdentifier, targetTask);
+    Integer priority = extractPriority(responseBody, priorityPath);
+
+    log.info("[ExternalUserAssignment] Resolved user identifier: {} (priority: {}) for target task: {}",
+        userIdentifier, priority, targetTask);
 
     String processDefinitionKey = extractProcessDefinitionKey(processDefinitionId);
 
@@ -143,10 +153,12 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
       taskAssignmentRuleRepository.updateAssignment(
           updatableRule.get().getId(),
           Code.create(userIdentifier),
-          Set.of()
+          Set.of(),
+          Set.of(),
+          priority
       );
-      log.info("[ExternalUserAssignment] Updated existing rule: id={}, assignee={}",
-          updatableRule.get().getId().getValue(), userIdentifier);
+      log.info("[ExternalUserAssignment] Updated existing rule: id={}, assignee={}, priority={}",
+          updatableRule.get().getId().getValue(), userIdentifier, priority);
     } else {
       taskAssignmentRuleRepository.save(TaskAssignmentRule.builder()
           .processDefinitionKey(Code.create(processDefinitionKey))
@@ -154,12 +166,13 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
           .taskDefinitionKey(Code.create(targetTask))
           .assignee(Code.create(userIdentifier))
           .assignmentMode(mode)
+          .priority(priority)
           .consumed(false)
           .active(true)
           .build()
       );
-      log.info("[ExternalUserAssignment] Created new rule: processInstance={}, targetTask={}, assignee={}, mode={}",
-          processInstanceId.getValue(), targetTask, userIdentifier, mode);
+      log.info("[ExternalUserAssignment] Created new rule: processInstance={}, targetTask={}, assignee={}, mode={}, priority={}",
+          processInstanceId.getValue(), targetTask, userIdentifier, mode, priority);
     }
 
     if (outputVar != null && !outputVar.isBlank()) {
@@ -240,6 +253,39 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
     } catch (Exception e) {
       log.error("[ExternalUserAssignment] Error evaluating JSONPath '{}'", jsonPath, e);
       execution.setTransientVariable(taskId + "Error", "JSONPath error: " + e.getMessage());
+      return null;
+    }
+  }
+
+  // Optional priority extraction. Priority is supplementary, so any failure to resolve it
+  // is logged and results in a null priority rather than failing the task.
+  private Integer extractPriority(String responseBody, String priorityPath) {
+    if (priorityPath == null || priorityPath.isBlank()) {
+      return null;
+    }
+    try {
+      Object result = JsonPath.read(responseBody, priorityPath);
+      if (result == null) {
+        log.warn("[ExternalUserAssignment] priorityJsonPathExpression '{}' returned null; skipping priority", priorityPath);
+        return null;
+      }
+      if (result instanceof Number number) {
+        return number.intValue();
+      }
+      String value = result.toString().trim();
+      if (value.isBlank()) {
+        log.warn("[ExternalUserAssignment] priorityJsonPathExpression '{}' returned blank value; skipping priority", priorityPath);
+        return null;
+      }
+      return Integer.valueOf(value);
+    } catch (PathNotFoundException e) {
+      log.warn("[ExternalUserAssignment] priorityJsonPathExpression '{}' not found in response; skipping priority", priorityPath);
+      return null;
+    } catch (NumberFormatException e) {
+      log.warn("[ExternalUserAssignment] priorityJsonPathExpression '{}' did not resolve to an integer; skipping priority", priorityPath);
+      return null;
+    } catch (Exception e) {
+      log.warn("[ExternalUserAssignment] Error evaluating priorityJsonPathExpression '{}'; skipping priority", priorityPath, e);
       return null;
     }
   }

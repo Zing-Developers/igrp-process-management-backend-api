@@ -180,6 +180,39 @@ class TaskInstanceRepositoryImplTest {
   }
 
 
+  @Test
+  void testFindByFilter_withPriority() {
+
+    var filter = TaskInstanceFilter
+        .builder()
+        .page(0)
+        .size(10)
+        .priority(5)
+        .build();
+
+    TaskInstanceEntity entity = mock(TaskInstanceEntity.class);
+    Page<TaskInstanceEntity> page =
+        new PageImpl<>(List.of(entity), PageRequest.of(filter.getPage(), filter.getSize()), 1);
+
+    when(entityRepository.findAll(any(Specification.class), any(PageRequest.class)))
+        .thenReturn(page);
+
+    TaskInstance model = mock(TaskInstance.class);
+    when(mapper.toModel(entity)).thenReturn(model);
+
+    PageableLista<TaskInstance> result = repository.findAll(filter);
+
+    assertNotNull(result);
+    assertEquals(1, result.getTotalElements());
+    assertEquals(1, result.getContent().size());
+    assertEquals(model, result.getContent().get(0));
+
+    verify(entityRepository).findAll(any(Specification.class), any(PageRequest.class));
+    verify(mapper).toModel(entity);
+
+  }
+
+
 
   @Test
   void testGetGlobalTaskStatistics() {

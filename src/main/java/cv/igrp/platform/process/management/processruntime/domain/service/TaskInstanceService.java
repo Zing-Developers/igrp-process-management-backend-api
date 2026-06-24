@@ -96,12 +96,10 @@ public class TaskInstanceService {
 
       taskInstance.addCandidates(data);
 
-      data.getCandidateGroups().forEach(group -> {
-        runtimeProcessEngineRepository.addCandidateGroup(
-            taskInstance.getExternalId().getValue(),
-            group
-        );
-      });
+      data.getCandidateGroups().forEach(group -> runtimeProcessEngineRepository.addCandidateGroup(
+          taskInstance.getExternalId().getValue(),
+          group
+      ));
 
       var candidateUsers = data.getCandidateUsers().stream()
           .map(this::normalizeUserId)
@@ -109,12 +107,10 @@ public class TaskInstanceService {
           .distinct()
           .toList();
 
-      candidateUsers.forEach(user -> {
-        runtimeProcessEngineRepository.addCandidateUser(
-            taskInstance.getExternalId().getValue(),
-            user
-        );
-      });
+      candidateUsers.forEach(user -> runtimeProcessEngineRepository.addCandidateUser(
+          taskInstance.getExternalId().getValue(),
+          user
+      ));
 
     }
 
@@ -147,11 +143,12 @@ public class TaskInstanceService {
     assignmentRules
         .forEach(rule -> {
           LOGGER.info(
-              "Registering task assignment rule for processInstance [{}], task [{}], assignee [{}], candidateUsers [{}], mode [{}], priority [{}]",
+              "Registering task assignment rule for processInstance [{}], task [{}], assignee [{}], candidateUsers [{}], candidateGroups [{}], mode [{}], priority [{}]",
               processInstanceIdValue(processInstance),
               rule.getTaskKey().getValue(),
               rule.getAssignee() != null ? rule.getAssignee().getValue() : null,
               rule.getCandidateUsers(),
+              rule.getCandidateGroups(),
               rule.getAssignmentMode(),
               rule.getPriority()
           );
@@ -161,6 +158,7 @@ public class TaskInstanceService {
             .taskDefinitionKey(rule.getTaskKey())
             .assignee(rule.getAssignee())
             .candidateUsers(rule.getCandidateUsers())
+            .candidateGroups(rule.getCandidateGroups())
             .assignmentMode(rule.getAssignmentMode())
             .priority(rule.getPriority())
             .consumed(false)
@@ -482,6 +480,7 @@ public class TaskInstanceService {
             .taskDefinitionKey(rule.getTaskKey())
             .assignee(rule.getAssignee())
             .candidateUsers(rule.getCandidateUsers())
+            .candidateGroups(rule.getCandidateGroups())
             .assignmentMode(rule.getAssignmentMode())
             .priority(rule.getPriority())
             .consumed(false)
@@ -523,7 +522,7 @@ public class TaskInstanceService {
     }
 
     applyDefinitionCandidateGroups(taskInstance, definitionCandidateGroups, user);
-    applyCandidateUserRules(taskInstance, assignmentRules, user);
+    applyCandidateRules(taskInstance, assignmentRules, user);
   }
 
   private void applyAssigneeRule(TaskInstance taskInstance, TaskAssignmentRule rule, Code user) {
@@ -558,23 +557,24 @@ public class TaskInstanceService {
         .build());
   }
 
-  private void applyCandidateUserRules(
+  private void applyCandidateRules(
       TaskInstance taskInstance,
       List<TaskAssignmentRule> assignmentRules,
       Code user
   ) {
     assignmentRules.stream()
-        .filter(TaskAssignmentRule::hasCandidateUsers)
-        .forEach(rule -> applyCandidateUserRule(taskInstance, rule, user));
+        .filter(rule -> rule.hasCandidateUsers() || rule.hasCandidateGroups())
+        .forEach(rule -> applyCandidateRule(taskInstance, rule, user));
   }
 
-  private void applyCandidateUserRule(TaskInstance taskInstance, TaskAssignmentRule rule, Code user) {
+  private void applyCandidateRule(TaskInstance taskInstance, TaskAssignmentRule rule, Code user) {
     LOGGER.info(
-        "Applying candidate-user task assignment rule [{}] to taskInstance [{}], task [{}], candidateUsers [{}], mode [{}], persisted [{}]",
+        "Applying candidate task assignment rule [{}] to taskInstance [{}], task [{}], candidateUsers [{}], candidateGroups [{}], mode [{}], persisted [{}]",
         rule.getId().getValue(),
         taskInstance.getId().getValue(),
         taskInstance.getTaskKey().getValue(),
         rule.getCandidateUsers(),
+        rule.getCandidateGroups(),
         rule.getAssignmentMode(),
         rule.isPersisted()
     );
@@ -582,6 +582,7 @@ public class TaskInstanceService {
         .id(taskInstance.getId().getValue().toString())
         .currentUser(user)
         .candidateUsers(rule.getCandidateUsers().stream().toList())
+        .candidateGroups(rule.getCandidateGroups().stream().toList())
         .priority(rule.getPriority())
         .build());
     markConsumedIfOneTime(rule, taskInstance);

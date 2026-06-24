@@ -13,4 +13,5 @@ public class TaskAssignmentRuleUpdateDTO {
 
   private String assignee;
   private String candidateUsers;
+  private String candidateGroups;
 }
