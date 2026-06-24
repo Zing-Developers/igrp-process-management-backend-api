@@ -14,8 +14,8 @@ This project is a Spring Boot 3 / Java 25 service with JPA/PostgreSQL, Activiti 
 | P0 | Webhook/runtime timeouts | Configure `RestClient` connect and read timeouts globally; current default is infinite. | Open |
 | P0 | Auth per-request overhead | Cache authorization groups, permissions, and super-admin checks; currently 3 remote calls per request. | Open |
 | P1 | N+1 queries — timeline events | Batch task-instance and user-profile resolution in `ActivityInstanceService`. | **RESOLVED** |
-| P1 | Statistics queries | Replace 6+ individual COUNT queries with grouped aggregate or cached result. | Open |
-| P1 | Database indexes | Add Flyway-managed indexes for the most common task/process filters and sorts. | Open |
+| P1 | Statistics queries | Replace 6+ individual COUNT queries with grouped aggregate or cached result. | **RESOLVED** (global task & process stats use one `GROUP BY`; per-user left as-is by design) |
+| P1 | Database indexes | Add Flyway-managed indexes for the most common task/process filters and sorts. | **RESOLVED** (Flyway `V6`, `CREATE INDEX CONCURRENTLY`) |
 | P1 | Class-level @Transactional on consumers | Move `@Transactional` from class to method level on Kafka/RabbitMQ consumers. | Open |
 | P1 | Unbounded archive queries | `archiveProcess`/`unArchiveProcess` load all instances without pagination and save individually. | Open |
 | P1 | IAM profile sync filter | DB read/write on every authenticated request without caching. | Open |
@@ -287,6 +287,14 @@ Recommended actions:
 
 ## Statistics Queries (P1)
 
+**Resolved on 2026-06-24 (global endpoints).** `getGlobalTaskStatistics` and
+`getProcessInstanceStatistics` now issue a single `GROUP BY status` aggregate
+(`countGroupedByStatus()` on each Spring Data repository) instead of 6 sequential COUNT
+queries. Output is unchanged (statuses with no rows default to 0; total is the sum of all
+buckets). The per-user endpoint `getTaskStatisticsByUser` is intentionally left unchanged —
+its 6 counts use *different* predicates (visibility / `assignedBy` / `endedBy`), so it is not
+a plain `GROUP BY`; caching is the better future lever there.
+
 ### Task statistics — 6 separate COUNT queries
 
 **File:** `TaskInstanceRepositoryImpl.java:328-345`
@@ -327,6 +335,17 @@ SELECT status, COUNT(*) FROM t_task_instance GROUP BY status;
 ---
 
 ## Database And Query Performance (P1)
+
+**Resolved on 2026-06-24 (indexes).** Added Flyway migration
+`V6__add_performance_indexes.sql`, which creates the task/process filter & sort indexes
+below using `CREATE INDEX CONCURRENTLY IF NOT EXISTS` so the build does not block writes on
+the large production tables. The migration is non-transactional
+(`V6__add_performance_indexes.sql.conf` → `executeInTransaction=false`) and
+`spring.flyway.postgresql.transactional-lock=false` switches Flyway to a session-level lock
+(required for `CONCURRENTLY`). Validated end-to-end against PostgreSQL 17: all indexes
+created, valid, and idempotent on re-run. Two of the indexes
+(`idx_process_instance_release`, `idx_task_assignment_rule_process_task`) are redundant with
+existing index prefixes and are flagged in the migration as safe to drop.
 
 ### Add indexes for common filters and sorts
 
@@ -645,7 +664,7 @@ Recommended actions:
 
 1. **Week 1 — Highest impact, lowest risk:**
    - Add `RestClient` connect/read timeouts globally (blocks indefinite hangs).
-   - Add missing database indexes via Flyway migration.
+   - ~~Add missing database indexes via Flyway migration.~~ **DONE** (`V6`, `CONCURRENTLY`).
    - Cache authorization calls in `SecurityConfig` (eliminates 3 remote calls/request).
 
 2. **Week 2 — N+1 query fixes:**
@@ -658,7 +677,7 @@ Recommended actions:
 
 3. **Week 3 — Consumer, statistics, and serial loop fixes:**
    - Move `@Transactional` to method level on Kafka/RabbitMQ consumers.
-   - Replace statistics 6-query pattern with `GROUP BY` or cached aggregate.
+   - ~~Replace statistics 6-query pattern with `GROUP BY` or cached aggregate.~~ **DONE** (global endpoints; per-user left as-is).
    - Add Kafka consumer concurrency and DLQ configuration.
    - Batch user profile resolution in `getTaskById()` (mirrors existing list pattern).
    - Batch artifact saves and group assignments in `importProcessDefinition()`.

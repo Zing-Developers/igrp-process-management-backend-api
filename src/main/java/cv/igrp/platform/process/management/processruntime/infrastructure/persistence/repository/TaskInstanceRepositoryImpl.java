@@ -338,20 +338,25 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
   @Override
   public TaskStatistics getGlobalTaskStatistics() {
 
-    long total = taskInstanceEntityRepository.count();
-    long available = countBySpec(statusSpec(TaskInstanceStatus.CREATED));
-    long assigned = countBySpec(statusSpec(TaskInstanceStatus.ASSIGNED));
-    long suspended = countBySpec(statusSpec(TaskInstanceStatus.SUSPENDED));
-    long completed = countBySpec(statusSpec(TaskInstanceStatus.COMPLETED));
-    long canceled = countBySpec(statusSpec(TaskInstanceStatus.CANCELED));
+    // Single grouped aggregate instead of one COUNT query per status. Statuses with no
+    // rows are absent from the result and default to 0; total is the sum across all
+    // buckets, matching the previous count() semantics.
+    Map<TaskInstanceStatus, Long> counts = new EnumMap<>(TaskInstanceStatus.class);
+    long total = 0L;
+    for (var row : taskInstanceEntityRepository.countGroupedByStatus()) {
+      total += row.getCount();
+      if (row.getStatus() != null) {
+        counts.merge(row.getStatus(), row.getCount(), Long::sum);
+      }
+    }
 
     return TaskStatistics.builder()
         .totalTaskInstances(total)
-        .totalAvailableTasks(available)
-        .totalAssignedTasks(assigned)
-        .totalSuspendedTasks(suspended)
-        .totalCompletedTasks(completed)
-        .totalCanceledTasks(canceled)
+        .totalAvailableTasks(counts.getOrDefault(TaskInstanceStatus.CREATED, 0L))
+        .totalAssignedTasks(counts.getOrDefault(TaskInstanceStatus.ASSIGNED, 0L))
+        .totalSuspendedTasks(counts.getOrDefault(TaskInstanceStatus.SUSPENDED, 0L))
+        .totalCompletedTasks(counts.getOrDefault(TaskInstanceStatus.COMPLETED, 0L))
+        .totalCanceledTasks(counts.getOrDefault(TaskInstanceStatus.CANCELED, 0L))
         .build();
   }
 
