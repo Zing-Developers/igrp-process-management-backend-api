@@ -235,9 +235,8 @@ public class TaskInstanceService {
     // Enrich with process variables
     Map<String, Object> variables = runtimeProcessEngineRepository.getProcessVariables(taskInstance.getEngineProcessNumber());
     taskInstance.addProcessVariables(variables);
-    // Resolve user profiles
-    resolveUserProfiles(taskInstance);
-    taskInstance.getTaskInstanceEvents().forEach(this::resolveUserProfiles);
+    // Resolve user profiles for the task and its events in a single batch query
+    resolveAllUserProfiles(List.of(taskInstance));
     return taskInstance;
   }
 
@@ -281,34 +280,6 @@ public class TaskInstanceService {
     resolveAllUserProfiles(taskInstances.getContent());
 
     return taskInstances;
-  }
-
-  private void resolveUserProfiles(TaskInstance taskInstance) {
-    Set<String> ids = new HashSet<>();
-
-    addIfNotNull(ids, taskInstance.getStartedBy());
-    addIfNotNull(ids, taskInstance.getEndedBy());
-    addIfNotNull(ids, taskInstance.getAssignedBy());
-
-    userProfileRepository.findBySubjectOrEmails(ids, ids).forEach(userProfile -> {
-
-      if (matches(userProfile, taskInstance.getStartedBy())) {
-        taskInstance.resolveUserProfileStartedBy(userProfile);
-      }
-      if (matches(userProfile, taskInstance.getEndedBy())) {
-        taskInstance.resolveUserProfileEndedBy(userProfile);
-      }
-      if (matches(userProfile, taskInstance.getAssignedBy())) {
-        taskInstance.resolveUserProfileAssignedBy(userProfile);
-      }
-    });
-
-  }
-
-  private void resolveUserProfiles(TaskInstanceEvent taskInstanceEvent) {
-    String performedBy = taskInstanceEvent.getPerformedBy().getValue();
-    userProfileRepository.findBySubjectOrEmail(performedBy, performedBy)
-        .ifPresent(taskInstanceEvent::resolveUserProfilePerformedBy);
   }
 
   /**
@@ -358,15 +329,6 @@ public class TaskInstanceService {
     if (identifier == null) return;
     UserProfile profile = lookup.get(identifier.getValue());
     if (profile != null) setter.accept(profile);
-  }
-
-  private boolean matches(UserProfile userProfile, Code value) {
-    if (value == null) {
-      return false;
-    }
-    String identifier = value.getValue();
-    return Objects.equals(identifier, userProfile.getSub())
-        || Objects.equals(identifier, userProfile.getEmail());
   }
 
   private void addIfNotNull(Set<String> ids, Code value) {

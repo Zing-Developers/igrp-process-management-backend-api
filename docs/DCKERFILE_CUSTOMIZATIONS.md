@@ -11,32 +11,6 @@ maven:3.9.9-eclipse-temurin-23 AS build
 eclipse-temurin:23-jre
 
 
-## 1.2 Instalação de Certificados
-
-Para instlação dos certificados internos da IRN, foram providenciados os seguintes certificados:
-
-irn.internal.crt
-justica-ca-root.crt
-justica-sub-ca.crt
-
-Se seguida, foi adicionada a seguinte secção no Dockerfile, de forma a serem instalados esses certificados:
-
-
-```Dockerfile
-COPY certs/irn/*.crt /usr/local/share/ca-certificates/
-
-RUN apt-get update && apt-get install -y ca-certificates && \
-    update-ca-certificates && \
-    for cert in /usr/local/share/ca-certificates/*.crt; do \
-      keytool -importcert -trustcacerts \
-      -keystore "$JAVA_HOME/lib/security/cacerts" \
-      -storepass changeit -noprompt \
-      -alias "$(basename $cert .crt)" \
-      -file "$cert"; \
-    done && \
-    rm -rf /var/lib/apt/lists/*
-```
-
 ## 1. Ambiente Dev IRN
 
 ## 1.1 Base Images

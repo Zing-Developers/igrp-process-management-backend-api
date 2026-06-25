@@ -14,7 +14,6 @@ This is a static project review. Validate every recommendation against the targe
 | P0 | Task/process access | Enforce authorization on task search, claim, assign, complete, import, deploy, and admin-style operations. |
 | P0 | Webhooks | Add SSRF protections, host allowlists, HTTPS enforcement, timeouts, and response-size limits. |
 | P1 | Secrets | Remove default secrets and use Kubernetes/Docker secrets or a vault. |
-| P1 | K8s credentials | Replace hardcoded plaintext credentials in deployment manifests with Secret references. |
 | P1 | Logging/errors | Stop logging sensitive payloads and sanitize ProblemDetail responses. |
 | P1 | Error responses | Do not return internal exception messages, PSQL details, or parser internals to API clients. |
 | P1 | Dependencies/images | Align security dependency versions with the Spring Boot BOM and scan dependencies/images. |
@@ -178,26 +177,6 @@ Recommended actions:
 - Remove the default token value so startup fails when the secret is missing.
 - Rotate any token that may have used the default.
 - Keep tokens out of logs, process variables, and Postman exports.
-
-### Use secrets for Kubernetes credentials
-
-`k8s/deployment.yaml` contains hardcoded plaintext database credentials directly in env values:
-
-```yaml
-- name: SPRING_DATASOURCE_USERNAME
-  value: "myuser"
-- name: SPRING_DATASOURCE_PASSWORD
-  value: "mypassword"
-```
-
-**File:** `k8s/deployment.yaml:32-35`
-
-Recommended actions:
-
-- Use Kubernetes `Secret` for database passwords, mail credentials, Kafka credentials, and webhook tokens.
-- Use `ConfigMap` only for non-secret values.
-- Add `envFrom` or `valueFrom.secretKeyRef`.
-- Prevent real secret values from entering Git.
 
 ### Keep `.env` local only
 
@@ -389,19 +368,6 @@ Recommended actions:
 - Use read-only root filesystem where possible.
 - Pass the keystore password as a build argument, or document why `changeit` is acceptable (CA truststore only, no private keys).
 
-### Harden Kubernetes manifests
-
-**File:** `k8s/deployment.yaml`
-
-Recommended additions:
-
-- TLS-enabled ingress and HSTS.
-- Readiness and liveness probes.
-- `securityContext` with `runAsNonRoot`, `allowPrivilegeEscalation: false`, dropped capabilities, and seccomp profile.
-- NetworkPolicies that limit DB, broker, IAM, and webhook egress.
-- Resource requests/limits matched to load tests (currently set but should be validated).
-- Separate service accounts with least privilege.
-
 ### Protect actuator and Swagger
 
 Production disables Swagger in `application-production.properties`, which is good. Staging defaults Swagger to enabled:
@@ -470,10 +436,9 @@ Recommended actions:
 3. Remove admin/system fallback for unauthenticated broker messages.
 4. Enforce task/process visibility for non-admin users.
 5. Remove default webhook token and move deployment secrets to `Secret` references.
-6. Replace hardcoded credentials in `k8s/deployment.yaml` with Kubernetes Secret references.
-7. Sanitize all `GlobalExceptionHandler` responses — stop returning `ex.getMessage()` to clients.
-8. Add SSRF protections and timeouts to webhook delegates.
-9. Default Kafka security protocol to `SASL_SSL` and active profile to production.
-10. Pin container images, add non-root `USER` directive, and lower OWASP CVSS threshold to 7.
-11. Sanitize logs — move payload logging to DEBUG, redact tokens and PII.
-12. Disable Swagger in staging by default.
+6. Sanitize all `GlobalExceptionHandler` responses — stop returning `ex.getMessage()` to clients.
+7. Add SSRF protections and timeouts to webhook delegates.
+8. Default Kafka security protocol to `SASL_SSL` and active profile to production.
+9. Pin container images, add non-root `USER` directive, and lower OWASP CVSS threshold to 7.
+10. Sanitize logs — move payload logging to DEBUG, redact tokens and PII.
+11. Disable Swagger in staging by default.

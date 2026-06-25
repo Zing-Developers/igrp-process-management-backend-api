@@ -11,7 +11,7 @@ This project is a Spring Boot 3 / Java 25 service with JPA/PostgreSQL, Activiti 
 | P0 | N+1 queries — task list | Batch process-variable and user-profile resolution in task list endpoint. | **RESOLVED** |
 | P0 | N+1 queries — process list | Batch progress, variables, and user-profile resolution in process list endpoint. | **RESOLVED** |
 | P0 | N+1 queries — candidate users | Persist `candidateUsers` to DB instead of per-task `task_assignment_rule` query. | **RESOLVED** |
-| P0 | Webhook/runtime timeouts | Configure `RestClient` connect and read timeouts globally; current default is infinite. | Open |
+| P0 | Webhook/runtime timeouts | Configure `RestClient` connect and read timeouts globally; current default is infinite. | **RESOLVED** (app + framework `0.1.0-beta.24.1`; app pom bumped & green locally — pending Nexus deploy of the framework) |
 | P0 | Auth per-request overhead | Cache authorization groups, permissions, and super-admin checks; currently 3 remote calls per request. | Open |
 | P1 | N+1 queries — timeline events | Batch task-instance and user-profile resolution in `ActivityInstanceService`. | **RESOLVED** |
 | P1 | Statistics queries | Replace 6+ individual COUNT queries with grouped aggregate or cached result. | **RESOLVED** (global task & process stats use one `GROUP BY`; per-user left as-is by design) |
@@ -28,7 +28,7 @@ This project is a Spring Boot 3 / Java 25 service with JPA/PostgreSQL, Activiti 
 | P2 | Connection pool | Tune HikariCP and PostgreSQL limits per pod replica count. | Open |
 | P2 | Process list sorting | `ProcessInstanceRepositoryImpl#findAll` has no deterministic sort order. | Open |
 | P2 | Kafka consumer config | No explicit concurrency, max-poll-records, or DLQ settings. | Open |
-| P2 | N+1 queries — single task detail | `getTaskById()` resolves user profiles per event instead of batching. | Open |
+| P2 | N+1 queries — single task detail | `getTaskById()` resolves user profiles per event instead of batching. | **RESOLVED** |
 | P2 | Serial loop — process task status batch | `getProcessInstanceTaskStatusBatch()` loops serially per process instance. | Open |
 | P2 | Serial loop — artifact saves on import | `importProcessDefinition()` saves each artifact individually in a loop. | Open |
 | P2 | Serial loop — group assignment | `updateProcessDefinitionAssignment()` and import call `addCandidateStarterGroup()` per group in a loop. | Open |
@@ -141,20 +141,15 @@ Recommended actions:
 - Use `saveAll(List<TaskAssignmentRule>)` for batch inserts.
 - Configure `spring.jpa.properties.hibernate.jdbc.batch_size=20` to enable JDBC batching.
 
-### TaskInstanceService.getTaskById — per-event user profile resolution (P2)
+### TaskInstanceService.getTaskById — per-event user profile resolution (P2) — RESOLVED
 
-**File:** `TaskInstanceService.java:241-242`
+**File:** `TaskInstanceService.java`
 
-```java
-resolveUserProfiles(taskInstance);
-taskInstance.getTaskInstanceEvents().forEach(this::resolveUserProfiles);
-```
-
-The list endpoint (`getAllTaskInstances`) was fixed to use batch resolution via `resolveAllUserProfiles()`, but the single-task detail endpoint (`getTaskById`) still resolves user profiles per event individually. A task with 10 events triggers 10+ separate `findBySubjectOrEmail` queries.
-
-Recommended actions:
-
-- Collect all user identifiers from the task and its events, then resolve in a single `findBySubjectOrEmails` batch call, mirroring the pattern already used in `getAllTaskInstances`.
+**Resolved on 2026-06-24.** `getTaskById` now calls the existing batch helper
+`resolveAllUserProfiles(List.of(taskInstance))`, which collects the task's `startedBy`/`endedBy`/
+`assignedBy` plus every event's `performedBy` and resolves them in a single `findBySubjectOrEmails`
+call (previously 1 + N per-event `findBySubjectOrEmail` queries). The now-orphaned per-task and
+per-event `resolveUserProfiles` overloads (and the `matches` helper they used) were removed.
 
 ### RuntimeProcessEngineRepositoryImpl.getProcessInstanceTaskStatusBatch — serial loop (P2)
 
@@ -214,6 +209,12 @@ Recommended actions:
 ---
 
 ## RestClient Timeouts (P0)
+
+**Resolved on 2026-06-24.** Connect/read timeouts (default 5s/10s, env-overridable via
+`igrp.restclient.connect-timeout` / `igrp.restclient.read-timeout` → `IGRP_RESTCLIENT_*`) are
+now applied via `ClientHttpRequestFactorySettings` in **both** RestClient beans:
+- App fallback `RestClientConfig.defaultRestClient` (active when `igrp.restclient.provider` ≠ `irn`) — live in this repo.
+- Framework `RestClientSignedAuthorizationConfig.restClient()` in `process-runtime-irn-integration` (active in production, `provider=irn`) — JWT interceptor preserved. The monorepo is **version-bumped to `0.1.0-beta.24.1`** (hotfix on the beta.24 / Activiti-8 line; `beta.25` belongs to the divergent Activiti-9 branch) and the app's `process-runtime-*` deps are bumped to match. Built + verified locally (app: 288 tests green). **Remaining step: deploy the monorepo `0.1.0-beta.24.1` to Nexus** (their CI) — until then `beta.24.1` exists only in local `.m2`, so the app pom bump must not be merged ahead of the Nexus deploy.
 
 ### RestClientConfig — no timeout defaults
 
@@ -663,7 +664,7 @@ Recommended actions:
 ## Suggested Next Steps
 
 1. **Week 1 — Highest impact, lowest risk:**
-   - Add `RestClient` connect/read timeouts globally (blocks indefinite hangs).
+   - ~~Add `RestClient` connect/read timeouts globally (blocks indefinite hangs).~~ **DONE** (app fallback live; framework/IRN path pending release).
    - ~~Add missing database indexes via Flyway migration.~~ **DONE** (`V6`, `CONCURRENTLY`).
    - Cache authorization calls in `SecurityConfig` (eliminates 3 remote calls/request).
 
@@ -679,7 +680,7 @@ Recommended actions:
    - Move `@Transactional` to method level on Kafka/RabbitMQ consumers.
    - ~~Replace statistics 6-query pattern with `GROUP BY` or cached aggregate.~~ **DONE** (global endpoints; per-user left as-is).
    - Add Kafka consumer concurrency and DLQ configuration.
-   - Batch user profile resolution in `getTaskById()` (mirrors existing list pattern).
+   - ~~Batch user profile resolution in `getTaskById()` (mirrors existing list pattern).~~ **DONE.**
    - Batch artifact saves and group assignments in `importProcessDefinition()`.
    - Parallelize or batch `getProcessInstanceTaskStatusBatch()` if runtime API supports it.
 

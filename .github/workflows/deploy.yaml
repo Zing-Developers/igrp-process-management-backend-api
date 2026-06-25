@@ -6,7 +6,6 @@ on:
       - cloud-dev-kafka-fix
     paths-ignore:
        #- '.github/**'
-      - 'k8s/**'
       - '.gitattributes'
 
 env:
