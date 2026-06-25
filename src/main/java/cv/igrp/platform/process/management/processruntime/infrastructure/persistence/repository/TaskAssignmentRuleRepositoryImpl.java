@@ -54,12 +54,19 @@ public class TaskAssignmentRuleRepositoryImpl implements TaskAssignmentRuleRepos
   public TaskAssignmentRule updateAssignment(
       Identifier ruleId,
       Code assignee,
-      Set<String> candidateUsers
+      Set<String> candidateUsers,
+      Set<String> candidateGroups,
+      Integer priority
   ) {
     var rule = findUpdatableRule(ruleId);
     rule.setAssignee(assignee != null ? assignee.getValue() : null);
     rule.getCandidateUsers().clear();
     rule.getCandidateUsers().addAll(normalize(candidateUsers));
+    rule.getCandidateGroups().clear();
+    rule.getCandidateGroups().addAll(normalize(candidateGroups));
+    if (priority != null) {
+      rule.setPriority(priority);
+    }
     return toModel(repository.save(rule));
   }
 
@@ -134,6 +141,12 @@ public class TaskAssignmentRuleRepositoryImpl implements TaskAssignmentRuleRepos
         SetJoin<TaskAssignmentRuleEntity, String> candidateUsers =
             root.joinSet("candidateUsers", JoinType.INNER);
         predicates.add(candidateUsers.in(normalize(filter.getCandidateUsers())));
+      }
+      if (!filter.getCandidateGroups().isEmpty()) {
+        query.distinct(true);
+        SetJoin<TaskAssignmentRuleEntity, String> candidateGroups =
+            root.joinSet("candidateGroups", JoinType.INNER);
+        predicates.add(candidateGroups.in(normalize(filter.getCandidateGroups())));
       }
       if (filter.getAssignmentMode() != null) {
         predicates.add(cb.equal(root.get("assignmentMode"), filter.getAssignmentMode()));
@@ -221,6 +234,8 @@ public class TaskAssignmentRuleRepositoryImpl implements TaskAssignmentRuleRepos
     entity.setAssignee(rule.getAssignee() != null ? rule.getAssignee().getValue() : null);
     entity.getCandidateUsers().clear();
     entity.getCandidateUsers().addAll(rule.getCandidateUsers());
+    entity.getCandidateGroups().clear();
+    entity.getCandidateGroups().addAll(rule.getCandidateGroups());
     entity.setAssignmentMode(rule.getAssignmentMode());
     entity.setPriority(rule.getPriority());
     entity.setConsumed(rule.isConsumed());
@@ -239,6 +254,7 @@ public class TaskAssignmentRuleRepositoryImpl implements TaskAssignmentRuleRepos
         .taskDefinitionKey(Code.create(entity.getTaskDefinitionKey()))
         .assignee(entity.getAssignee() != null ? Code.create(entity.getAssignee()) : null)
         .candidateUsers(entity.getCandidateUsers())
+        .candidateGroups(entity.getCandidateGroups())
         .assignmentMode(entity.getAssignmentMode())
         .priority(entity.getPriority())
         .consumed(entity.getConsumed())

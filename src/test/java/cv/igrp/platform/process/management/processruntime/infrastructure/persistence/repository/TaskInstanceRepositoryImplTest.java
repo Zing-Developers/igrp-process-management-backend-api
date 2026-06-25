@@ -180,36 +180,95 @@ class TaskInstanceRepositoryImplTest {
   }
 
 
+  @Test
+  void testFindByFilter_withPriority() {
+
+    var filter = TaskInstanceFilter
+        .builder()
+        .page(0)
+        .size(10)
+        .priority(5)
+        .build();
+
+    TaskInstanceEntity entity = mock(TaskInstanceEntity.class);
+    Page<TaskInstanceEntity> page =
+        new PageImpl<>(List.of(entity), PageRequest.of(filter.getPage(), filter.getSize()), 1);
+
+    when(entityRepository.findAll(any(Specification.class), any(PageRequest.class)))
+        .thenReturn(page);
+
+    TaskInstance model = mock(TaskInstance.class);
+    when(mapper.toModel(entity)).thenReturn(model);
+
+    PageableLista<TaskInstance> result = repository.findAll(filter);
+
+    assertNotNull(result);
+    assertEquals(1, result.getTotalElements());
+    assertEquals(1, result.getContent().size());
+    assertEquals(model, result.getContent().get(0));
+
+    verify(entityRepository).findAll(any(Specification.class), any(PageRequest.class));
+    verify(mapper).toModel(entity);
+
+  }
+
+
 
   @Test
   void testGetGlobalTaskStatistics() {
 
-    // total
-    when(entityRepository.count()).thenReturn(100L);
-
-    // captor para Specification
-    ArgumentCaptor<Specification<TaskInstanceEntity>> specCaptor = ArgumentCaptor.forClass(Specification.class);
-
-    when(entityRepository.count(specCaptor.capture()))
-        .thenReturn(52L)   // available
-        .thenReturn(18L)   // assigned
-        .thenReturn(5L)    // suspended
-        .thenReturn(25L)   // completed
-        .thenReturn(7L);   // canceled
+    // Single grouped aggregate replaces the previous per-status COUNT queries.
+    when(entityRepository.countGroupedByStatus()).thenReturn(List.of(
+        statusCount(TaskInstanceStatus.CREATED, 52L),    // available
+        statusCount(TaskInstanceStatus.ASSIGNED, 18L),
+        statusCount(TaskInstanceStatus.SUSPENDED, 5L),
+        statusCount(TaskInstanceStatus.COMPLETED, 25L),
+        statusCount(TaskInstanceStatus.CANCELED, 7L)
+    ));
 
     // When
     TaskStatistics stats = repository.getGlobalTaskStatistics();
 
     // Then
-    assertEquals(100L, stats.getTotalTaskInstances());
+    assertEquals(107L, stats.getTotalTaskInstances()); // total = sum of all buckets
     assertEquals(52L, stats.getTotalAvailableTasks());
     assertEquals(18L, stats.getTotalAssignedTasks());
     assertEquals(5L, stats.getTotalSuspendedTasks());
     assertEquals(25L, stats.getTotalCompletedTasks());
     assertEquals(7L, stats.getTotalCanceledTasks());
+  }
 
-    assertThat(specCaptor.getAllValues()).hasSize(5);
+  @Test
+  void testGetGlobalTaskStatistics_missingStatusDefaultsToZero() {
 
+    // Only two statuses present; the rest must default to 0.
+    when(entityRepository.countGroupedByStatus()).thenReturn(List.of(
+        statusCount(TaskInstanceStatus.CREATED, 10L),
+        statusCount(TaskInstanceStatus.ASSIGNED, 3L)
+    ));
+
+    TaskStatistics stats = repository.getGlobalTaskStatistics();
+
+    assertEquals(13L, stats.getTotalTaskInstances());
+    assertEquals(10L, stats.getTotalAvailableTasks());
+    assertEquals(3L, stats.getTotalAssignedTasks());
+    assertEquals(0L, stats.getTotalSuspendedTasks());
+    assertEquals(0L, stats.getTotalCompletedTasks());
+    assertEquals(0L, stats.getTotalCanceledTasks());
+  }
+
+  private static TaskInstanceEntityRepository.TaskStatusCount statusCount(TaskInstanceStatus status, long count) {
+    return new TaskInstanceEntityRepository.TaskStatusCount() {
+      @Override
+      public TaskInstanceStatus getStatus() {
+        return status;
+      }
+
+      @Override
+      public long getCount() {
+        return count;
+      }
+    };
   }
 
 

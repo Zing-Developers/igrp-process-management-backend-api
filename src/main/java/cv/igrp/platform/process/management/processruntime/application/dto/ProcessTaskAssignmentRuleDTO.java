@@ -20,6 +20,8 @@ public class ProcessTaskAssignmentRuleDTO {
 
   private String candidateUsers;
 
+  private String candidateGroups;
+
   private TaskAssignmentMode assignmentMode;
 
   private Integer priority;

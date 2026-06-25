@@ -15,7 +15,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalTime;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -140,26 +142,26 @@ public class ProcessInstanceRepositoryImpl implements ProcessInstanceRepository 
   @Override
   public ProcessStatistics getProcessInstanceStatistics() {
 
-    long total = processInstanceEntityRepository.count();
-
-    long created = countByStatus(ProcessInstanceStatus.CREATED);
-    long running = countByStatus(ProcessInstanceStatus.RUNNING);
-    long suspended = countByStatus(ProcessInstanceStatus.SUSPENDED);
-    long completed = countByStatus(ProcessInstanceStatus.COMPLETED);
-    long canceled = countByStatus(ProcessInstanceStatus.CANCELED);
+    // Single grouped aggregate instead of one COUNT query per status. Statuses with no
+    // rows are absent from the result and default to 0; total is the sum across all
+    // buckets (including any null-status rows), matching the previous count() semantics.
+    Map<ProcessInstanceStatus, Long> counts = new EnumMap<>(ProcessInstanceStatus.class);
+    long total = 0L;
+    for (var row : processInstanceEntityRepository.countGroupedByStatus()) {
+      total += row.getCount();
+      if (row.getStatus() != null) {
+        counts.merge(row.getStatus(), row.getCount(), Long::sum);
+      }
+    }
 
     return ProcessStatistics.builder()
         .totalProcessInstances(total)
-        .totalCreatedProcess(created)
-        .totalRunningProcess(running)
-        .totalSuspendedProcess(suspended)
-        .totalCompletedProcess(completed)
-        .totalCanceledProcess(canceled)
+        .totalCreatedProcess(counts.getOrDefault(ProcessInstanceStatus.CREATED, 0L))
+        .totalRunningProcess(counts.getOrDefault(ProcessInstanceStatus.RUNNING, 0L))
+        .totalSuspendedProcess(counts.getOrDefault(ProcessInstanceStatus.SUSPENDED, 0L))
+        .totalCompletedProcess(counts.getOrDefault(ProcessInstanceStatus.COMPLETED, 0L))
+        .totalCanceledProcess(counts.getOrDefault(ProcessInstanceStatus.CANCELED, 0L))
         .build();
-  }
-
-  private long countByStatus(ProcessInstanceStatus status) {
-    return processInstanceEntityRepository.count((root, query, cb) -> cb.equal(root.get("status"), status));
   }
 
   @Override

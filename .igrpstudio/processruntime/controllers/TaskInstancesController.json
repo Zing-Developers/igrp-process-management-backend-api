@@ -127,6 +127,12 @@
           "name": "filterByCurrentUser",
           "description": "Current user filter",
           "isRequired": false
+        },
+        {
+          "type": "integer",
+          "name": "priority",
+          "description": "Task priority (exact match)",
+          "isRequired": false
         }
       ]
     },
@@ -407,6 +413,12 @@
           "name": "name",
           "description": "Task Name",
           "isRequired": false
+        },
+        {
+          "type": "integer",
+          "name": "priority",
+          "description": "Task priority (exact match)",
+          "isRequired": false
         }
       ]
     },
@@ -572,6 +584,12 @@
           "type": "string",
           "name": "candidateUsers",
           "description": "Candidate Users",
+          "isRequired": false
+        },
+        {
+          "type": "string",
+          "name": "candidateGroups",
+          "description": "Candidate Groups",
           "isRequired": false
         },
         {

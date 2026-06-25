@@ -22,6 +22,7 @@ public class TaskInstanceFilter {
   private final Code applicationBase;
   private final Name processName;
   private final TaskInstanceStatus status;
+  private final Integer priority;
   private final LocalDate dateFrom;
   private final LocalDate dateTo;
   private final Integer page;
@@ -53,6 +54,7 @@ public class TaskInstanceFilter {
       Set<String> candidateUsers,
       Code user,
       TaskInstanceStatus status,
+      Integer priority,
       LocalDate dateFrom,
       LocalDate dateTo,
       Integer page,
@@ -74,6 +76,7 @@ public class TaskInstanceFilter {
     this.candidateUsers = candidateUsers == null ? new HashSet<>() : candidateUsers;
     this.user = user;
     this.status = status;
+    this.priority = priority;
     this.dateFrom = dateFrom;
     this.dateTo = dateTo;
     this.page = page == null ? 0 : page;

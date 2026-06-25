@@ -34,12 +34,40 @@ class TaskInstanceMapperTest {
         10,
         null,
         null,
-        false
+        false,
+        null
     );
 
     var filter = mapper.toFilter(command);
 
     assertEquals(Set.of("group-a", "group-b"), filter.getCandidateGroups());
     assertEquals(Set.of("user-a@nosi.cv", "user-b@nosi.cv"), filter.getCandidateUsers());
+  }
+
+  @Test
+  void toFilter_shouldMapPriority() {
+    var command = new ListTaskInstancesCommand(
+        new VariablesFilterDTO(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        10,
+        null,
+        null,
+        false,
+        7
+    );
+
+    var filter = mapper.toFilter(command);
+
+    assertEquals(7, filter.getPriority());
   }
 }

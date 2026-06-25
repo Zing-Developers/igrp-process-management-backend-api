@@ -26,6 +26,7 @@ public class TaskAssignmentRuleMapper {
         .taskDefinitionKey(toCode(command.getTaskDefinitionKey()))
         .assignee(toCode(command.getAssignee()))
         .candidateUsers(splitCommaSeparated(command.getCandidateUsers()))
+        .candidateGroups(splitCommaSeparated(command.getCandidateGroups()))
         .assignmentMode(command.getAssignmentMode())
         .consumed(command.getConsumed())
         .active(command.getActive())
@@ -55,6 +56,7 @@ public class TaskAssignmentRuleMapper {
     dto.setTaskDefinitionKey(rule.getTaskDefinitionKey().getValue());
     dto.setAssignee(rule.getAssignee() != null ? rule.getAssignee().getValue() : null);
     dto.setCandidateUsers(String.join(",", rule.getCandidateUsers()));
+    dto.setCandidateGroups(String.join(",", rule.getCandidateGroups()));
     dto.setAssignmentMode(rule.getAssignmentMode());
     dto.setPriority(rule.getPriority());
     dto.setConsumed(rule.isConsumed());
@@ -75,6 +77,13 @@ public class TaskAssignmentRuleMapper {
       return Set.of();
     }
     return splitCommaSeparated(dto.getCandidateUsers());
+  }
+
+  public Set<String> toCandidateGroups(TaskAssignmentRuleUpdateDTO dto) {
+    if (dto == null) {
+      return Set.of();
+    }
+    return splitCommaSeparated(dto.getCandidateGroups());
   }
 
   private Identifier toIdentifier(String value) {

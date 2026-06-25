@@ -119,6 +119,7 @@ This delegate is designed for scenarios where the assignee of a user task is det
 | `apiMethod` | Expression | No | `GET` | The HTTP method to use. Supported values: `GET`, `POST`, `PUT`, `DELETE`. |
 | `apiPayload` | Expression | No | — | The request body for `POST` and `PUT` requests. Supports `${variableName}` and `$[ENV_VAR]` placeholders. |
 | `jsonPathExpression` | Expression | Yes | — | A JSONPath expression used to extract the user identifier from the API response. Example: `$.data.assignedUserEmail` |
+| `priorityJsonPathExpression` | Expression | No | — | An optional JSONPath expression used to extract the task priority from the same API response. The resolved value (a number, e.g. `3`) is stored on the assignment rule and applied to the target task when it is activated. Works exactly like `jsonPathExpression`. Example: `$.data.priority` |
 | `targetTaskKey` | Expression | Yes | — | The task definition key (ID) of the user task that should be assigned to the resolved user. This must match the ID of a user task defined in the BPMN process. |
 | `assignmentMode` | Expression | No | `ONE_TIME` | Determines how the assignment rule behaves. `ONE_TIME` means the rule is consumed after it is applied once. `ALWAYS` means the rule persists and is reapplied each time the target task is activated. |
 | `outputVariable` | Expression | No | — | An optional process variable name where the extracted user identifier will be stored. Useful when you need to reference the resolved user in subsequent tasks or expressions. |
@@ -132,17 +133,18 @@ The delegate uses the global webhook authentication token configured via the app
 1. The delegate reads all configured parameters from the BPMN expression fields (with fallback to process variables of the same name).
 2. All `$[ENV_VAR]` placeholders are resolved using system environment variables.
 3. An HTTP request is made to the configured `apiUrl` using the specified `apiMethod`.
-4. The JSON response body is parsed using the `jsonPathExpression` to extract the user identifier.
+4. The JSON response body is parsed using the `jsonPathExpression` to extract the user identifier. If `priorityJsonPathExpression` is configured, the task priority is extracted from the same response in the same way.
 5. The delegate checks if an active, unconsumed `TaskAssignmentRule` with an assignee already exists for the same `(processInstanceId, targetTaskKey)` combination:
-   - **If found:** The existing rule's assignee is **updated** to the new user identifier (no duplicate rule is created). This handles retries, loops, or re-entry scenarios safely.
-   - **If not found:** A new `TaskAssignmentRule` is created and persisted with the extracted user as the direct assignee.
-6. When the target user task is activated later in the process, the assignment rule is automatically applied, assigning the task to the resolved user.
+   - **If found:** The existing rule's assignee (and priority, when resolved) is **updated** to the new values (no duplicate rule is created). This handles retries, loops, or re-entry scenarios safely.
+   - **If not found:** A new `TaskAssignmentRule` is created and persisted with the extracted user as the direct assignee, and the resolved priority (if any).
+6. When the target user task is activated later in the process, the assignment rule is automatically applied, assigning the task to the resolved user and setting its priority when the rule carries one.
 7. Optionally, the extracted identifier is also stored in a process variable (if `outputVariable` is configured).
 
 ### Error Handling
 
 - If the API call fails (HTTP error or connection failure), the error is logged and a transient variable `<taskId>Error` is set on the execution. The delegate returns without creating an assignment rule.
 - If the JSONPath expression does not match any value in the response, or returns a null/blank value, the error is logged and a transient variable `<taskId>Error` is set. No assignment rule is created.
+- If `priorityJsonPathExpression` is configured but does not match, returns a blank value, or does not resolve to an integer, a warning is logged and the rule is created/updated **without** a priority (the task keeps its default priority). Priority resolution never fails the task.
 - Required parameters (`apiUrl`, `jsonPathExpression`, `targetTaskKey`) throw an `IllegalArgumentException` if not provided.
 
 ### Example Configuration
@@ -159,6 +161,7 @@ The delegate uses the global webhook authentication token configured via the app
 | `apiUrl` | `$[BACKOFFICE_API_URL]/api/v1/requests/by-service-id/${serviceId}` |
 | `apiMethod` | `GET` |
 | `jsonPathExpression` | `$.data.assignedUserEmail` |
+| `priorityJsonPathExpression` | `$.data.priority` |
 | `targetTaskKey` | `reviewRequest` |
 | `assignmentMode` | `ONE_TIME` |
 | `outputVariable` | `assignedReviewerEmail` |
@@ -171,12 +174,13 @@ The delegate uses the global webhook authentication token configured via the app
   "data": {
     "assignedUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "assignedUserName": "John Doe",
-    "assignedUserEmail": "john.doe@example.com"
+    "assignedUserEmail": "john.doe@example.com",
+    "priority": 3
   }
 }
 ```
 
-With the JSONPath expression `$.data.assignedUserEmail`, the delegate extracts `john.doe@example.com` and creates an assignment rule so the `reviewRequest` user task is assigned to that user. The email is also stored in the process variable `assignedReviewerEmail` for use in subsequent tasks (e.g., sending a notification email).
+With the JSONPath expression `$.data.assignedUserEmail`, the delegate extracts `john.doe@example.com` and creates an assignment rule so the `reviewRequest` user task is assigned to that user. The email is also stored in the process variable `assignedReviewerEmail` for use in subsequent tasks (e.g., sending a notification email). With `priorityJsonPathExpression` set to `$.data.priority`, the delegate also reads `3` from the response and applies it as the task priority when `reviewRequest` is activated.
 
 ### JSONPath Expression Examples
 

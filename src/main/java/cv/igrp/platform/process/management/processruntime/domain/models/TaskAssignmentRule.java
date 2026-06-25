@@ -20,6 +20,7 @@ public class TaskAssignmentRule {
   private final Code taskDefinitionKey;
   private final Code assignee;
   private final Set<String> candidateUsers;
+  private final Set<String> candidateGroups;
   private final TaskAssignmentMode assignmentMode;
   private final Integer priority;
   private final boolean consumed;
@@ -35,6 +36,7 @@ public class TaskAssignmentRule {
       Code taskDefinitionKey,
       Code assignee,
       Collection<String> candidateUsers,
+      Collection<String> candidateGroups,
       TaskAssignmentMode assignmentMode,
       Integer priority,
       Boolean consumed,
@@ -47,7 +49,8 @@ public class TaskAssignmentRule {
     this.processInstanceId = processInstanceId;
     this.taskDefinitionKey = Objects.requireNonNull(taskDefinitionKey, "Task definition key cannot be null!");
     this.assignee = assignee;
-    this.candidateUsers = normalizeCandidateUsers(candidateUsers);
+    this.candidateUsers = normalizeValues(candidateUsers);
+    this.candidateGroups = normalizeValues(candidateGroups);
     this.assignmentMode = assignmentMode == null ? TaskAssignmentMode.ONE_TIME : assignmentMode;
     this.priority = priority;
     this.consumed = consumed != null && consumed;
@@ -56,17 +59,17 @@ public class TaskAssignmentRule {
     this.persisted = persisted != null && persisted;
   }
 
-  private Set<String> normalizeCandidateUsers(Collection<String> candidateUsers) {
-    if (candidateUsers == null || candidateUsers.isEmpty()) {
+  private Set<String> normalizeValues(Collection<String> values) {
+    if (values == null || values.isEmpty()) {
       return Set.of();
     }
-    Set<String> users = new LinkedHashSet<>();
-    candidateUsers.stream()
+    Set<String> normalized = new LinkedHashSet<>();
+    values.stream()
         .filter(Objects::nonNull)
         .map(String::trim)
-        .filter(user -> !user.isBlank())
-        .forEach(users::add);
-    return users;
+        .filter(value -> !value.isBlank())
+        .forEach(normalized::add);
+    return normalized;
   }
 
   public boolean hasAssignee() {
@@ -75,5 +78,9 @@ public class TaskAssignmentRule {
 
   public boolean hasCandidateUsers() {
     return !candidateUsers.isEmpty();
+  }
+
+  public boolean hasCandidateGroups() {
+    return !candidateGroups.isEmpty();
   }
 }

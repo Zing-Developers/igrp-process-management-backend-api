@@ -17,6 +17,7 @@ public class TaskAssignmentRuleFilter {
   private final Code taskDefinitionKey;
   private final Code assignee;
   private final Set<String> candidateUsers;
+  private final Set<String> candidateGroups;
   private final TaskAssignmentMode assignmentMode;
   private final Boolean consumed;
   private final Boolean active;
@@ -31,6 +32,7 @@ public class TaskAssignmentRuleFilter {
       Code taskDefinitionKey,
       Code assignee,
       Set<String> candidateUsers,
+      Set<String> candidateGroups,
       TaskAssignmentMode assignmentMode,
       Boolean consumed,
       Boolean active,
@@ -43,6 +45,7 @@ public class TaskAssignmentRuleFilter {
     this.taskDefinitionKey = taskDefinitionKey;
     this.assignee = assignee;
     this.candidateUsers = candidateUsers == null ? new HashSet<>() : candidateUsers;
+    this.candidateGroups = candidateGroups == null ? new HashSet<>() : candidateGroups;
     this.assignmentMode = assignmentMode;
     this.consumed = consumed;
     this.active = active;

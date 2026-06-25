@@ -258,6 +258,78 @@ class TaskInstanceServiceTest {
     verify(taskAssignmentRuleRepository, never()).save(any(TaskAssignmentRule.class));
   }
 
+  @Test
+  void createTaskInstancesByProcess_shouldConsumePersistedOneTimeCandidateGroupRule() {
+
+    UUID taskId = UUID.randomUUID();
+    UUID ruleId = UUID.randomUUID();
+    String externalId = UUID.randomUUID().toString();
+
+    ProcessInstance processInstance = ProcessInstance.builder()
+        .id(Identifier.generate())
+        .procReleaseKey(Code.create("PROC_KEY"))
+        .procReleaseId(Code.create("PROC_RELEASE_ID"))
+        .engineProcessNumber(Code.create("ENG-PROC-123"))
+        .businessKey(Code.create("BUS-1"))
+        .startedBy("demo@nosi.cv")
+        .priority(10)
+        .build();
+
+    TaskAssignmentRule persistedRule = TaskAssignmentRule.builder()
+        .id(Identifier.create(ruleId))
+        .processDefinitionKey(processInstance.getProcReleaseKey())
+        .processInstanceId(processInstance.getId())
+        .taskDefinitionKey(Code.create("task-1"))
+        .candidateGroups(List.of("group-1"))
+        .assignmentMode(TaskAssignmentMode.ONE_TIME)
+        .priority(7)
+        .persisted(true)
+        .build();
+
+    TaskInstance runtimeTask = TaskInstance.builder()
+        .id(Identifier.create(taskId))
+        .taskKey(Code.create("task-1"))
+        .externalId(Code.create(externalId))
+        .name(Name.create("Task-1"))
+        .startedAt(LocalDateTime.now())
+        .build();
+
+    TaskInstance persistedTask = TaskInstance.builder()
+        .id(Identifier.create(taskId))
+        .taskKey(Code.create("task-1"))
+        .externalId(Code.create(externalId))
+        .name(Name.create("Task-1"))
+        .processInstanceId(processInstance.getId())
+        .processKey(processInstance.getProcReleaseKey())
+        .startedBy(Code.create("demo@nosi.cv"))
+        .status(TaskInstanceStatus.CREATED)
+        .taskInstanceEvents(new ArrayList<>())
+        .build();
+
+    ProcessArtifact artifact = mock(ProcessArtifact.class);
+    when(artifact.getKey()).thenReturn(Code.create("task-1"));
+    when(artifact.getFormKey()).thenReturn(null);
+    when(artifact.getCandidateGroups()).thenReturn(Set.of());
+    when(artifact.getDueDate()).thenReturn(null);
+
+    when(runtimeProcessEngineRepository.getActiveTaskInstances("ENG-PROC-123"))
+        .thenReturn(List.of(runtimeTask));
+    when(processDefinitionRepository.findAllArtifacts(processInstance.getProcReleaseId()))
+        .thenReturn(List.of(artifact));
+    when(taskAssignmentRuleRepository.findActiveByProcessInstanceAndTaskDefinition(
+        processInstance.getId(),
+        Code.create("task-1")
+    )).thenReturn(List.of(persistedRule));
+    when(taskInstanceRepository.findByIdWithEvents(taskId))
+        .thenReturn(Optional.of(persistedTask));
+
+    taskInstanceService.createTaskInstancesByProcess(processInstance);
+
+    verify(runtimeProcessEngineRepository).addCandidateGroup(externalId, "group-1");
+    verify(taskAssignmentRuleRepository).markConsumed(Identifier.create(ruleId), Identifier.create(taskId));
+    verify(taskAssignmentRuleRepository, never()).save(any(TaskAssignmentRule.class));
+  }
+
   /* ============================================================
    *  getByIdWithEvents
    * ============================================================ */
