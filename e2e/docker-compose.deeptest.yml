@@ -1,0 +1,26 @@
+# DEEP-TEST overlay: extra mgmt-api variants for security E2E tests. Run with:
+#   docker compose -p irn-e2e -f docker-compose.e2e.yml -f docker-compose.deeptest.yml up -d mgmt-cors mgmt-staging
+services:
+
+  # mgmt-api clone with explicit CORS allowlist, for positive CORS tests.
+  mgmt-cors:
+    extends:
+      file: docker-compose.e2e.yml
+      service: mgmt-api
+    ports: !override
+      - "18180:8080"
+    environment:
+      IGRP_CORS_ALLOWED_ORIGINS: http://localhost:5173,https://app.irn.test
+
+  # mgmt-api clone on the staging profile with ENABLE_SWAGGER unset,
+  # for the swagger-staging-default (swagger off by default) test.
+  # Staging uses ddl-auto=validate; it shares postgres-mgmt whose schema the
+  # dev-profile mgmt-api already created, so validation passes.
+  mgmt-staging:
+    extends:
+      file: docker-compose.e2e.yml
+      service: mgmt-api
+    ports: !override
+      - "18183:8080"
+    environment:
+      SPRING_ACTIVE_PROFILE: staging
