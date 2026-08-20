@@ -1,7 +1,10 @@
 package cv.igrp.platform.process.management.shared.config;
 
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundGuardProperties;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.context.annotation.Bean;
@@ -11,6 +14,7 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 
 @Configuration
+@EnableConfigurationProperties(OutboundGuardProperties.class)
 public class RestClientConfig {
 
   // Fallback RestClient, used only when no other RestClient bean exists (e.g. when the
@@ -26,8 +30,12 @@ public class RestClientConfig {
     ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.defaults()
         .withConnectTimeout(connectTimeout)
         .withReadTimeout(readTimeout);
+    // Redirects off: a validated public webhook destination must not be able to 302 the request
+    // into the address space the OutboundRequestGuard just blocked.
     return builder
-        .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
+        .requestFactory(ClientHttpRequestFactoryBuilder.httpComponents()
+            .withHttpClientCustomizer(HttpClientBuilder::disableRedirectHandling)
+            .build(settings))
         .build();
   }
 

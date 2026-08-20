@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.shared.delegates.webhook;
 
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundRequestGuard;
+
 import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import cv.igrp.platform.process.management.shared.util.MessageUtil;
 import cv.igrp.platform.process.management.shared.util.ObjectUtil;
@@ -37,9 +39,12 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
   public Expression webhookUrlPath;
   public Expression webhookPayloadHeader;
 
-  public IgrpProcessWebhookDelegate(MessageUtil messageUtil, RestClient restClient) {
+  private final OutboundRequestGuard guard;
+
+  public IgrpProcessWebhookDelegate(MessageUtil messageUtil, RestClient restClient, OutboundRequestGuard guard) {
     this.messageUtil = messageUtil;
     this.restClient = restClient;
+    this.guard = guard;
   }
 
   @Override
@@ -55,10 +60,10 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
     String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
     path = EnvVarUtil.resolveEnvVars(path, "webhookUrlPath");
 
-    String url = UriComponentsBuilder.fromUriString(baseUrl)
+    String url = guard.validate(UriComponentsBuilder.fromUriString(baseUrl)
         .path(path != null ? path : "")
         .build()
-        .toUriString();
+        .toUriString());
 
     String payload = messageUtil.createMessage(execution);
 
@@ -69,30 +74,22 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
     Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
     try {
-      HttpHeaders headers = new HttpHeaders();
-      headers.setContentType(MediaType.APPLICATION_JSON);
-      if (!headersMap.isEmpty()) {
-        headersMap.forEach(headers::set);
-      } else {
-        if(globalAuthToken != null && !globalAuthToken.isEmpty()) {
-          headers.set("Authorization", "Bearer " + globalAuthToken);
-        }
-      }
+      HttpHeaders headers = guard.buildHeaders(headersMap, globalAuthToken);
 
       log.debug("[IgrpProcessWebhookDelegate] Sending request to {}", url);
       log.debug("[IgrpProcessWebhookDelegate] Payload: {}", payload);
 
-      restClient.post()
+      var response = restClient.post()
           .uri(url)
           .headers(httpHeaders -> httpHeaders.addAll(headers))
           .body(payload)
-          .retrieve()
-          .toEntity(String.class);
+          .exchange((request, clientResponse) -> guard.readBounded(clientResponse));
 
-      log.info("[IgrpProcessWebhookDelegate] Process Data successfully sent to webhook");
-
-    } catch (RestClientResponseException e) {
-      log.warn("[IgrpProcessWebhookDelegate] Webhook returned error {}", e.getStatusCode());
+      if (response.status() >= 400) {
+        log.warn("[IgrpProcessWebhookDelegate] Webhook returned error {}", response.status());
+      } else {
+        log.info("[IgrpProcessWebhookDelegate] Process Data successfully sent to webhook");
+      }
     } catch (Exception e) {
       log.error("[IgrpProcessWebhookDelegate] Error calling webhook {}", url, e);
     }

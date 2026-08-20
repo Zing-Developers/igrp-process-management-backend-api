@@ -15,6 +15,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundGuardProperties;
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundRequestGuard;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatusCode;
@@ -70,7 +72,8 @@ class IgrpExternalUserAssignmentDelegateTest {
 
   @BeforeEach
   void setUp() {
-    delegate = new IgrpExternalUserAssignmentDelegate(restClient, taskAssignmentRuleRepository, processInstanceRepository);
+    delegate = new IgrpExternalUserAssignmentDelegate(restClient, taskAssignmentRuleRepository, processInstanceRepository,
+        new OutboundRequestGuard(new OutboundGuardProperties(false, java.util.List.of("api.example.com"), java.util.List.of(), 1048576)));
   }
 
   @Test
