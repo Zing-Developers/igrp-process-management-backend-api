@@ -33,12 +33,12 @@ public class TaskAssignmentRuleService {
       Set<String> candidateUsers,
       Set<String> candidateGroups
   ) {
-    LOGGER.info(
-        "Updating task assignment rule [{}] with assignee [{}], candidateUsers [{}] and candidateGroups [{}]",
+    LOGGER.debug(
+        "Updating task assignment rule [{}] (hasAssignee [{}], candidateUsers [{}], candidateGroups [{}])",
         id,
-        assignee != null ? assignee.getValue() : null,
-        candidateUsers,
-        candidateGroups
+        assignee != null,
+        candidateUsers != null ? candidateUsers.size() : 0,
+        candidateGroups != null ? candidateGroups.size() : 0
     );
     // Priority is left untouched (null) on manual rule updates; it is only set by automated
     // assignment delegates that resolve it from an external source.
@@ -53,7 +53,7 @@ public class TaskAssignmentRuleService {
   }
 
   public void deactivate(String id) {
-    LOGGER.info("Deactivating task assignment rule [{}]", id);
+    LOGGER.debug("Deactivating task assignment rule [{}]", id);
     repository.deactivate(Identifier.create(id));
     LOGGER.info("Deactivated task assignment rule [{}]", id);
   }

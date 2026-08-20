@@ -30,7 +30,7 @@ public class MessageBrokerSenderDelegate implements JavaDelegate {
 
   @Override
   public void execute(DelegateExecution execution) {
-    LOGGER.info("Entered MessageSenderDelegate");
+    LOGGER.debug("Entered MessageSenderDelegate");
 
     if (topic == null) {
       throw new IllegalArgumentException("'topic' which represent topic or queue is required.");
@@ -41,7 +41,7 @@ public class MessageBrokerSenderDelegate implements JavaDelegate {
 
     var message = messageUtil.createMessage(execution);
 
-    LOGGER.info("Sending message...: \n{}\n", message);
+    LOGGER.debug("Sending message to broker ({} chars)", message != null ? message.length() : 0);
 
     messageSender.send(topicValue, message);
 

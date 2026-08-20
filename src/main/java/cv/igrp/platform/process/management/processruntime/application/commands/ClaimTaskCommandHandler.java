@@ -29,7 +29,7 @@ public class ClaimTaskCommandHandler implements CommandHandler<ClaimTaskCommand,
   @Transactional
   public ResponseEntity<String> handle(ClaimTaskCommand command) {
     final var currentUser = userContext.getCurrentUser();
-    LOGGER.info("User [{}] started claiming task [{}]", currentUser.getValue(), command.getId());
+    LOGGER.debug("User [{}] started claiming task [{}]", currentUser.getValue(), command.getId());
     taskInstanceService.claimTask(
         TaskOperationData.builder()
             .currentUser(currentUser)

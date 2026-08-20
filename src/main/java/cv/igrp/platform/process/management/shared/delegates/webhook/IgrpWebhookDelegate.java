@@ -47,7 +47,7 @@ public class IgrpWebhookDelegate implements JavaDelegate {
 
     String taskId = execution.getCurrentActivityId();
     String processInstanceId = execution.getProcessInstanceId();
-    log.info("[IgrpWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
+    log.debug("[IgrpWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
     String baseUrlVariable = (String) execution.getVariable("webhookUrl");
     String baseUrl = Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution).toString() : null;
     baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
@@ -96,7 +96,7 @@ public class IgrpWebhookDelegate implements JavaDelegate {
         }
       }
 
-      log.info("[IgrpWebhookDelegate] Sending {} request to {}", method, url);
+      log.debug("[IgrpWebhookDelegate] Sending {} request to {}", method, url);
       log.debug("[IgrpWebhookDelegate] Payload: {}", payload);
 
       switch (method.toUpperCase()) {
@@ -141,12 +141,12 @@ public class IgrpWebhookDelegate implements JavaDelegate {
         default -> throw new IllegalArgumentException("Unsupported webhookMethod: " + method);
       }
 
-      log.info("[IgrpWebhookDelegate] Response {}: {}", statusCode, responseBody);
+      log.info("[IgrpWebhookDelegate] Webhook responded {} for task {}", statusCode, taskId);
 
     } catch (RestClientResponseException e) {
       statusCode = e.getStatusCode().value();
       responseBody = e.getResponseBodyAs(String.class);
-      log.warn("[IgrpWebhookDelegate] Webhook returned error {}: {}", statusCode, responseBody);
+      log.warn("[IgrpWebhookDelegate] Webhook returned error {} for task {}", statusCode, taskId);
     } catch (Exception e) {
       log.error("[IgrpWebhookDelegate] Error calling webhook {}", url, e);
       execution.setTransientVariable(taskId + "Error", e.getMessage());

@@ -30,7 +30,7 @@ public class UnClaimTaskCommandHandler implements CommandHandler<UnClaimTaskComm
   @Transactional
   public ResponseEntity<String> handle(UnClaimTaskCommand command) {
     final var currentUser = userContext.getCurrentUser();
-    LOGGER.info("User [{}] started unclaiming task [{}]", currentUser.getValue(), command.getId());
+    LOGGER.debug("User [{}] started unclaiming task [{}]", currentUser.getValue(), command.getId());
     taskInstanceService.unClaimTask(
         TaskOperationData.builder()
             .currentUser(currentUser)

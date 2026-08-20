@@ -10,6 +10,7 @@ import cv.igrp.platform.process.management.shared.application.constants.ProcessI
 import cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus;
 import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
 import cv.igrp.platform.process.management.shared.domain.models.*;
+import cv.igrp.platform.process.management.shared.security.util.IgrpAuthorizationConstants;
 import cv.igrp.platform.process.management.shared.security.util.UserContext;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -614,6 +615,9 @@ class TaskInstanceServiceTest {
 
   @Test
   void getAllTaskInstances_shouldUseBatchMethodsForVariablesAndProfiles() {
+
+    // Caller allowed to search all tasks, so the filter reaches the repository untouched
+    when(userContext.hasPermission(IgrpAuthorizationConstants.TASK_INSTANCES_SEARCH_ALL)).thenReturn(true);
 
     // Setup filter (no current-user filtering, no variable filtering)
     TaskInstanceFilter filter = mock(TaskInstanceFilter.class);

@@ -1,0 +1,8 @@
+{
+  "request": { "method": "GET", "urlPath": "/realms/e2e/protocol/openid-connect/certs" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "jwks.json"
+  }
+}
