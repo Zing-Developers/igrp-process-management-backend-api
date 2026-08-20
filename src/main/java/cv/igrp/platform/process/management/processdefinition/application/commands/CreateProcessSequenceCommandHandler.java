@@ -33,7 +33,7 @@ public class CreateProcessSequenceCommandHandler implements CommandHandler<Creat
   public ResponseEntity<ProcessSequenceDTO> handle(CreateProcessSequenceCommand command) {
     final var currentUser = userContext.getCurrentUser();
 
-    LOGGER.info("User [{}] started creating sequence for processDefinitionKey [{}]", currentUser.getValue(), command.getProcessDefinitionKey());
+    LOGGER.debug("User [{}] started creating sequence for processDefinitionKey [{}]", currentUser.getValue(), command.getProcessDefinitionKey());
 
     var sequenceResp = processSequenceService.save(processSequenceMapper.toModel(command));
 

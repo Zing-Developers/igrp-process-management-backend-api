@@ -25,7 +25,7 @@ public class IgrpJsonParseDelegate implements JavaDelegate {
 
     String taskId = execution.getCurrentActivityId();
     String processInstanceId = execution.getProcessInstanceId();
-    log.info("[igrpJsonParseDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
+    log.debug("[IgrpJsonParseDelegate] Executing parse task: {} from process instance: {}", taskId, processInstanceId);
     String jsonVariable = (String) execution.getVariable("json");
     String payload = Objects.nonNull(jsonVariable)? jsonVariable: Objects.nonNull(json)? json.getValue(execution).toString() : null;
     payload = EnvVarUtil.resolveEnvVars(payload, "json");
@@ -46,7 +46,7 @@ public class IgrpJsonParseDelegate implements JavaDelegate {
       execution.getEngineServices().getRuntimeService().setVariable(
           processInstanceId,taskId + "Data", payloadParsed);
 
-      log.info("[IgrpJsonParseDelegate] Data parsed successfully");
+      log.debug("[IgrpJsonParseDelegate] Data parsed successfully");
 
     } catch (Exception e) {
       log.error("[IgrpJsonParseDelegate] Error parsing JSON: ", e);

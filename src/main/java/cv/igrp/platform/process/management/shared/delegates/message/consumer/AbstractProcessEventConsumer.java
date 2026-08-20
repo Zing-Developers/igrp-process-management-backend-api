@@ -43,11 +43,11 @@ public abstract class AbstractProcessEventConsumer {
 
     var message = record.value();
 
-    LOGGER.info("Received process event: {}", message);
+    LOGGER.debug("Received process event message ({} chars)", message != null ? message.length() : 0);
 
     ProcessEventDTO event = parseMessage(message);
     if (event == null || event.getBusinessKey() == null || event.getBusinessKey().isBlank()) {
-      LOGGER.warn("Invalid or incomplete event message: {}", message);
+      LOGGER.warn("Invalid or incomplete event message ({} chars)", message != null ? message.length() : 0);
       return;
     }
 
@@ -77,10 +77,10 @@ public abstract class AbstractProcessEventConsumer {
       SecurityContextHolder.getContext().setAuthentication(auth);
 
       if (event.getMessageName() != null && !event.getMessageName().isBlank()) {
-        LOGGER.info("Correlating message '{}' for businessKey '{}'", event.getMessageName(), event.getBusinessKey());
+        LOGGER.debug("Correlating message '{}' for businessKey '{}'", event.getMessageName(), event.getBusinessKey());
         processInstanceService.correlateMessage(event.getBusinessKey(), event.getMessageName(), vars, assignmentRules);
       } else {
-        LOGGER.info("Signaling process instance for businessKey '{}'", event.getBusinessKey());
+        LOGGER.debug("Signaling process instance for businessKey '{}'", event.getBusinessKey());
         processInstanceService.signal(event.getBusinessKey(), event.getTaskId(), vars, assignmentRules);
       }
 

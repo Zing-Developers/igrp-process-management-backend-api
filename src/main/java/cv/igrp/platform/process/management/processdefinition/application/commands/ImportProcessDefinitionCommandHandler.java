@@ -28,13 +28,13 @@ public class ImportProcessDefinitionCommandHandler implements CommandHandler<Imp
   @Transactional
   @IgrpCommandHandler
   public ResponseEntity<String> handle(ImportProcessDefinitionCommand command) {
-    LOGGER.info("Importing process definition");
+    LOGGER.debug("Importing process definition");
     processDeploymentService.importProcessDefinition(
         mapper.toModel(
             command.getProcesspackagedto()
         )
     );
-    LOGGER.info("Process definition imported successfully");
+    LOGGER.debug("Import command finished");
     return ResponseEntity.noContent().build();
   }
 
