@@ -1,5 +1,71 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-08 (b) · Endurecimento de segurança (pós-24.4)
+
+Segunda vaga sobre a release 24.4, a fechar itens abertos do `docs/SECURITY_RECOMMENDATIONS.md`.
+Só configuração e código de app — **framework 24.4 mantém-se** (exceto o item residual assinalado no
+fim). Ver o novo estado na tabela de prioridades do `SECURITY_RECOMMENDATIONS.md` (Feito 11 · Aberto 3).
+
+### ⚠️ Breaking / mudanças de comportamento
+
+1. **CORS deixa de ser wildcard.** Sem `IGRP_CORS_ALLOWED_ORIGINS` definido, **nenhuma** origem
+   cross-origin é aceite (antes: qualquer origem, com credenciais). Frontends noutro domínio param de
+   funcionar até a origem ser listada. Ver guia DevOps §3.
+2. **Profile default passa a `production`.** Sem `SPRING_ACTIVE_PROFILE`, a app arranca em `production`
+   (antes: `development`, com `ddl-auto=update` e `show-sql`). Ambientes que dependiam do default de
+   desenvolvimento têm de o definir explicitamente.
+3. **OIDC inacessível no arranque = arranque falha.** O JWT decoder deixou de devolver um decoder que
+   rejeita tudo silenciosamente; se o Keycloak estiver em baixo ao arrancar, a app **não sobe** (usar
+   readiness probes). Falha visível em vez de degradação silenciosa.
+4. **Webhooks: destinos internos bloqueados.** Chamadas de saída dos delegates (webhook + assignment)
+   para loopback/IPs privados/metadata deixam de passar. Um webhook legítimo para um serviço interno
+   exige agora o host em `IGRP_OUTBOUND_ALLOWED_HOSTS`. HTTPS obrigatório fora de `development`.
+5. **Imagens correm como não-root** (UID 1001) — volumes/paths montados têm de ser legíveis por esse UID.
+
+### Segurança — itens fechados
+
+- **SSRF nos webhooks (P0)** — `OutboundRequestGuard` em todos os delegates com URL vinda de variáveis
+  de processo: bloqueia loopback/RFC1918/link-local (incl. `169.254.169.254` metadata)/CGNAT/IPv6-ULA/
+  irresolúveis/`user:pass@`; allowlist opcional (`igrp.delegate.outbound.allowed-hosts`, exato ou
+  `*.sufixo`); HTTPS obrigatório fora de dev; headers de credenciais (`Authorization`/`Cookie`/`Proxy-*`/
+  `X-Forwarded-*`) filtrados das variáveis de processo; respostas limitadas a 1MB; **redirects
+  desativados** no client (o factory Apache seguia-os por default — um destino público podia 302 para o
+  espaço bloqueado). 8 testes unitários.
+- **JWT decoder fail-closed (P0)** — try/catch removido; arranque falha se o OIDC estiver inacessível.
+- **CORS restrito (P0)** — origens por `IGRP_CORS_ALLOWED_ORIGINS`; vazio = sem cross-origin; wildcard
+  eliminado nas duas apps.
+- **Erros saneados (P1)** — `GlobalExceptionHandler`: NPE/IllegalState/PSQL/Jackson só no log do
+  servidor; `IllegalArgument` e exceções de engine mantêm as mensagens de negócio (o frontend depende).
+- **Segredos (P1)** — default público `delegate-secret-token` removido; password de exemplo → placeholder.
+- **Fuga do OpenAPI (P2)** — `springdoc.api-docs.enabled` amarrado ao `ENABLE_SWAGGER`: o `/v3/api-docs`
+  deixou de servir o contrato completo anonimamente em staging (e em production no Studio). O toggle de UI
+  sozinho não o cobria — **achado do deep test**.
+- **Defaults seguros (P2)** — profile `production`, swagger staging `false`, `USER 1001` non-root nos 2
+  Dockerfiles.
+
+### Validação
+
+- Testes: management **300/300** (8 novos do `OutboundRequestGuard`).
+- Deep test (Docker, 35 verificações, 5 perfis): fail-closed provado com container de issuer inválido
+  (morre em ~4s), CORS nos dois sentidos, imagem non-root com build **real contra o Nexus** (`id -un` →
+  `appuser`), erros saneados com corpos como evidência, matriz de autorização intacta.
+
+### Residual (framework, tarefa separada)
+
+Com `igrp.restclient.provider=irn`, os delegates usam o RestClient **assinado**, cujo interceptor anexa o
+token RS256 da plataforma a **todos** os pedidos — incluindo webhooks para terceiros. A validação de URL
+aplica-se na mesma (o guard vive nos delegates), mas a separação do cliente assinado é uma correção do
+monorepo (prevista para 24.5).
+
+### Ficheiros
+
+**Management** (`features/security-harding`): `7e1906e` (quick-wins), `439f9ef` (fuga api-docs),
+`70fa329` (SSRF). Novos: `shared/delegates/outbound/{OutboundRequestGuard,OutboundGuardProperties}.java`
++ teste; `e2e/docker-compose.deeptest.yml`.
+**Studio** (`feacture/security-harding`): `4bc8280` (quick-wins), `e1cb759` (fuga api-docs).
+
+---
+
 ## 2026-08 · Autorização IRN + Remediação CVE
 
 **Framework:** `cv.igrp.framework:*` **0.1.0-beta.24.4** (publicado no Nexus `igrp-framework-releases`)
