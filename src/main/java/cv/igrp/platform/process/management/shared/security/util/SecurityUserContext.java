@@ -47,7 +47,7 @@ public class SecurityUserContext implements UserContext {
 
       String preferredUsername = jwt.getClaimAsString("preferred_username");
       if (preferredUsername != null && !preferredUsername.isBlank()) {
-        LOGGER.warn("JWT missing 'email' claim, falling back to 'preferred_username' [{}]", preferredUsername);
+        LOGGER.warn("JWT missing 'email' claim, falling back to 'preferred_username'");
         return preferredUsername;
       }
 
@@ -89,6 +89,20 @@ public class SecurityUserContext implements UserContext {
         .filter(role -> role.startsWith(IgrpAuthorizationConstants.ROLE_PREFIX))
         .map(role -> role.substring(IgrpAuthorizationConstants.ROLE_PREFIX.length()))
         .toList();
+  }
+
+  @Override
+  public boolean hasPermission(String permission) {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+    if (authentication == null || !authentication.isAuthenticated() || permission == null) {
+      return false;
+    }
+
+    return authentication.getAuthorities()
+        .stream()
+        .map(GrantedAuthority::getAuthority)
+        .anyMatch(permission::equals);
   }
 
   @Override

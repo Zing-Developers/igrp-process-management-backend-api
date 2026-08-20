@@ -12,6 +12,7 @@ import cv.igrp.platform.process.management.shared.domain.models.ArtifactContext;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
 import cv.igrp.platform.process.management.shared.domain.models.Identifier;
 import cv.igrp.platform.process.management.shared.domain.models.PageableLista;
+import cv.igrp.platform.process.management.shared.security.util.IgrpAuthorizationConstants;
 import cv.igrp.platform.process.management.shared.security.util.UserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -142,13 +143,13 @@ public class TaskInstanceService {
     );
     assignmentRules
         .forEach(rule -> {
-          LOGGER.info(
-              "Registering task assignment rule for processInstance [{}], task [{}], assignee [{}], candidateUsers [{}], candidateGroups [{}], mode [{}], priority [{}]",
+          LOGGER.debug(
+              "Registering task assignment rule for processInstance [{}], task [{}], hasAssignee [{}], candidateUsers [{}], candidateGroups [{}], mode [{}], priority [{}]",
               processInstanceIdValue(processInstance),
               rule.getTaskKey().getValue(),
-              rule.getAssignee() != null ? rule.getAssignee().getValue() : null,
-              rule.getCandidateUsers(),
-              rule.getCandidateGroups(),
+              rule.getAssignee() != null,
+              rule.getCandidateUsers() != null ? rule.getCandidateUsers().size() : 0,
+              rule.getCandidateGroups() != null ? rule.getCandidateGroups().size() : 0,
               rule.getAssignmentMode(),
               rule.getPriority()
           );
@@ -240,9 +241,22 @@ public class TaskInstanceService {
     return taskInstance;
   }
 
+  /**
+   * Searches task instances, scoped to what the caller is allowed to see.
+   *
+   * <p>Callers without {@link IgrpAuthorizationConstants#TASK_INSTANCES_SEARCH_ALL} only ever see their
+   * own tasks and their groups', regardless of the {@code filterByCurrentUser}, {@code user},
+   * {@code candidateUsers} and {@code candidateGroups} values sent in the request. This is the single
+   * choke point both the general search and the "my tasks" search go through.
+   */
   public PageableLista<TaskInstance> getAllTaskInstances(TaskInstanceFilter filter) {
 
-    if (filter.isFilterByCurrentUser()) {
+    final var canSearchAll = userContext.isSuperAdmin()
+        || userContext.hasPermission(IgrpAuthorizationConstants.TASK_INSTANCES_SEARCH_ALL);
+
+    if (!canSearchAll) {
+      filter.restrictToCurrentUser(userContext.getCurrentUser(), userContext.getCurrentGroups());
+    } else if (filter.isFilterByCurrentUser()) {
       final var currentUser = userContext.getCurrentUser();
       final var isSuperAdmin = userContext.isSuperAdmin();
       filter.bindCurrentUser(currentUser, isSuperAdmin);
@@ -365,14 +379,14 @@ public class TaskInstanceService {
 
     var activeTasks = getActiveRuntimeTasks(processInstance);
     if (activeTasks.isEmpty()) {
-      LOGGER.info(
+      LOGGER.debug(
           "No active runtime tasks found for processInstance [{}] while checking task assignment rules",
           processInstanceIdValue(processInstance)
       );
       return;
     }
 
-    LOGGER.info(
+    LOGGER.debug(
         "Found [{}] active runtime task(s) for processInstance [{}]; loading task assignment rules for each task",
         activeTasks.size(),
         processInstanceIdValue(processInstance)
@@ -423,7 +437,7 @@ public class TaskInstanceService {
         taskInstance.getProcessInstanceId(),
         taskInstance.getTaskKey()
     );
-    LOGGER.info(
+    LOGGER.debug(
         "Loaded [{}] active and non-consumed task assignment rule(s) from database for processInstance [{}], task [{}]",
         persistedRules.size(),
         taskProcessInstanceIdValue(taskInstance),
@@ -449,7 +463,7 @@ public class TaskInstanceService {
             .active(true)
             .build())
         .toList();
-    LOGGER.info(
+    LOGGER.debug(
         "Using [{}] in-memory task assignment rule(s) for processInstance [{}], task [{}]",
         inMemoryRules.size(),
         processInstanceIdValue(processInstance),
@@ -489,11 +503,10 @@ public class TaskInstanceService {
 
   private void applyAssigneeRule(TaskInstance taskInstance, TaskAssignmentRule rule, Code user) {
     LOGGER.info(
-        "Applying assignee task assignment rule [{}] to taskInstance [{}], task [{}], assignee [{}], mode [{}], persisted [{}]",
+        "Applying assignee task assignment rule [{}] to taskInstance [{}], task [{}], mode [{}], persisted [{}]",
         rule.getId().getValue(),
         taskInstance.getId().getValue(),
         taskInstance.getTaskKey().getValue(),
-        rule.getAssignee().getValue(),
         rule.getAssignmentMode(),
         rule.isPersisted()
     );
@@ -535,8 +548,8 @@ public class TaskInstanceService {
         rule.getId().getValue(),
         taskInstance.getId().getValue(),
         taskInstance.getTaskKey().getValue(),
-        rule.getCandidateUsers(),
-        rule.getCandidateGroups(),
+        rule.getCandidateUsers() != null ? rule.getCandidateUsers().size() : 0,
+        rule.getCandidateGroups() != null ? rule.getCandidateGroups().size() : 0,
         rule.getAssignmentMode(),
         rule.isPersisted()
     );
@@ -589,7 +602,7 @@ public class TaskInstanceService {
   }
 
   private void configureDueDate(TaskInstance runtimeTask, TaskInstance task, ProcessArtifact artifact) {
-    LOGGER.info("DueDate: {} from ProcessArtifact: {}", artifact.getDueDate(), artifact.getKey());
+    LOGGER.debug("DueDate: {} from ProcessArtifact: {}", artifact.getDueDate(), artifact.getKey());
     if (artifact.getDueDate() == null || artifact.getDueDate().isBlank()) {
       return;
     }
