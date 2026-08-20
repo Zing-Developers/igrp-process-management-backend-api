@@ -14,7 +14,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class OutboundRequestGuardTest {
 
   private static OutboundRequestGuard guard(boolean https, List<String> hosts, List<String> extra) {
-    return new OutboundRequestGuard(new OutboundGuardProperties(https, hosts, extra, 1024));
+    return guard(https, hosts, extra, List.of("IGRP_WEBHOOK_*"));
+  }
+
+  private static OutboundRequestGuard guard(boolean https, List<String> hosts, List<String> extra,
+                                            List<String> envVars) {
+    cv.igrp.platform.process.management.shared.util.EnvVarUtil.configureAllowlist(
+        cv.igrp.platform.process.management.shared.delegates.outbound.EnvVarAllowlistConfigurer.toPredicate(envVars));
+    return new OutboundRequestGuard(new OutboundGuardProperties(https, hosts, extra, envVars, 1024));
   }
 
   /** No allowlist: public hosts pass, every internal range is blocked. */
@@ -106,6 +113,35 @@ class OutboundRequestGuardTest {
     var g = guard(false, List.of(), List.of());
     assertThat(g.buildHeaders(Map.of(), "tok").getFirst("Authorization")).isEqualTo("Bearer tok");
     assertThat(g.buildHeaders(Map.of(), "").containsKey("Authorization")).isFalse();
+  }
+
+
+  @Test
+  @DisplayName("a credential header sourced from an allowlisted $[VAR] is allowed and resolved")
+  void envSourcedCredentialHeaderPasses() {
+    var g = guard(false, List.of(), List.of(), List.of("IGRP_WEBHOOK_*"));
+    // resolveEnvVars reads System.getenv; use a var the CI env is unlikely to set -> expect the
+    // "not set" error, proving the header was ALLOWED through to resolution (provenance accepted)
+    assertThatThrownBy(() -> g.buildHeaders(Map.of("Authorization", "Bearer $[IGRP_WEBHOOK_RH_TOKEN]"), "glob"))
+        .isInstanceOf(RuntimeException.class)
+        .hasMessageContaining("IGRP_WEBHOOK_RH_TOKEN");
+  }
+
+  @Test
+  @DisplayName("a credential header referencing a NON-allowlisted var is dropped, not resolved")
+  void nonAllowlistedEnvCredentialHeaderDropped() {
+    var g = guard(false, List.of(), List.of(), List.of("IGRP_WEBHOOK_*"));
+    // POSTGRES_PASSWORD is not allowlisted -> header blocked -> never resolved -> no exception, dropped
+    HttpHeaders h = g.buildHeaders(Map.of("Authorization", "Bearer $[POSTGRES_PASSWORD]"), "");
+    assertThat(h.containsKey("Authorization")).isFalse();
+  }
+
+  @Test
+  @DisplayName("a literal credential header is always dropped (only $[VAR] provenance passes)")
+  void literalCredentialHeaderDropped() {
+    var g = guard(false, List.of(), List.of(), List.of("IGRP_WEBHOOK_*"));
+    HttpHeaders h = g.buildHeaders(Map.of("Authorization", "Bearer literal-stolen"), "");
+    assertThat(h.containsKey("Authorization")).isFalse();
   }
 
 }

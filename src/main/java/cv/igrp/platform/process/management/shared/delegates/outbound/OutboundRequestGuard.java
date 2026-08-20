@@ -1,5 +1,6 @@
 package cv.igrp.platform.process.management.shared.delegates.outbound;
 
+import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * SSRF guard for delegate outbound calls: URL destinations built from process variables must not be
@@ -106,20 +108,30 @@ public class OutboundRequestGuard {
   }
 
   /**
-   * Builds the outbound headers: JSON content type plus either the filtered custom headers from the
-   * process variable, or the platform token when no custom headers were supplied (the pre-existing
-   * fallback contract of the webhook delegates).
+   * A credential-style header (e.g. {@code Authorization}) is only allowed from a process variable
+   * when its value is sourced entirely from an allowlisted server environment variable — an optional
+   * auth scheme word followed by a single {@code $[VAR]} reference. A literal credential is never
+   * accepted; the secret must live in the server environment, not in the BPMN.
    */
-  public HttpHeaders buildHeaders(Map<String, String> customHeaders, String globalAuthToken) {
+  private static final Pattern ENV_SOURCED_CREDENTIAL =
+      Pattern.compile("^(?:[A-Za-z]+\\s+)?\\$\\[([A-Za-z_][A-Za-z0-9_]*)]$");
+
+  /**
+   * Builds the outbound headers from the RAW (unresolved) header map: content type, plus either the
+   * filtered custom headers, or the platform token when no custom headers were supplied (the
+   * pre-existing fallback). Allowed header values have their {@code $[VAR]} references resolved here,
+   * after the allow/block decision so provenance can be judged on the raw value.
+   */
+  public HttpHeaders buildHeaders(Map<String, String> rawHeaders, String globalAuthToken) {
 
     var headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
 
-    if (customHeaders != null && !customHeaders.isEmpty()) {
+    if (rawHeaders != null && !rawHeaders.isEmpty()) {
       List<String> dropped = new ArrayList<>();
-      customHeaders.forEach((name, value) -> {
-        if (isHeaderAllowed(name)) {
-          headers.set(name, value);
+      rawHeaders.forEach((name, rawValue) -> {
+        if (isHeaderAllowed(name, rawValue)) {
+          headers.set(name, EnvVarUtil.resolveEnvVars(rawValue, "webhookPayloadHeader"));
         } else {
           dropped.add(name);
         }
@@ -182,18 +194,26 @@ public class OutboundRequestGuard {
     return false;
   }
 
-  private boolean isHeaderAllowed(String name) {
+  private boolean isHeaderAllowed(String name, String rawValue) {
     if (name == null || name.isBlank()) {
       return false;
     }
     final var lower = name.toLowerCase(Locale.ROOT);
-    if (lower.startsWith("x-forwarded-")) {
-      return isExtraAllowed(lower);
+    final boolean blockedByName = lower.startsWith("x-forwarded-") || BLOCKED_HEADERS.contains(lower);
+    if (!blockedByName) {
+      return true;
     }
-    if (BLOCKED_HEADERS.contains(lower)) {
-      return isExtraAllowed(lower);
+    // A blocked-by-name header passes only when explicitly configured, or when its value is a
+    // server-sourced credential (an allowlisted $[VAR]) rather than a process literal.
+    return isExtraAllowed(lower) || isEnvSourcedCredential(rawValue);
+  }
+
+  private boolean isEnvSourcedCredential(String rawValue) {
+    if (rawValue == null) {
+      return false;
     }
-    return true;
+    var matcher = ENV_SOURCED_CREDENTIAL.matcher(rawValue.trim());
+    return matcher.matches() && EnvVarUtil.isAllowed(matcher.group(1));
   }
 
   private boolean isExtraAllowed(String lowerName) {

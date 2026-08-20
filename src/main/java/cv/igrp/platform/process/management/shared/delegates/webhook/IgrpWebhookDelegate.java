@@ -83,7 +83,8 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     Object payloadHeader = execution.getVariable("webhookPayloadHeader");
     String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
         .orElse("").toString();
-    payloadHeaderStr = EnvVarUtil.resolveEnvVars(payloadHeaderStr, "webhookPayloadHeader");
+    // Parse RAW (unresolved): the guard resolves $[VAR] per header value after deciding allow/block,
+    // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
     Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
     Object responseBody;

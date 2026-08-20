@@ -73,7 +73,7 @@ class IgrpExternalUserAssignmentDelegateTest {
   @BeforeEach
   void setUp() {
     delegate = new IgrpExternalUserAssignmentDelegate(restClient, taskAssignmentRuleRepository, processInstanceRepository,
-        new OutboundRequestGuard(new OutboundGuardProperties(false, java.util.List.of("api.example.com"), java.util.List.of(), 1048576)));
+        new OutboundRequestGuard(new OutboundGuardProperties(false, java.util.List.of("api.example.com"), java.util.List.of(), java.util.List.of("IGRP_WEBHOOK_*"), 1048576)));
   }
 
   @Test
