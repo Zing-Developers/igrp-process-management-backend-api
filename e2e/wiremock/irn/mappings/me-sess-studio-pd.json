@@ -1,0 +1,37 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/v1/Auth/me",
+    "cookies": {
+      "session_id": {
+        "equalTo": "sess-studio-pd"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "user-sess-studio-pd",
+      "email": "studio-pd@test.local",
+      "fullName": "Studio Pd",
+      "isAuthenticated": true,
+      "permissions": [
+        "STUDIO_PROCESS_DEFINITIONS:visualizar",
+        "STUDIO_PROCESS_DEFINITIONS:criar"
+      ],
+      "userSpaces": [],
+      "selectedSpaceId": "space-e2e",
+      "selectedProfileId": "profile-e2e",
+      "selectedSpace": null,
+      "selectedProfile": {
+        "profileId": "profile-e2e",
+        "profileCode": "E2E",
+        "profileName": "E2E Profile"
+      }
+    }
+  }
+}

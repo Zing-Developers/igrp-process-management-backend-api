@@ -37,19 +37,19 @@ public class SaveTaskCommandHandler implements CommandHandler<SaveTaskCommand, R
    @Transactional
    public ResponseEntity<TaskInstanceDTO> handle(SaveTaskCommand command) {
      final var currentUser = userContext.getCurrentUser();
-     LOGGER.info("User [{}] started completing task [{}]", currentUser.getValue(), command.getId());
+     LOGGER.debug("User [{}] started saving task [{}]", currentUser.getValue(), command.getId());
 
      final var forms = new HashMap<String,Object>();
      command.getTaskdatadto()
          .getForms()
          .forEach(v -> forms.put(v.getName(), v.getValue()));
-     LOGGER.info("[Save Task] Forms: {}", forms);
+     LOGGER.debug("[Save Task] {} form entries", forms != null ? forms.size() : 0);
 
      final var variables = new HashMap<String,Object>();
      if(command.getTaskdatadto().getVariables()!=null)
        command.getTaskdatadto().getVariables().forEach( v -> variables.put(v.getName(), v.getValue()));
 
-     LOGGER.info("[Save Task] Variables: {}", variables);
+     LOGGER.debug("[Save Task] {} variable entries", variables != null ? variables.size() : 0);
 
      final var taskInstanceResp =  taskInstanceService.saveTask(
          TaskOperationData.builder()

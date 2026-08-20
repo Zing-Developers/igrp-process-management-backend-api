@@ -47,7 +47,7 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
 
     String taskId = execution.getCurrentActivityId();
     String processInstanceId = execution.getProcessInstanceId();
-    log.info("[IgrpProcessWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
+    log.debug("[IgrpProcessWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
     String baseUrlVariable = (String) execution.getVariable("webhookUrl");
     String baseUrl = Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution).toString() : null;
     baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
@@ -79,7 +79,7 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
         }
       }
 
-      log.info("[IgrpProcessWebhookDelegate] Sending request to {}", url);
+      log.debug("[IgrpProcessWebhookDelegate] Sending request to {}", url);
       log.debug("[IgrpProcessWebhookDelegate] Payload: {}", payload);
 
       restClient.post()
@@ -92,7 +92,7 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
       log.info("[IgrpProcessWebhookDelegate] Process Data successfully sent to webhook");
 
     } catch (RestClientResponseException e) {
-      log.warn("[IgrpProcessWebhookDelegate] Webhook returned error {}: {}", e.getStatusCode(), e.getMessage());
+      log.warn("[IgrpProcessWebhookDelegate] Webhook returned error {}", e.getStatusCode());
     } catch (Exception e) {
       log.error("[IgrpProcessWebhookDelegate] Error calling webhook {}", url, e);
     }

@@ -34,7 +34,7 @@ public class SendEmailDelegate implements JavaDelegate {
 
   @Override
   public void execute(DelegateExecution execution) {
-    LOGGER.info("Entered SendEmailDelegate");
+    LOGGER.debug("Entered SendEmailDelegate");
 
     String toVariable = execution.getVariable("emailTo", String.class);
     String to = Objects.nonNull(toVariable) ? toVariable : Objects.nonNull(emailTo)? (String) emailTo.getValue(execution): null;
@@ -59,7 +59,7 @@ public class SendEmailDelegate implements JavaDelegate {
     message.setText(body);
 
     mailSender.send(message);
-    LOGGER.info("Email successfully sent to: {}", to);
+    LOGGER.info("Email sent [processInstanceId={}]", execution.getProcessInstanceId());
   }
 
   private void validate(String to, String subject, String body) {

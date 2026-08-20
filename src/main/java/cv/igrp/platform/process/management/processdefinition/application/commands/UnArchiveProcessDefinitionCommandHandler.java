@@ -24,7 +24,7 @@ public class UnArchiveProcessDefinitionCommandHandler implements CommandHandler<
   @Transactional
   @IgrpCommandHandler
   public ResponseEntity<String> handle(UnArchiveProcessDefinitionCommand command) {
-    LOGGER.info("Unarchiving process definition [{}]", command.getId());
+    LOGGER.debug("Unarchiving process definition [{}]", command.getId());
     processDeploymentService.unArchiveProcess(command.getId());
     LOGGER.info("Process definition [{}] unarchived", command.getId());
     return ResponseEntity.status(204).build();

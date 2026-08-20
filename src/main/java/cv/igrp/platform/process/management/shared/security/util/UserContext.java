@@ -16,4 +16,12 @@ public interface UserContext {
 
   boolean isSuperAdmin();
 
+  /**
+   * Whether the current user holds the given permission, in {@code MODULE:action} form.
+   *
+   * @param permission the permission to check, matched exactly against the granted authorities
+   * @return {@code true} when the authenticated user has that permission
+   */
+  boolean hasPermission(String permission);
+
 }
