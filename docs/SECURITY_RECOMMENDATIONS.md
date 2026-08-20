@@ -10,21 +10,21 @@ This is a static project review. Validate every recommendation against the targe
 
 | Priority | Area | Recommendation | Estado 2026-08 |
 | --- | --- | --- | --- |
-| P0 | JWT decoder | Fail startup when the OIDC provider is unreachable instead of silently disabling JWT validation. | **ABERTO** — try/catch ainda presente |
-| P0 | CORS | Restrict allowed origins and avoid credentials with wildcard origins. | **ABERTO** — wildcard + credentials nas duas apps |
+| P0 | JWT decoder | Fail startup when the OIDC provider is unreachable instead of silently disabling JWT validation. | **FEITO** — try/catch removido; arranque falha se o OIDC estiver inacessível |
+| P0 | CORS | Restrict allowed origins and avoid credentials with wildcard origins. | **FEITO** — origins por `IGRP_CORS_ALLOWED_ORIGINS` (vazio = sem cross-origin); wildcard eliminado nas duas apps |
 | P0 | Message consumers | Do not process unauthenticated broker messages as admin/system by default. | **ABERTO** — system-bot ainda ganha ROLE_ACTIVITI_ADMIN |
 | P0 | Task/process access | Enforce authorization on task search, claim, assign, complete, import, deploy, and admin-style operations. | **FEITO** — autorização por permissões IRN + guard de visibilidade (SPEC_ROUTE_AUTHORIZATION.md) |
 | P0 | Webhooks | Add SSRF protections, host allowlists, HTTPS enforcement, timeouts, and response-size limits. | **PARCIAL** — timeouts feitos (5s/10s); allowlist/CIDR/HTTPS/limites em falta |
-| P1 | Secrets | Remove default secrets and use Kubernetes/Docker secrets or a vault. | **ABERTO** — `delegate-secret-token` default mantém-se; password fraca no .env.example |
-| P1 | Logging/errors | Stop logging sensitive payloads and sanitize ProblemDetail responses. | **PARCIAL** — logs PII-estritos FEITOS; ProblemDetail por sanear |
-| P1 | Error responses | Do not return internal exception messages, PSQL details, or parser internals to API clients. | **ABERTO** — GlobalExceptionHandler devolve ex.getMessage() |
+| P1 | Secrets | Remove default secrets and use Kubernetes/Docker secrets or a vault. | **FEITO (código)** — default do token removido; placeholder forte no .env.example; vault/Secrets é prática de deployment |
+| P1 | Logging/errors | Stop logging sensitive payloads and sanitize ProblemDetail responses. | **FEITO** — logs PII-estritos + ProblemDetail saneado |
+| P1 | Error responses | Do not return internal exception messages, PSQL details, or parser internals to API clients. | **FEITO** — NPE/ISE/PSQL/parser genéricos (log servidor); IAE e exceções de engine mantêm mensagens de negócio deliberadamente |
 | P1 | Dependencies/images | Align security dependency versions with the Spring Boot BOM and scan dependencies/images. | **FEITO** — pin 6.3.7 removido, 51 CVEs Accenture, gate OWASP CVSS ≥ 7 |
 | P1 | Transport security | Require TLS for ingress, Kafka, webhooks, IAM calls, and mail where applicable. | **ABERTO** |
 | P1 | Kafka transport | Default Kafka security protocol to SASL_SSL instead of PLAINTEXT. | **ABERTO** — default continua PLAINTEXT |
-| P2 | Profile defaults | Default active profile to production instead of development to prevent accidental ddl-auto=update and show-sql in production. | **ABERTO** — default continua development |
-| P2 | Swagger/actuator | Keep docs and operational endpoints disabled or protected outside development. | **ABERTO** — staging default true; swagger permitAll |
+| P2 | Profile defaults | Default active profile to production instead of development to prevent accidental ddl-auto=update and show-sql in production. | **FEITO** — default production nas duas apps |
+| P2 | Swagger/actuator | Keep docs and operational endpoints disabled or protected outside development. | **FEITO** — staging default false; /actuator/prometheus coberto pelo denyAll do adapter IRN |
 | P2 | Input limits | Add strict validation for variable filters, JSON payload size, dates, enum values, and webhook headers. | **ABERTO** |
-| P2 | Dockerfile | Pin container image tags, review keystore password usage, and run as non-root. | **PARCIAL** — tags pinadas (studio incluído); USER non-root em falta nas duas |
+| P2 | Dockerfile | Pin container image tags, review keystore password usage, and run as non-root. | **FEITO** — tags pinadas + USER 1001 non-root nas duas |
 
 ## Authentication And Authorization
 

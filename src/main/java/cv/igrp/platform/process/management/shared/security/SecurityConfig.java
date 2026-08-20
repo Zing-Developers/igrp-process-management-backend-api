@@ -35,6 +35,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.cors.CorsConfiguration;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -54,20 +55,31 @@ public class SecurityConfig {
 
   private final String principalClaimName;
 
+  private final String corsAllowedOrigins;
+
   public SecurityConfig(IAuthorizationServiceAdapter authorizationService,
                         IRouteAuthorizationAdapter routeAuthorization,
-                        @Value("${igrp.security.principal-claim-name}") String principalClaimName) {
+                        @Value("${igrp.security.principal-claim-name}") String principalClaimName,
+                        @Value("${igrp.cors.allowed-origins:}") String corsAllowedOrigins) {
     this.authorizationService = authorizationService;
     this.routeAuthorization = routeAuthorization;
     this.principalClaimName = principalClaimName;
+    this.corsAllowedOrigins = corsAllowedOrigins;
   }
 
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http, IAMUserProfileSyncFilter iamUserProfileSyncFilter) throws Exception {
 
-    http.cors(cors -> cors.configurationSource(_ -> {
+    http.cors(cors -> cors.configurationSource(request -> {
+      // No configured origins = no CORS headers at all: cross-origin browser calls are refused.
+      // Wildcard origins with credentials (the previous setup) let any site ride the user's
+      // auth context (SECURITY_RECOMMENDATIONS P0).
+      if (corsAllowedOrigins == null || corsAllowedOrigins.isBlank()) {
+        return null;
+      }
       var configuration = new CorsConfiguration();
-      configuration.addAllowedOriginPattern(CorsConfiguration.ALL);
+      configuration.setAllowedOrigins(Arrays.stream(corsAllowedOrigins.split(","))
+          .map(String::trim).filter(o -> !o.isEmpty()).toList());
       configuration.addAllowedMethod(HttpMethod.GET);
       configuration.addAllowedMethod(HttpMethod.POST);
       configuration.addAllowedMethod(HttpMethod.PUT);
