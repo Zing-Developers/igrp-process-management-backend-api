@@ -20,17 +20,29 @@ fim). Ver o novo estado na tabela de prioridades do `SECURITY_RECOMMENDATIONS.md
 4. **Webhooks: destinos internos bloqueados.** Chamadas de saída dos delegates (webhook + assignment)
    para loopback/IPs privados/metadata deixam de passar. Um webhook legítimo para um serviço interno
    exige agora o host em `IGRP_OUTBOUND_ALLOWED_HOSTS`. HTTPS obrigatório fora de `development`.
+4b. **Referências `$[VAR]` restritas.** Um process definition só pode referenciar env vars da allowlist
+   (`IGRP_OUTBOUND_ALLOWED_ENV_VARS`, default `IGRP_WEBHOOK_*`). Processos que referenciam outras vars
+   (email, tópico, payload…) param com erro até a var ser adicionada à lista.
 5. **Imagens correm como não-root** (UID 1001) — volumes/paths montados têm de ser legíveis por esse UID.
 
 ### Segurança — itens fechados
 
 - **SSRF nos webhooks (P0)** — `OutboundRequestGuard` em todos os delegates com URL vinda de variáveis
   de processo: bloqueia loopback/RFC1918/link-local (incl. `169.254.169.254` metadata)/CGNAT/IPv6-ULA/
-  irresolúveis/`user:pass@`; allowlist opcional (`igrp.delegate.outbound.allowed-hosts`, exato ou
-  `*.sufixo`); HTTPS obrigatório fora de dev; headers de credenciais (`Authorization`/`Cookie`/`Proxy-*`/
-  `X-Forwarded-*`) filtrados das variáveis de processo; respostas limitadas a 1MB; **redirects
-  desativados** no client (o factory Apache seguia-os por default — um destino público podia 302 para o
-  espaço bloqueado). 8 testes unitários.
+  irresolúveis/`user:pass@`; allowlist opcional de hosts (`igrp.delegate.outbound.allowed-hosts`, exato
+  ou `*.sufixo`); HTTPS obrigatório fora de dev; respostas limitadas a 1MB; **redirects desativados** no
+  client (o factory Apache seguia-os por default — um destino público podia 302 para o espaço bloqueado).
+- **Exfiltração de segredos via `$[VAR]` (P0, mesmo bloco)** — a resolução de `$[VAR]` do `EnvVarUtil`
+  referenciava **qualquer** env var; um autor de processo com deploy podia mandar `$[POSTGRES_PASSWORD]`
+  ou `$[KEYCLOAK_CLIENT_SECRET]` para um host público (o guard de SSRF só bloqueia destinos internos).
+  Agora restrita a uma allowlist (`igrp.delegate.outbound.allowed-env-vars`, exato ou `PREFIX*`, default
+  `IGRP_WEBHOOK_*`), imposta no `EnvVarUtil` — cobre **todos** os delegates (webhook, mail, parse,
+  message). Referenciar var fora da lista falha com erro claro.
+- **Headers de credencial por proveniência** — em vez de bloquear `Authorization`/`Cookie`/`Proxy-*`/
+  `X-Forwarded-*` pelo nome (o que também partia o padrão legítimo `Authorization: Bearer $[IGRP_WEBHOOK_…]`),
+  o filtro passou a julgar a **origem do valor**: um header de credencial só passa se o valor for
+  `[esquema] $[VAR-allowlisted]` — segredo do servidor, nunca um literal do processo. Literais e
+  variáveis não-allowlisted continuam a cair. 5 testes novos (3 de proveniência + 2 de allowlist).
 - **JWT decoder fail-closed (P0)** — try/catch removido; arranque falha se o OIDC estiver inacessível.
 - **CORS restrito (P0)** — origens por `IGRP_CORS_ALLOWED_ORIGINS`; vazio = sem cross-origin; wildcard
   eliminado nas duas apps.
@@ -45,7 +57,7 @@ fim). Ver o novo estado na tabela de prioridades do `SECURITY_RECOMMENDATIONS.md
 
 ### Validação
 
-- Testes: management **300/300** (8 novos do `OutboundRequestGuard`).
+- Testes: management **305/305** (guard SSRF + proveniência de headers + allowlist de env vars).
 - Deep test (Docker, 35 verificações, 5 perfis): fail-closed provado com container de issuer inválido
   (morre em ~4s), CORS nos dois sentidos, imagem non-root com build **real contra o Nexus** (`id -un` →
   `appuser`), erros saneados com corpos como evidência, matriz de autorização intacta.
@@ -60,8 +72,9 @@ monorepo (prevista para 24.5).
 ### Ficheiros
 
 **Management** (`features/security-harding`): `7e1906e` (quick-wins), `439f9ef` (fuga api-docs),
-`70fa329` (SSRF). Novos: `shared/delegates/outbound/{OutboundRequestGuard,OutboundGuardProperties}.java`
-+ teste; `e2e/docker-compose.deeptest.yml`.
+`70fa329` (SSRF), `e944fc9` (allowlist de env vars + proveniência). Novos:
+`shared/delegates/outbound/{OutboundRequestGuard,OutboundGuardProperties,EnvVarAllowlistConfigurer}.java`
++ testes; `e2e/docker-compose.deeptest.yml`.
 **Studio** (`feacture/security-harding`): `4bc8280` (quick-wins), `e1cb759` (fuga api-docs).
 
 ---

@@ -77,7 +77,8 @@ Iguais nas duas apps salvo indicação. Referência viva: `.env.example` de cada
 | `ENABLE_SWAGGER` | `false` (prod/staging) | controla **UI e** `/v3/api-docs` (o spec OpenAPI). `true` só em dev. |
 | `IGRP_OUTBOUND_REQUIRE_HTTPS` | `true` | webhooks/assignment exigem https; `false` só em `development` |
 | `IGRP_OUTBOUND_ALLOWED_HOSTS` | vazio, ou lista `host,*.sufixo` | **vazio = qualquer host público** (interno sempre bloqueado). Para um webhook a um serviço **interno**, listar o host aqui (é confiado como configurado). |
-| `IGRP_OUTBOUND_ALLOWED_EXTRA_HEADERS` | vazio | headers de credenciais que uma variável de processo pode mesmo assim enviar (ex. `Authorization`); por omissão são filtrados |
+| `IGRP_OUTBOUND_ALLOWED_EXTRA_HEADERS` | vazio | headers de credenciais que uma variável de processo pode mesmo assim enviar (ex. `Authorization`); por omissão são filtrados. **Prefir** referenciar por `$[VAR]` (ver linha seguinte) a abrir isto |
+| `IGRP_OUTBOUND_ALLOWED_ENV_VARS` | `IGRP_WEBHOOK_*` (exato ou `PREFIX*`) | que env vars um process definition pode referenciar via `$[VAR]`. Default deixa resolver credenciais de webhook nomeadas por convenção e **bloqueia** segredos (`POSTGRES_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`). Governa **todos** os delegates (webhook, mail, parse, message). |
 | `IGRP_OUTBOUND_MAX_RESPONSE_BYTES` | `1048576` (1MB) | tamanho máximo da resposta de webhook |
 
 A tabela de rotas (`irn.authorization.routes.*`) vem no `application.properties` de cada app e
@@ -149,6 +150,12 @@ Quatro defaults mudaram — um ambiente que dependia do valor antigo comporta-se
 - **Webhooks → SSRF-guarded**: um webhook para um serviço **interno** (loopback/IP privado) deixa de
   passar; listar o host em `IGRP_OUTBOUND_ALLOWED_HOSTS`. Verificar os process definitions que usam
   webhook delegates antes de subir.
+- **Referências `$[VAR]` → restritas**: um process definition que refira `$[SOME_VAR]` fora de
+  `IGRP_WEBHOOK_*` (email, tópico Kafka, payload, URL…) **falha no runtime** até a var estar em
+  `IGRP_OUTBOUND_ALLOWED_ENV_VARS`. Inventariar os `$[...]` usados nos processos existentes e listar as
+  vars legítimas; nunca listar segredos de infra (BD, Keycloak) — é o que a restrição protege.
+  Para credenciais de webhook, a boa prática é nomeá-las `IGRP_WEBHOOK_*` e referenciar
+  `Authorization: Bearer $[IGRP_WEBHOOK_XYZ]` no header (passa por proveniência, sem abrir extra-headers).
 
 Imagens correm como **UID 1001** (non-root): volumes montados (ex. a chave privada) têm de ser legíveis
 por esse UID — `chmod`/`fsGroup` conforme o caso.
