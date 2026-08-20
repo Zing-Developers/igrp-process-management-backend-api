@@ -69,7 +69,7 @@ Iguais nas duas apps salvo indicação. Referência viva: `.env.example` de cada
 | `IGRP_AUTHORIZATION_JWT_KEY` | id da chave registada no IRN | |
 | `IGRP_AUTHORIZATION_JWT_PRIVATE_KEY` | `file:/app/keys/irn-private-key.pem` | PKCS#1, montada read-only |
 | `IRN_AUTHORIZATION_DENY_UNMATCHED` | `true` (default) | `false` = rotas sem regra ficam só autenticadas — não recomendado |
-| `IGRP_SECURITY_PRINCIPAL_CLAIM_NAME` | `sub` (default) | claim JWT usado como identidade (logs, auditoria, `created_by`) |
+| `IGRP_SECURITY_PRINCIPAL_CLAIM_NAME` | **`email`** em IRN (default `sub`) | identidade gravada em tarefas, colunas de auditoria e logs. Tem de bater com o formato das atribuições — o IRN atribui por email, senão o match "minhas tarefas" falha. Igual nas duas apps; decidir **antes** do go-live (mudar com dados existentes deixa tarefas antigas órfãs no match). Exige o scope `email` no token Keycloak. |
 | `MANAGEMENT_HEALTH_MAIL_ENABLED` | `false` se não houver SMTP | **management API**: sem SMTP o `MailHealthIndicator` põe `/actuator/health` a 503 e mata os probes do k8s |
 | `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` | URL do Eureka | se service discovery ativo |
 
@@ -131,6 +131,9 @@ Diz exatamente que permissão falta. Se um utilizador reporta 403, esta linha re
 
 ## 7. Notas operacionais
 
+- **Com `PRINCIPAL_CLAIM_NAME=email`, o identificador funcional do utilizador é um email** — aparece
+  como `enduser.id` na auditoria e nos INFOs de ciclo de vida. Exceção deliberada e documentada à
+  política de logs sem PII: é o ID que faz o match de tarefas funcionar no IRN.
 - **Cache do `/Auth/me`: 5 minutos por sessão.** Alterações de permissões no System Administration
   demoram até 5 min a refletir-se (ou reinício da app / nova sessão). Não é bug.
 - Se o IRN estiver em baixo, o enriquecimento falha **fechado**: utilizadores levam 403 (a app não
