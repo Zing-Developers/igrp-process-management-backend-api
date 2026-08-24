@@ -64,10 +64,12 @@ aplicação.
 | # | Decisão |
 |---|---|
 | D-1 | Usar **só** o array `permissions` do `/Auth/me`. `accessibleModuleCodes` fica de fora. |
-| D-2 | **Não** reutilizar permissões IRN existentes (`TASK_MANAGEMENT:ver`, `PROCESS_MAP:ver`, …). Catálogo novo, derivado dos métodos HTTP, registado no System Administration. |
+| D-2 | Catálogo novo, derivado dos métodos HTTP, registado no System Administration. **Emendada pela D-6:** o catálogo mantém-se, mas cada rota passa a aceitar **também** as permissões IRN reais dos frontends (`accept-also`), porque na prática só os códigos dos frontends estão atribuídos aos perfis. |
 | D-3 | O mapeamento rota→permissão **não vive no `SecurityConfig`** — é delegado ao adapter IRN por uma interface no `process-runtime-auth-core`. |
 | D-4 | A mesma solução aplica-se ao `igrp-process-studio-backend-api`. |
 | D-5 | Não declarar o catálogo no iGRP Studio por agora. |
+| D-6 | **Híbrido multi-frontend.** Vários frontends IRN (`FILA_TRABALHO`, `TASK_MANAGEMENT`, `MY_TASKS`, `AVAILABLE_TASKS`) frenteiam os mesmos `/tasks-instances/*`, cada um com o seu código e verbos, e o backend não os distingue. Cada rota aceita **qualquer de**: a permissão derivada (`TASK_INSTANCES:acao`) **ou** as permissões IRN reais dos frontends. Ver §4.3. |
+| D-7 | `pesquisar_todos` passa a ser uma **lista configurável** any-of (`igrp.authorization.task-search-all-permissions`), não uma constante — a mesma capacidade tem códigos diferentes por módulo. |
 
 ---
 
@@ -229,7 +231,53 @@ TASK_INSTANCES:pesquisar_todos    → ver tarefas para além das próprias e as 
 > tem `:publicar` pode fazer deploy mas não configurar artefactos; quem só tem `:criar` pode preparar
 > tudo menos publicar. É deliberado: permite separar quem desenha de quem põe em produção.
 
-### 4.3 Riscos assinalados
+### 4.3 Frontends e códigos IRN aceites (`accept-also`)
+
+Vários frontends IRN consomem os mesmos endpoints, mas cada um é um **módulo IRN com o seu próprio
+código** — *Fila de Trabalho* = `FILA_TRABALHO`, *Gestão de Tarefas* = `TASK_MANAGEMENT`, *Minhas
+Tarefas* = `MY_TASKS`, *Tarefas Disponíveis* = `AVAILABLE_TASKS` — e os quatro chamam
+`/tasks-instances/*`. O backend não distingue qual frontend chamou: mesmo token, mesmo endpoint. Como na
+prática só os códigos dos frontends estão atribuídos aos perfis (o catálogo `TASK_INSTANCES:*` da §4 não
+foi adotado), gatear só pelo catálogo daria **403 a toda a gente**.
+
+Solução (D-6): cada tier de ação aceita **qualquer de** — a permissão derivada `TASK_INSTANCES:acao`
+**ou** as permissões IRN reais dos frontends, declaradas em `accept-also`, keyed pela ação derivada
+(por isso os overrides de leitura herdam a lista de `visualizar`). O `anyAuthority` da regra já é um
+`Set`; o `SecurityConfig` já chama `hasAnyAuthority`, nada muda aí.
+
+```properties
+irn.authorization.routes.modules[4].accept-also.visualizar=FILA_TRABALHO:visualizar,TASK_MANAGEMENT:ver,MY_TASKS:visualizar,AVAILABLE_TASKS:visualizar
+irn.authorization.routes.modules[4].accept-also.criar=...   # verbos de operar, por confirmar
+```
+
+| Tier | Rotas | Aceita também (a confirmar no System Administration) |
+|---|---|---|
+| `visualizar` | search, me, {id}, status, stats, variables, assignment-rules | `FILA_TRABALHO:visualizar` · `TASK_MANAGEMENT:ver` ✓ · `MY_TASKS:visualizar` · `AVAILABLE_TASKS:visualizar` |
+| `criar` | claim, unclaim, assign, complete, save | verbos de operar de cada frontend (por confirmar) |
+| `editar`/`eliminar` | assignment-rules | por confirmar |
+
+Só `TASK_MANAGEMENT:ver` está confirmado do `/Auth/me`; o resto são placeholders — **edições de uma
+linha na config, sem recompilar**. Ausente/vazio → comportamento idêntico ao catálogo puro
+(retrocompatível). O mecanismo está no `process-runtime-auth-irn` (`ModuleRoutes.acceptAlso` +
+`IrnRouteAuthorizationAdapter.authoritiesFor`), a partir de `0.1.0-beta.24.5`.
+
+O mecanismo não é exclusivo das tarefas: **todos** os módulos (`AREAS`, `PROCESS_DEFINITIONS`,
+`PROCESS_INSTANCES`, `ACTIVITIES` e os `STUDIO_*`) já trazem as linhas `accept-also.<ação>`
+**comentadas** no `application.properties`, cada uma com o seu botão `${IRN_..._ACCEPT_*}` e um TODO dos
+candidatos (`FILA_TRABALHO`, `PROCESS_MAP`, `PROCESS_CONFIGURATION`, `CONFIGURADOR_PROCESSOS`). Só o
+bloco de tarefas está ativo; nas restantes rotas basta descomentar o tier certo e pôr o código real
+quando sair do System Administration.
+
+**`pesquisar_todos`** (D-7) segue o mesmo padrão any-of, mas fora das rotas: é uma lista configurável
+`igrp.authorization.task-search-all-permissions` (default `TASK_INSTANCES:pesquisar_todos`); o service
+concede se o utilizador tiver **qualquer** uma, ou for super admin.
+
+Verificado ao vivo na stack `irn-e2e`: `sess-fila-trabalho` (`FILA_TRABALHO:visualizar`, **sem**
+`TASK_INSTANCES`) → `POST /search` **200**, `POST /{id}/complete` **403**; `sess-task-mgmt`
+(`TASK_MANAGEMENT:ver`) → search **200**; `sess-mgmt-viewer` (`TASK_INSTANCES:visualizar`) → search
+**200** (híbrido); `sess-none` → search **403**.
+
+### 4.4 Riscos assinalados
 
 | # | Risco | Correção, se decidirem |
 |---|---|---|

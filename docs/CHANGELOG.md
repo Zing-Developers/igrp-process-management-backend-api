@@ -1,5 +1,33 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-08 (c) · Autorização multi-frontend (framework 24.5)
+
+Vários frontends IRN (`FILA_TRABALHO`, `TASK_MANAGEMENT`, `MY_TASKS`, `AVAILABLE_TASKS`) frenteiam os
+mesmos `/tasks-instances/*`, cada um com o seu código de módulo e verbos, e o backend não os distingue.
+Como só os códigos dos frontends estão atribuídos aos perfis, gatear só pelo catálogo `TASK_INSTANCES:*`
+dava **403 a toda a gente**.
+
+- **`accept-also` por ação** — cada tier de rota passa a aceitar **qualquer de**: a permissão derivada
+  (`TASK_INSTANCES:acao`) **ou** as permissões IRN reais dos frontends. Novo campo
+  `ModuleRoutes.acceptAlso` + helper `authoritiesFor` no `process-runtime-auth-irn`; o `SecurityConfig`
+  não muda (o `anyAuthority` já é um `Set`). Config em `irn.authorization.routes.modules[*].accept-also.<acao>`.
+- **`pesquisar_todos` → lista configurável** — `igrp.authorization.task-search-all-permissions`
+  (any-of, default `TASK_INSTANCES:pesquisar_todos`), porque a mesma capacidade tem códigos diferentes
+  por módulo. `TaskInstanceService` concede se o utilizador tiver **qualquer** uma.
+- **Placeholders** — só `TASK_MANAGEMENT:ver` está confirmado; os restantes verbos entram por config
+  (uma linha, sem recompilar) quando saírem do System Administration.
+- **Retrocompatível** — sem `accept-also`, o comportamento é idêntico ao catálogo puro; quem já tem
+  `TASK_INSTANCES:*` continua a passar (híbrido).
+- **Preparado em todas as rotas** — os restantes módulos das duas apps (`AREAS`,
+  `PROCESS_DEFINITIONS`, `PROCESS_INSTANCES`, `ACTIVITIES`, `STUDIO_*`) já trazem as linhas
+  `accept-also.<ação>` comentadas, com botão de env var e TODO dos candidatos. Ativar noutra rota é
+  descomentar o tier e pôr o código real — sem código nem rebuild. Só o bloco de tarefas está ativo.
+
+**Validação:** unitários do adapter (retrocompat + any-of) verdes; management **305/305**; e2e ao vivo
+(`irn-e2e`): `sess-fila-trabalho` → search **200** / complete **403**, `sess-task-mgmt` → search **200**,
+`sess-mgmt-viewer` → search **200** (híbrido), `sess-none` → search **403**. Framework bump
+`0.1.0-beta.24.4` → `0.1.0-beta.24.5` nas duas apps.
+
 ## 2026-08 (b) · Endurecimento de segurança (pós-24.4)
 
 Segunda vaga sobre a release 24.4, a fechar itens abertos do `docs/SECURITY_RECOMMENDATIONS.md`.
