@@ -105,12 +105,45 @@ e um TODO dos candidatos. Só o bloco de tarefas está ativo. Para aceitar um fr
 descomentar a linha do tier certo e pôr o código real (via env var ou direto). É any-of, a par da
 permissão derivada; sem código nem rebuild. Só `TASK_MANAGEMENT:ver` está confirmado hoje.
 
+### 3.1 ConfigMap e precedência de propriedades
+
+As apps carregam ConfigMaps **como variáveis de ambiente** (`envFrom`/`valueFrom` no Deployment) — **não**
+como PropertySource do Spring. Só o `spring.cloud.kubernetes.discovery` está ativo; o carregamento de
+ConfigMap/Secret como config (`spring.cloud.kubernetes.config`) **não** está ligado. Consequência: uma
+env var vinda do ConfigMap **sobrepõe-se** ao `application.properties` empacotado no jar. Ordem de
+precedência do Spring Boot, do mais forte ao mais fraco:
+
+```
+1. args de linha de comando
+2. variáveis de ambiente do SO        ← ConfigMap via envFrom aterra aqui (ganha)
+3. application-<profile>.properties
+4. application.properties (no jar)     ← os defaults
+```
+
+**Duas regras a reter:**
+
+1. **Nome tem de mapear.** Uma env var só bate uma propriedade se o nome corresponder (*relaxed binding*:
+   `IRN_AUTHORIZATION_ROUTES_DENY_UNMATCHED` → `irn.authorization.routes.deny-unmatched`). As variáveis
+   da tabela acima já têm nome próprio, logo funcionam diretamente.
+2. **Chaves indexadas não se sobrepõem por env direto.** `irn.authorization.routes.modules[4].accept-also.visualizar`
+   não é exprimível como nome de env var (os `[4]` e os pontos partem). Por isso essas propriedades têm
+   um botão explícito — `${IRN_TASKS_ACCEPT_READ:...}` — e é **esse** nome que se põe no ConfigMap, não a
+   chave indexada. Para mudar uma chave indexada que ainda não tenha `${VAR}`: ou se lhe acrescenta o
+   botão, ou se ativa `spring.cloud.kubernetes.config` para carregar o ConfigMap como PropertySource (aí
+   qualquer chave, indexada incluída, passa a poder ser sobreposta).
+
+| Como entregas o ConfigMap | Sobrepõe o `application.properties`? |
+|---|---|
+| `envFrom`/`valueFrom` (env vars) | **Sim** — chaves com nome mapeável, ou os `${VAR}` definidos |
+| Chave indexada (`modules[N]…`) por env direto | **Não** de forma fiável — usar o `${VAR}` correspondente |
+| Ficheiro montado + `spring.config.additional-location` | Sim, se o Spring apontar para ele |
+| `spring.cloud.kubernetes.config` (PropertySource) | Não se aplica — **não ativo** hoje (só discovery) |
+
 ## 4. Build e deploy
 
-- O framework **0.1.0-beta.24.5** tem de estar publicado no Nexus (`igrp-framework-releases`) antes do
-  build das apps — os `docker build` resolvem-no de lá, sem `~/.m2` local. **Pré-requisito:**
-  `mvn deploy` da 24.5 no monorepo (a 24.4 já lá está; a 24.5 acrescenta o `accept-also` multi-frontend
-  e, sem config nova, é idêntica à 24.4).
+- O framework **0.1.0-beta.24.5** está publicado no Nexus (`igrp-framework-releases`) — os `docker build`
+  resolvem-no de lá, sem `~/.m2` local. (A 24.5 acrescenta o `accept-also` multi-frontend; sem config
+  nova é idêntica à 24.4.)
 - **Runtime Java 25 obrigatório** nas duas apps (bytecode do framework). Dockerfiles já pinados:
   build `maven:3.9.16-eclipse-temurin-25`, runtime `eclipse-temurin:25-jre`.
 - Branches a fazer build: management `features/security-harding` · studio `feacture/security-harding`
