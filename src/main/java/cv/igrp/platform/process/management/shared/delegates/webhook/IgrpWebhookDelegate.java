@@ -1,6 +1,8 @@
 package cv.igrp.platform.process.management.shared.delegates.webhook;
 
 import com.google.gson.JsonElement;
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundRequestGuard;
+
 import cv.igrp.platform.process.management.shared.util.EnvVarUtil;
 import cv.igrp.platform.process.management.shared.util.ObjectUtil;
 import org.activiti.engine.delegate.DelegateExecution;
@@ -13,7 +15,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
@@ -28,8 +29,11 @@ public class IgrpWebhookDelegate implements JavaDelegate {
 
   private final RestClient restClient;
 
-  public IgrpWebhookDelegate(RestClient restClient) {
+  private final OutboundRequestGuard guard;
+
+  public IgrpWebhookDelegate(RestClient restClient, OutboundRequestGuard guard) {
     this.restClient = restClient;
+    this.guard = guard;
   }
 
   @Value(value = "${igrp.delegate.webhook.auth-token:}")
@@ -58,11 +62,11 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     String query = Objects.nonNull(queryParams)? queryParams : Objects.nonNull(webhookQueryParams) ? (String) webhookQueryParams.getValue(execution) : null;
     query = EnvVarUtil.resolveEnvVars(query, "webhookQueryParams");
 
-    String url = UriComponentsBuilder.fromUriString(baseUrl)
+    String url = guard.validate(UriComponentsBuilder.fromUriString(baseUrl)
         .path(path != null ? path : "")
         .query(query != null ? query : "")
         .build()
-        .toUriString();
+        .toUriString());
 
     String methodVariable = (String) execution.getVariable("webhookMethod");
     String method = ofNullable(Objects.nonNull(methodVariable)? methodVariable : Objects.nonNull(webhookMethod) ? webhookMethod.getValue(execution) : null)
@@ -79,22 +83,15 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     Object payloadHeader = execution.getVariable("webhookPayloadHeader");
     String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
         .orElse("").toString();
-    payloadHeaderStr = EnvVarUtil.resolveEnvVars(payloadHeaderStr, "webhookPayloadHeader");
+    // Parse RAW (unresolved): the guard resolves $[VAR] per header value after deciding allow/block,
+    // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
     Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
     Object responseBody;
     int statusCode;
 
     try {
-      HttpHeaders headers = new HttpHeaders();
-      headers.setContentType(MediaType.APPLICATION_JSON);
-      if (!headersMap.isEmpty()) {
-        headersMap.forEach(headers::set);
-      } else {
-        if(globalAuthToken != null && !globalAuthToken.isEmpty()) {
-          headers.set("Authorization", "Bearer " + globalAuthToken);
-        }
-      }
+      HttpHeaders headers = guard.buildHeaders(headersMap, globalAuthToken);
 
       log.debug("[IgrpWebhookDelegate] Sending {} request to {}", method, url);
       log.debug("[IgrpWebhookDelegate] Payload: {}", payload);
@@ -104,49 +101,45 @@ public class IgrpWebhookDelegate implements JavaDelegate {
           var response = restClient.get()
               .uri(url)
               .headers(httpHeaders -> httpHeaders.addAll(headers))
-              .retrieve()
-              .toEntity(String.class);
-          responseBody = response.getBody();
-          statusCode = response.getStatusCode().value();
+              .exchange((request, clientResponse) -> guard.readBounded(clientResponse));
+          responseBody = response.body();
+          statusCode = response.status();
         }
         case "POST" -> {
           var response = restClient.post()
               .uri(url)
               .headers(httpHeaders -> httpHeaders.addAll(headers))
               .body(payload)
-              .retrieve()
-              .toEntity(String.class);
-          responseBody = response.getBody();
-          statusCode = response.getStatusCode().value();
+              .exchange((request, clientResponse) -> guard.readBounded(clientResponse));
+          responseBody = response.body();
+          statusCode = response.status();
         }
         case "PUT" -> {
           var response = restClient.put()
               .uri(url)
               .headers(httpHeaders -> httpHeaders.addAll(headers))
               .body(payload)
-              .retrieve()
-              .toEntity(String.class);
-          responseBody = response.getBody();
-          statusCode = response.getStatusCode().value();
+              .exchange((request, clientResponse) -> guard.readBounded(clientResponse));
+          responseBody = response.body();
+          statusCode = response.status();
         }
         case "DELETE" -> {
           var response = restClient.delete()
               .uri(url)
               .headers(httpHeaders -> httpHeaders.addAll(headers))
-              .retrieve()
-              .toEntity(String.class);
-          responseBody = response.getBody();
-          statusCode = response.getStatusCode().value();
+              .exchange((request, clientResponse) -> guard.readBounded(clientResponse));
+          responseBody = response.body();
+          statusCode = response.status();
         }
         default -> throw new IllegalArgumentException("Unsupported webhookMethod: " + method);
       }
 
-      log.info("[IgrpWebhookDelegate] Webhook responded {} for task {}", statusCode, taskId);
+      if (statusCode >= 400) {
+        log.warn("[IgrpWebhookDelegate] Webhook returned error {} for task {}", statusCode, taskId);
+      } else {
+        log.info("[IgrpWebhookDelegate] Webhook responded {} for task {}", statusCode, taskId);
+      }
 
-    } catch (RestClientResponseException e) {
-      statusCode = e.getStatusCode().value();
-      responseBody = e.getResponseBodyAs(String.class);
-      log.warn("[IgrpWebhookDelegate] Webhook returned error {} for task {}", statusCode, taskId);
     } catch (Exception e) {
       log.error("[IgrpWebhookDelegate] Error calling webhook {}", url, e);
       execution.setTransientVariable(taskId + "Error", e.getMessage());

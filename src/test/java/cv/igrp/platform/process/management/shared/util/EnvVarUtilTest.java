@@ -15,7 +15,11 @@ class EnvVarUtilTest {
   );
 
   private String resolve(String value, String fieldName) {
-    return EnvVarUtil.resolveEnvVars(value, fieldName, TEST_ENV::get);
+    return EnvVarUtil.resolveEnvVars(value, fieldName, TEST_ENV::get, name -> true);
+  }
+
+  private String resolve(String value, String fieldName, java.util.function.Predicate<String> allow) {
+    return EnvVarUtil.resolveEnvVars(value, fieldName, TEST_ENV::get, allow);
   }
 
   @Test
@@ -76,6 +80,25 @@ class EnvVarUtilTest {
   @Test
   void springExpression_notAffected() {
     assertEquals("#{bean.method()}", resolve("#{bean.method()}", "field"));
+  }
+
+
+  @Test
+  void allowlistBlocksReferencesToNonListedVars() {
+    java.util.function.Predicate<String> only = name -> name.startsWith("IGRP_WEBHOOK_");
+    var ex = assertThrows(RuntimeException.class,
+        () -> resolve("token=$[API_TOKEN]", "webhookPayload", only));
+    assertTrue(ex.getMessage().contains("API_TOKEN"));
+    assertTrue(ex.getMessage().contains("allowed-env-vars"));
+  }
+
+  @Test
+  void allowlistPermitsListedVars() {
+    var env = new java.util.HashMap<String, String>(TEST_ENV);
+    env.put("IGRP_WEBHOOK_TOKEN", "wh-secret");
+    java.util.function.Predicate<String> only = name -> name.startsWith("IGRP_WEBHOOK_");
+    assertEquals("Bearer wh-secret",
+        EnvVarUtil.resolveEnvVars("Bearer $[IGRP_WEBHOOK_TOKEN]", "webhookPayloadHeader", env::get, only));
   }
 
 }

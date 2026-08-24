@@ -1,0 +1,36 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/v1/Auth/me",
+    "cookies": {
+      "session_id": {
+        "equalTo": "sess-task-mgmt"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "user-sess-task-mgmt",
+      "email": "task-mgmt@test.local",
+      "fullName": "Gestao de Tarefas User",
+      "isAuthenticated": true,
+      "permissions": [
+        "TASK_MANAGEMENT:ver"
+      ],
+      "userSpaces": [],
+      "selectedSpaceId": "space-e2e",
+      "selectedProfileId": "profile-e2e",
+      "selectedSpace": null,
+      "selectedProfile": {
+        "profileId": "profile-e2e",
+        "profileCode": "E2E",
+        "profileName": "E2E Profile"
+      }
+    }
+  }
+}

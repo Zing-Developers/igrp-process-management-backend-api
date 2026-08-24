@@ -60,7 +60,8 @@ class TaskInstanceServiceVisibilityTest {
     service = new TaskInstanceService(
         taskInstanceRepository, taskInstanceEventRepository, taskAssignmentRuleRepository,
         runtimeProcessEngineRepository, processInstanceRepository, processDefinitionRepository,
-        userProfileRepository, userContext);
+        userProfileRepository, userContext,
+        List.of(IgrpAuthorizationConstants.TASK_INSTANCES_SEARCH_ALL));
 
     when(userContext.getCurrentUser()).thenReturn(Code.create(CURRENT_USER));
     when(userContext.getCurrentGroups()).thenReturn(CURRENT_GROUPS);
