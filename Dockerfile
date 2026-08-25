@@ -1,4 +1,4 @@
-FROM maven:3.9.16-eclipse-temurin-25 AS build
+FROM docker.tools.irn.internal/base/java-sdk:latest AS build
 WORKDIR /app
 
 COPY pom.xml ./
@@ -7,12 +7,13 @@ RUN mvn -B -q dependency:go-offline
 COPY src ./src
 RUN mvn -B -Dmaven.test.skip=true clean package && ls -lh target
 
-FROM eclipse-temurin:25-jre
+FROM docker.tools.irn.internal/base/java-jre:latest
 WORKDIR /app
-COPY --from=build /app/target/*.jar /app/app.jar
-RUN useradd --system --no-create-home --uid 1001 appuser
-USER 1001
+COPY --from=build --chown=javauser:javauser /app/target/*.jar /app/app.jar
 
 EXPOSE 8080
-ENTRYPOINT ["java","-jar","/app/app.jar"]
+
+USER javauser:javauser
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
 
