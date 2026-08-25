@@ -24,7 +24,7 @@ public class AssignProcessDefinitionCommandHandler implements CommandHandler<Ass
   @Transactional
   @IgrpCommandHandler
   public ResponseEntity<String> handle(AssignProcessDefinitionCommand command) {
-    LOGGER.info("Assigning process definition [{}]", command.getId());
+    LOGGER.debug("Assigning process definition [{}]", command.getId());
     processDeploymentService.assignProcessDefinition(
         command.getId(),
         command.getAssignprocessdto().getCandidateGroups()

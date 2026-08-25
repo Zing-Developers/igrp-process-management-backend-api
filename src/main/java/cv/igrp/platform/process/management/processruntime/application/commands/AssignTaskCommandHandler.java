@@ -34,7 +34,7 @@ public class AssignTaskCommandHandler implements CommandHandler<AssignTaskComman
   @Transactional
   public ResponseEntity<String> handle(AssignTaskCommand command) {
     final var currentUser = userContext.getCurrentUser();
-    LOGGER.info("User [{}] started assigning task [{}] to user [{}]", currentUser.getValue(), command.getId(), command.getAssigntaskdto().getUser());
+    LOGGER.debug("User [{}] started assigning task [{}]", currentUser.getValue(), command.getId());
     taskInstanceService.assignTask(
         TaskOperationData.builder()
             .currentUser(currentUser)
@@ -46,7 +46,7 @@ public class AssignTaskCommandHandler implements CommandHandler<AssignTaskComman
             .candidateUsers(getUsers(command.getAssigntaskdto()))
             .build()
     );
-    LOGGER.info("User [{}] finished assigning task [{}] to user [{}]", currentUser.getValue(), command.getId(), command.getAssigntaskdto().getUser());
+    LOGGER.info("User [{}] finished assigning task [{}]", currentUser.getValue(), command.getId());
     return ResponseEntity.noContent().build();
   }
 

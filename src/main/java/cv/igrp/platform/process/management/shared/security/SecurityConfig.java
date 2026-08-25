@@ -1,14 +1,19 @@
 package cv.igrp.platform.process.management.shared.security;
 
 import cv.igrp.framework.process.runtime.auth.core.adapter.IAuthorizationServiceAdapter;
+import cv.igrp.framework.process.runtime.auth.core.adapter.IRouteAuthorizationAdapter;
 import cv.igrp.platform.process.management.shared.security.util.ActivitiConstants;
 import cv.igrp.platform.process.management.shared.security.util.IgrpAuthorizationConstants;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authorization.AuthorizationEventPublisher;
+import org.springframework.security.authorization.SpringAuthorizationEventPublisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -30,7 +35,9 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.cors.CorsConfiguration;
 
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -44,20 +51,35 @@ public class SecurityConfig {
 
   private final IAuthorizationServiceAdapter authorizationService;
 
+  private final IRouteAuthorizationAdapter routeAuthorization;
+
   private final String principalClaimName;
 
+  private final String corsAllowedOrigins;
+
   public SecurityConfig(IAuthorizationServiceAdapter authorizationService,
-                        @Value("${igrp.security.principal-claim-name}") String principalClaimName) {
+                        IRouteAuthorizationAdapter routeAuthorization,
+                        @Value("${igrp.security.principal-claim-name}") String principalClaimName,
+                        @Value("${igrp.cors.allowed-origins:}") String corsAllowedOrigins) {
     this.authorizationService = authorizationService;
+    this.routeAuthorization = routeAuthorization;
     this.principalClaimName = principalClaimName;
+    this.corsAllowedOrigins = corsAllowedOrigins;
   }
 
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http, IAMUserProfileSyncFilter iamUserProfileSyncFilter) throws Exception {
 
-    http.cors(cors -> cors.configurationSource(_ -> {
+    http.cors(cors -> cors.configurationSource(request -> {
+      // No configured origins = no CORS headers at all: cross-origin browser calls are refused.
+      // Wildcard origins with credentials (the previous setup) let any site ride the user's
+      // auth context (SECURITY_RECOMMENDATIONS P0).
+      if (corsAllowedOrigins == null || corsAllowedOrigins.isBlank()) {
+        return null;
+      }
       var configuration = new CorsConfiguration();
-      configuration.addAllowedOriginPattern(CorsConfiguration.ALL);
+      configuration.setAllowedOrigins(Arrays.stream(corsAllowedOrigins.split(","))
+          .map(String::trim).filter(o -> !o.isEmpty()).toList());
       configuration.addAllowedMethod(HttpMethod.GET);
       configuration.addAllowedMethod(HttpMethod.POST);
       configuration.addAllowedMethod(HttpMethod.PUT);
@@ -75,18 +97,37 @@ public class SecurityConfig {
         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
     );
 
-    // Configure authorization rules and policy enforcement
+    // Configure authorization rules and policy enforcement.
+    // Business routes come from the authorization adapter, never from this class: see
+    // docs/SPEC_ROUTE_AUTHORIZATION.md.
     http
-        .authorizeHttpRequests((authorize) -> authorize
-            .requestMatchers(
-                "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
-                "/swagger-resources/**", "/webjars/**",
-                "/actuator/health", "/actuator/health/**"
-            ).permitAll()
-            .anyRequest()
-            .authenticated()  // Require authentication for all other requests
-        )
-        .exceptionHandling(ex -> ex.authenticationEntryPoint((_, response, _) -> {
+        .authorizeHttpRequests((authorize) -> {
+
+          // Error dispatches must stay reachable, otherwise denyAll() turns every error into a 403
+          authorize.requestMatchers(request -> request.getDispatcherType() == DispatcherType.ERROR).permitAll();
+
+          authorize.requestMatchers(
+              "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
+              "/swagger-resources/**", "/webjars/**",
+              "/actuator/health", "/actuator/health/**"
+          ).permitAll();
+
+          routeAuthorization.getRules().forEach(rule -> {
+            var matcher = rule.method() == null
+                ? authorize.requestMatchers(rule.pattern())
+                : authorize.requestMatchers(rule.method(), rule.pattern());
+            matcher.hasAnyAuthority(withSuperAdmin(rule.anyAuthority()));
+          });
+
+          if (routeAuthorization.denyUnmatched()) {
+            authorize.anyRequest().denyAll();
+          } else {
+            authorize.anyRequest().authenticated();
+          }
+        })
+        .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, _) -> {
+          // DEBUG, not WARN: anonymous probes and expired tokens are routine noise
+          LOGGER.debug("Unauthenticated request: {} {}", request.getMethod(), request.getRequestURI());
           response.addHeader(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=\"Restricted Content\"");
           response.sendError(HttpStatus.UNAUTHORIZED.value(), HttpStatus.UNAUTHORIZED.getReasonPhrase());
         }));
@@ -100,6 +141,25 @@ public class SecurityConfig {
     http.addFilterBefore(iamUserProfileSyncFilter, AuthorizationFilter.class);
 
     return http.build();
+  }
+
+  /**
+   * Publishes authorization decisions as application events. Spring Security only publishes denials
+   * through this publisher, which {@link AuthorizationAuditListener} turns into structured audit logs.
+   */
+  @Bean
+  public AuthorizationEventPublisher authorizationEventPublisher(ApplicationEventPublisher publisher) {
+    return new SpringAuthorizationEventPublisher(publisher);
+  }
+
+  /**
+   * Adds the super admin role to a rule's accepted authorities, so the role does not have to be
+   * repeated in every entry of the route table.
+   */
+  private static String[] withSuperAdmin(Set<String> authorities) {
+    var accepted = new LinkedHashSet<>(authorities);
+    accepted.add(ROLE_PREFIX + IgrpAuthorizationConstants.SUPER_ADMIN_ROLE);
+    return accepted.toArray(String[]::new);
   }
 
   @Bean
@@ -139,7 +199,7 @@ public class SecurityConfig {
 
         // Activiti Admin or User role
         if (authorizationService.isSuperAdmin(token, request)) {
-          LOGGER.info("User [{}] granted super admin privileges", email);
+          LOGGER.info("User [{}] granted super admin privileges", sub);
           authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + IgrpAuthorizationConstants.SUPER_ADMIN_ROLE));
           authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + ActivitiConstants.ROLE_ACTIVITI_ADMIN));
           authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + ActivitiConstants.ROLE_ACTIVITI_USER));
@@ -148,12 +208,15 @@ public class SecurityConfig {
         }
 
       } catch (Exception e) {
-        LOGGER.error("Failed to enrich authorities for [email={}, sub={}]: {}", email, sub, e.getMessage(), e);
-        // Ensure at least basic Activiti user role
+        // Fail closed: keep only the minimal Activiti role the engine needs, never an admin one, and
+        // never any permission. Every permission-gated route will answer 403 until IRN recovers.
+        LOGGER.error("SECURITY: failed to enrich authorities for [sub={}]; "
+            + "granting the minimal role only, permission-gated routes will be denied", sub, e);
+        authorities.clear();
         authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + ActivitiConstants.ROLE_ACTIVITI_USER));
       }
 
-      LOGGER.debug("Authorities: {}", authorities);
+      LOGGER.debug("Granted {} authorities", authorities.size());
 
       return authorities;
 

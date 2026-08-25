@@ -43,7 +43,7 @@ public class ApplicationAuditorAware implements AuditorAware<String> {
       }
     }
 
-    LOGGER.warn("No authenticated user found, falling back to system account");
+    LOGGER.debug("No authenticated user found, falling back to system account");
     return SYSTEM_FALLBACK;
   }
 

@@ -36,21 +36,21 @@ public class CompleteTaskCommandHandler implements CommandHandler<CompleteTaskCo
   public ResponseEntity<TaskInstanceDTO> handle(CompleteTaskCommand command) {
 
     final var currentUser = userContext.getCurrentUser();
-    LOGGER.info("User [{}] started completing task [{}]", currentUser.getValue(), command.getId());
+    LOGGER.debug("User [{}] started completing task [{}]", currentUser.getValue(), command.getId());
 
     final var forms = new HashMap<String,Object>();
     command.getTaskdatadto()
         .getForms()
         .forEach(v -> forms.put(v.getName(), v.getValue()));
 
-    LOGGER.info("[Complete Task] Forms: {}", forms);
+    LOGGER.debug("[Complete Task] {} form entries", forms != null ? forms.size() : 0);
 
     final var variables = new HashMap<String,Object>();
     command.getTaskdatadto()
         .getVariables()
         .forEach(v -> variables.put(v.getName(), v.getValue()));
 
-    LOGGER.info("[Complete Task] Variables: {}", variables);
+    LOGGER.debug("[Complete Task] {} variable entries", variables != null ? variables.size() : 0);
 
     final var taskInstanceResp =  taskInstanceService.completeTask(
         TaskOperationData.builder()

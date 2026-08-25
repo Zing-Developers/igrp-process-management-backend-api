@@ -47,10 +47,10 @@ public class TriggerProcessEventCommandHandler implements CommandHandler<Trigger
     try {
 
       if (event.getMessageName() != null && !event.getMessageName().isBlank()) {
-        LOGGER.info("Correlating message '{}' for businessKey '{}'", event.getMessageName(), event.getBusinessKey());
+        LOGGER.debug("Correlating message '{}' for businessKey '{}'", event.getMessageName(), event.getBusinessKey());
         processInstanceService.correlateMessage(event.getBusinessKey(), event.getMessageName(), vars);
       } else {
-        LOGGER.info("Signaling process instance for businessKey '{}'", event.getBusinessKey());
+        LOGGER.debug("Signaling process instance for businessKey '{}'", event.getBusinessKey());
         processInstanceService.signal(event.getBusinessKey(), event.getTaskId(), vars);
       }
 

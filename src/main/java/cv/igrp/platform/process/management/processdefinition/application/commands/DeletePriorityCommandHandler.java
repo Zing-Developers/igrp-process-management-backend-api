@@ -23,7 +23,7 @@ public class DeletePriorityCommandHandler implements CommandHandler<DeletePriori
 
   @IgrpCommandHandler
   public ResponseEntity<String> handle(DeletePriorityCommand command) {
-    LOGGER.info("Deleting priority [{}]", command.getId());
+    LOGGER.debug("Deleting priority [{}]", command.getId());
     taskPriorityService.deletePriority(Identifier.create(command.getId()));
     LOGGER.info("Priority [{}] deleted", command.getId());
     return ResponseEntity.status(204).build();

@@ -29,7 +29,7 @@ public class ConfigurePriorityCommandHandler implements CommandHandler<Configure
   @Transactional
   @IgrpCommandHandler
   public ResponseEntity<TaskPriorityDTO> handle(ConfigurePriorityCommand command) {
-    LOGGER.info("Configuring priority for process [{}]", command.getProcessKey());
+    LOGGER.debug("Configuring priority for process [{}]", command.getProcessKey());
     taskPriorityService.configurePriority(mapper.toModel(
         command.getProcessKey(),
         command.getTaskpriorityrequestdto()

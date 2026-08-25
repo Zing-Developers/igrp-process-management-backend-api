@@ -1,0 +1,16 @@
+{
+  "request": { "method": "GET", "urlPath": "/realms/e2e/.well-known/openid-configuration" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "issuer": "http://mock-oidc:8080/realms/e2e",
+      "jwks_uri": "http://mock-oidc:8080/realms/e2e/protocol/openid-connect/certs",
+      "authorization_endpoint": "http://mock-oidc:8080/realms/e2e/protocol/openid-connect/auth",
+      "token_endpoint": "http://mock-oidc:8080/realms/e2e/protocol/openid-connect/token",
+      "subject_types_supported": ["public"],
+      "id_token_signing_alg_values_supported": ["RS256"],
+      "response_types_supported": ["code"]
+    }
+  }
+}

@@ -79,7 +79,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
 
   @Override
   public ProcessInstance startProcessInstanceById(String processDefinitionId, String businessKey, Map<String, Object> variables) {
-    LOGGER.info("Authenticated user: {}", SecurityContextHolder.getContext().getAuthentication().getName());
+    LOGGER.debug("Authenticated engine call by [{}]", SecurityContextHolder.getContext().getAuthentication().getName());
     try {
       var processInstance = processManagerAdapter.startProcess(processDefinitionId, businessKey, variables);
       LOGGER.info("Process started with ID: {}", processInstance.id());
@@ -93,7 +93,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   @Override
   public ProcessInstance startProcessInstanceById(String processInstanceId, String processDefinitionId, String businessKey, Map<String, Object> variables) throws RuntimeProcessEngineException {
     var auth = SecurityContextHolder.getContext().getAuthentication();
-    LOGGER.info("Starting process. user={}, processInstanceId={}, processDefinitionId={}",
+    LOGGER.debug("Starting process. user={}, processInstanceId={}, processDefinitionId={}",
         auth, processInstanceId, processDefinitionId);
     try {
       var processInstance = processManagerAdapter.startCreatedProcess(
@@ -116,10 +116,10 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
 
   @Override
   public ProcessInstance createProcessInstanceById(String processDefinitionId, String businessKey) throws RuntimeProcessEngineException {
-    LOGGER.info("Authenticated user: {}", SecurityContextHolder.getContext().getAuthentication().getName());
+    LOGGER.debug("Authenticated engine call by [{}]", SecurityContextHolder.getContext().getAuthentication().getName());
     try {
       var processInstance = processManagerAdapter.createProcess(processDefinitionId, businessKey);
-      LOGGER.info("Process created by user: {}", processInstance.initiator());
+      LOGGER.debug("Process created by user: {}", processInstance.initiator());
       LOGGER.info("Process created with ID: {}", processInstance.id());
       return processInstanceMapper.toModel(processInstance);
     } catch (Exception e) {
@@ -443,7 +443,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   public void addCandidateGroup(String taskId, String groupId) throws RuntimeProcessEngineException {
     try {
       taskActionService.addCandidateGroup(taskId, groupId);
-      LOGGER.info("Added candidate group '{}' to task '{}'", groupId, taskId);
+      LOGGER.debug("Added candidate group '{}' to task '{}'", groupId, taskId);
     } catch (Exception e) {
       LOGGER.error("Failed to add candidate group '{}' to task '{}'", groupId, taskId, e);
       throw new RuntimeProcessEngineException(
@@ -456,7 +456,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   public void addCandidateUser(String taskId, String userId) throws RuntimeProcessEngineException {
     try {
       taskService.addCandidateUser(taskId, userId);
-      LOGGER.info("Added candidate user '{}' to task '{}'", userId, taskId);
+      LOGGER.debug("Added candidate user '{}' to task '{}'", userId, taskId);
     } catch (Exception e) {
       LOGGER.error("Failed to add candidate user '{}' to task '{}'", userId, taskId, e);
       throw new RuntimeProcessEngineException(
@@ -511,7 +511,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   public void rescheduleTimer(String processInstanceId, long seconds) {
     try {
       processManagerAdapter.rescheduleTimer(processInstanceId, seconds);
-      LOGGER.info("Rescheduled timer for process instance '{}' in {} seconds", processInstanceId, seconds);
+      LOGGER.debug("Rescheduling timer for process instance '{}' in {} seconds", processInstanceId, seconds);
     } catch (Exception e) {
       LOGGER.error("Failed to reschedule timer for process instance '{}'", processInstanceId, e);
       throw new RuntimeProcessEngineException("Failed to reschedule timer for process instance: " + processInstanceId, e);

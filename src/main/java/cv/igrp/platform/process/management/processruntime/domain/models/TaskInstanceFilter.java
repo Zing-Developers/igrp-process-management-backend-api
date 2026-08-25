@@ -105,4 +105,27 @@ public class TaskInstanceFilter {
     this.isSuperAdmin = isSuperAdmin;
   }
 
+  /**
+   * Discards the identity filters supplied by the client and scopes the search to the given user and
+   * their groups.
+   *
+   * <p>Applied to callers without permission to search beyond their own work, so that
+   * {@code user}, {@code candidateUsers} and {@code candidateGroups} sent in the request body cannot
+   * widen visibility.
+   *
+   * @param user   the authenticated user
+   * @param groups the authenticated user's groups
+   */
+  public void restrictToCurrentUser(Code user, List<String> groups){
+    this.candidateUsers = new HashSet<>();
+    this.candidateGroups = new HashSet<>();
+    this.contextUserGroups = new HashSet<>();
+    this.isSuperAdmin = false;
+    this.user = user;
+
+    if (groups != null) {
+      this.contextUserGroups.addAll(groups);
+    }
+  }
+
 }

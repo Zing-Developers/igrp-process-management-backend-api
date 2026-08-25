@@ -1,0 +1,147 @@
+# E2E stack for IRN route authorization. Run with:
+#   docker compose -p irn-e2e -f docker-compose.e2e.yml up -d
+# Jars must be built on the HOST first (framework 24.3 artifacts only live in ~/.m2):
+#   (cd .. && mvn -o -DskipTests package)
+#   (cd ../../igrp-process-studio-backend-api && mvn -o -DskipTests package)
+services:
+
+  postgres-mgmt:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: igrp_e2e
+      POSTGRES_USER: igrp_e2e
+      POSTGRES_PASSWORD: igrp_e2e
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U igrp_e2e -d igrp_e2e"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  postgres-studio:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: studio_e2e
+      POSTGRES_USER: studio_e2e
+      POSTGRES_PASSWORD: studio_e2e
+    ports:
+      - "15433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studio_e2e -d studio_e2e"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mock-oidc:
+    image: wiremock/wiremock:3.9.1
+    ports:
+      - "18090:8080"
+    volumes:
+      - ./wiremock/oidc:/home/wiremock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && printf \"GET /__admin/health HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q 200 <&3'"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  wiremock-irn:
+    image: wiremock/wiremock:3.9.1
+    ports:
+      - "18089:8080"
+    volumes:
+      - ./wiremock/irn:/home/wiremock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && printf \"GET /__admin/health HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q 200 <&3'"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mgmt-api:
+    image: eclipse-temurin:25-jre
+    command: ["java", "-jar", "/app/app.jar"]
+    volumes:
+      - ../target/igrp-platform-process-management-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+      - ./keys:/keys:ro
+    ports:
+      - "18080:8080"
+    environment:
+      SPRING_ACTIVE_PROFILE: development
+      SERVICE_PORT: "8080"
+      POSTGRES_HOST: postgres-mgmt
+      POSTGRES_PORT: "5432"
+      POSTGRES_DATABASE: igrp_e2e
+      POSTGRES_USER: igrp_e2e
+      POSTGRES_PASSWORD: igrp_e2e
+      AUTH_JWT_ISSUER: http://mock-oidc:8080/realms/e2e
+      IGRP_AUTHORIZATION_SERVICE_ADAPTER: irn
+      IRN_API_BASE_URL: http://wiremock-irn:8080
+      IRN_API_SUPER_ADMIN_EMAIL: superadmin@test.local
+      IRN_API_SESSION_COOKIE_NAME: session_id
+      IRN_AUTHORIZATION_DENY_UNMATCHED: "true"
+      IGRP_RESTCLIENT_PROVIDER: irn
+      IGRP_AUTHORIZATION_JWT_KEY: e2e
+      IGRP_AUTHORIZATION_JWT_PRIVATE_KEY: file:/keys/irn-client-key.pem
+      IGRP_MESSAGE_BROKER_PROVIDER: none
+      MESSAGE_BROKER_PROVIDER: none
+      EUREKA_CLIENT_ENABLED: "false"
+      KUBERNETES_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_KUBERNETES_ENABLED: "false"
+      OTEL_DISABLED: "true"
+      OTEL_COLLECTOR_ENDPOINT: http://localhost:4318
+      # Placeholders with no default in application.properties; values are never used
+      SPRING_MAIL_HOST: localhost
+      SPRING_MAIL_PORT: "587"
+      SPRING_MAIL_USERNAME: e2e
+      SPRING_MAIL_PASSWORD: e2e
+      SPRING_KAFKA_USERNAME: e2e
+      SPRING_KAFKA_PASSWORD: e2e
+      # No real SMTP in the stack; keep the mail health indicator out of /actuator/health
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+    depends_on:
+      postgres-mgmt:
+        condition: service_healthy
+      mock-oidc:
+        condition: service_healthy
+      wiremock-irn:
+        condition: service_healthy
+
+  studio-api:
+    # 25-jre, not 23: the framework 0.1.0-beta.24.3 jars ship Java 25 bytecode (class file 69)
+    image: eclipse-temurin:25-jre
+    command: ["java", "-jar", "/app/app.jar"]
+    volumes:
+      - ../../igrp-process-studio-backend-api/target/process_manager_studio-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+      - ./keys:/keys:ro
+    ports:
+      - "18082:8082"
+    environment:
+      SPRING_ACTIVE_PROFILE: development
+      SERVICE_PORT: "8082"
+      POSTGRES_HOST: postgres-studio
+      POSTGRES_PORT: "5432"
+      POSTGRES_DATABASE: studio_e2e
+      POSTGRES_USER: studio_e2e
+      POSTGRES_PASSWORD: studio_e2e
+      AUTH_JWT_ISSUER: http://mock-oidc:8080/realms/e2e
+      IGRP_AUTHORIZATION_SERVICE_ADAPTER: irn
+      IRN_API_BASE_URL: http://wiremock-irn:8080
+      IRN_API_SUPER_ADMIN_EMAIL: superadmin@test.local
+      IRN_API_SESSION_COOKIE_NAME: session_id
+      IRN_AUTHORIZATION_DENY_UNMATCHED: "true"
+      IGRP_RESTCLIENT_PROVIDER: irn
+      IGRP_AUTHORIZATION_JWT_KEY: e2e
+      IGRP_AUTHORIZATION_JWT_PRIVATE_KEY: file:/keys/irn-client-key.pem
+      IGRP_PROCESS_ENGINE_BASE_URL: http://mgmt-api:8080
+      EUREKA_CLIENT_ENABLED: "false"
+      KUBERNETES_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_KUBERNETES_ENABLED: "false"
+      OTEL_DISABLED: "true"
+      OTEL_COLLECTOR_ENDPOINT: http://localhost:4318
+    depends_on:
+      postgres-studio:
+        condition: service_healthy
+      mock-oidc:
+        condition: service_healthy
+      wiremock-irn:
+        condition: service_healthy

@@ -152,7 +152,7 @@ public class ProcessDeploymentService {
 
   public void importProcessDefinition(ProcessPackage processPackage) {
 
-    LOGGER.info("Importing process definition: {}", processPackage.getProcessKey());
+    LOGGER.debug("Importing process definition: {}", processPackage.getProcessKey());
 
     // Deploy Process
     ProcessDeployment processDeployment = deployProcess(

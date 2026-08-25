@@ -71,7 +71,8 @@ public class GlobalExceptionHandler {
 
         var problemDetail = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
 
-        problemDetail.setTitle(ex.getMessage());
+        // Helpful NPE messages carry internal field/method/class names — server log only
+        problemDetail.setTitle("Unexpected server error");
 
         return problemDetail;
     }
@@ -83,7 +84,8 @@ public class GlobalExceptionHandler {
 
         var problemDetail = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
 
-        problemDetail.setTitle(ex.getMessage());
+        // Internal-state details stay in the server log
+        problemDetail.setTitle("Unexpected server state");
 
         return problemDetail;
     }
@@ -139,8 +141,8 @@ public class GlobalExceptionHandler {
             return problem;
         }
 
+        // Jackson parser internals (class paths, locations) stay in the server log
         problem.setTitle("Malformed JSON request");
-        problem.setDetail(ex.getMessage());
 
         return problem;
     }
@@ -168,8 +170,10 @@ public class GlobalExceptionHandler {
             }
         }
 
+        // Raw PSQL messages leak table/column/constraint names and values — server log only
+        LOGGER.error("Data integrity violation", ex);
         problem.setTitle("Data Integrity Violation");
-        problem.setDetail(ex.getMostSpecificCause().getMessage());
+        problem.setDetail("A data integrity constraint was violated.");
 
         return problem;
     }

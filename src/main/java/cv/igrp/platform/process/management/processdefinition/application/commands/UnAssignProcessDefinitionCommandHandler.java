@@ -24,7 +24,7 @@ public class UnAssignProcessDefinitionCommandHandler implements CommandHandler<U
   @Transactional
   @IgrpCommandHandler
   public ResponseEntity<String> handle(UnAssignProcessDefinitionCommand command) {
-    LOGGER.info("Unassigning process definition [{}]", command.getId());
+    LOGGER.debug("Unassigning process definition [{}]", command.getId());
     processDeploymentService.unAssignProcessDefinition(
         command.getId(),
         command.getAssignprocessdto().getCandidateGroups()

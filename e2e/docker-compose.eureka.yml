@@ -1,0 +1,26 @@
+# Overlay: turns Eureka ON to exercise the guava-dependent netflix client path
+# (eureka-client -> netflix-eventbus/infix compiled against guava 14, now forced to 33.x).
+# Usage: docker compose -p irn-e2e -f docker-compose.e2e.yml -f docker-compose.eureka.yml up -d
+# Revert: docker compose -p irn-e2e -f docker-compose.e2e.yml up -d --force-recreate mgmt-api studio-api && docker rm -f irn-e2e-eureka-1
+services:
+
+  eureka:
+    image: steeltoeoss/eureka-server
+    ports:
+      - "18761:8761"
+
+  mgmt-api:
+    depends_on:
+      eureka:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_ENABLED: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
+
+  studio-api:
+    depends_on:
+      eureka:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_ENABLED: "true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/

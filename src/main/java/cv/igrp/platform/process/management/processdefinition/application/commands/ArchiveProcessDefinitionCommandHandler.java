@@ -24,7 +24,7 @@ public class ArchiveProcessDefinitionCommandHandler implements CommandHandler<Ar
   @Transactional
   @IgrpCommandHandler
   public ResponseEntity<String> handle(ArchiveProcessDefinitionCommand command) {
-    LOGGER.info("Archiving process definition [{}]", command.getId());
+    LOGGER.debug("Archiving process definition [{}]", command.getId());
     processDeploymentService.archiveProcess(command.getId());
     LOGGER.info("Process definition [{}] archived", command.getId());
     return ResponseEntity.status(204).build();

@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstance;
 import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRule;
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundRequestGuard;
 import cv.igrp.platform.process.management.processruntime.domain.repository.ProcessInstanceRepository;
 import cv.igrp.platform.process.management.processruntime.domain.repository.TaskAssignmentRuleRepository;
 import cv.igrp.platform.process.management.shared.application.constants.TaskAssignmentMode;
@@ -38,14 +39,18 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
   private final TaskAssignmentRuleRepository taskAssignmentRuleRepository;
   private final ProcessInstanceRepository processInstanceRepository;
 
+  private final OutboundRequestGuard guard;
+
   public IgrpExternalUserAssignmentDelegate(
       RestClient restClient,
       TaskAssignmentRuleRepository taskAssignmentRuleRepository,
-      ProcessInstanceRepository processInstanceRepository
+      ProcessInstanceRepository processInstanceRepository,
+      OutboundRequestGuard guard
   ) {
     this.restClient = restClient;
     this.taskAssignmentRuleRepository = taskAssignmentRuleRepository;
     this.processInstanceRepository = processInstanceRepository;
+    this.guard = guard;
   }
 
   @Value(value = "${igrp.delegate.webhook.auth-token:}")
@@ -67,7 +72,7 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
     String processDefinitionId = execution.getProcessDefinitionId();
     String businessKey = execution.getProcessInstanceBusinessKey();
 
-    log.info("[ExternalUserAssignment] Executing task: {} from process instance: {} (businessKey: {})",
+    log.debug("[ExternalUserAssignment] Executing task: {} from process instance: {} (businessKey: {})",
         taskId, engineProcessInstanceId, businessKey);
 
     ProcessInstance processInstance = processInstanceRepository.findByBusinessKey(businessKey)
@@ -75,7 +80,7 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
             "No process instance found for businessKey: " + businessKey));
     Identifier processInstanceId = processInstance.getId();
 
-    log.info("[ExternalUserAssignment] Resolved application processInstanceId: {} from businessKey: {}",
+    log.debug("[ExternalUserAssignment] Resolved application processInstanceId: {} from businessKey: {}",
         processInstanceId.getValue(), businessKey);
 
     String url = resolveField(execution, "apiUrl", apiUrl);
@@ -134,8 +139,8 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
 
     Integer priority = extractPriority(responseBody, priorityPath);
 
-    log.info("[ExternalUserAssignment] Resolved user identifier: {} (priority: {}) for target task: {}",
-        userIdentifier, priority, targetTask);
+    log.debug("[ExternalUserAssignment] Resolved user identifier for target task: {} (priority: {})",
+        targetTask, priority);
 
     String processDefinitionKey = extractProcessDefinitionKey(processDefinitionId);
 
@@ -157,8 +162,8 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
           Set.of(),
           priority
       );
-      log.info("[ExternalUserAssignment] Updated existing rule: id={}, assignee={}, priority={}",
-          updatableRule.get().getId().getValue(), userIdentifier, priority);
+      log.info("[ExternalUserAssignment] Updated existing rule: id={}, priority={}",
+          updatableRule.get().getId().getValue(), priority);
     } else {
       taskAssignmentRuleRepository.save(TaskAssignmentRule.builder()
           .processDefinitionKey(Code.create(processDefinitionKey))
@@ -171,8 +176,8 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
           .active(true)
           .build()
       );
-      log.info("[ExternalUserAssignment] Created new rule: processInstance={}, targetTask={}, assignee={}, mode={}, priority={}",
-          processInstanceId.getValue(), targetTask, userIdentifier, mode, priority);
+      log.info("[ExternalUserAssignment] Created new rule: processInstance={}, targetTask={}, mode={}, priority={}",
+          processInstanceId.getValue(), targetTask, mode, priority);
     }
 
     if (outputVar != null && !outputVar.isBlank()) {
@@ -183,13 +188,14 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
 
   private String callApi(DelegateExecution execution, String taskId, String url, String method, String payload) {
     try {
+      url = guard.validate(url);
       HttpHeaders headers = new HttpHeaders();
       headers.setContentType(MediaType.APPLICATION_JSON);
       if (globalAuthToken != null && !globalAuthToken.isEmpty()) {
         headers.set("Authorization", "Bearer " + globalAuthToken);
       }
 
-      log.info("[ExternalUserAssignment] Sending {} request to {}", method, url);
+      log.debug("[ExternalUserAssignment] Sending {} request to {}", method, url);
 
       var response = switch (method) {
         case "GET" -> restClient.get()
@@ -217,11 +223,11 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
         default -> throw new IllegalArgumentException("Unsupported apiMethod: " + method);
       };
 
-      log.info("[ExternalUserAssignment] Response {}: {}", response.getStatusCode().value(), response.getBody());
+      log.debug("[ExternalUserAssignment] Response {} ({} chars)", response.getStatusCode().value(), response.getBody() != null ? response.getBody().length() : 0);
       return response.getBody();
 
     } catch (RestClientResponseException e) {
-      log.error("[ExternalUserAssignment] API returned error {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
+      log.error("[ExternalUserAssignment] API returned error {} ({} chars)", e.getStatusCode().value(), e.getResponseBodyAsString() != null ? e.getResponseBodyAsString().length() : 0);
       execution.setTransientVariable(taskId + "Error", "API error " + e.getStatusCode().value() + ": " + e.getResponseBodyAsString());
       return null;
     } catch (Exception e) {

@@ -44,11 +44,11 @@ public abstract class AbstractStartProcessConsumer {
 
     var message = record.value();
 
-    LOGGER.info("Received message: {}", message);
+    LOGGER.debug("Received start-process message ({} chars)", message != null ? message.length() : 0);
 
     StartProcessDTO dto = parseMessage(message);
     if (dto == null) {
-      LOGGER.warn("Ignored invalid message: {}", message);
+      LOGGER.warn("Ignored invalid start-process message ({} chars)", message != null ? message.length() : 0);
       return;
     }
 

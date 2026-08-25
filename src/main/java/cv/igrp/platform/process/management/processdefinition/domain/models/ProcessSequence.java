@@ -132,7 +132,7 @@ public class ProcessSequence {
 
   private String generateNumber(Long currentNumber) {
 
-    LOGGER.info("Generation of process sequence has been started...");
+    LOGGER.debug("Generation of process sequence started");
 
     StringBuilder sb = new StringBuilder();
 
@@ -168,7 +168,7 @@ public class ProcessSequence {
 
     var sequence = sb.toString();
 
-    LOGGER.info("Generation of process sequence has been successfully finished. RESULT [{}]", sequence);
+    LOGGER.debug("Generation of process sequence finished");
 
     return sequence;
   }
