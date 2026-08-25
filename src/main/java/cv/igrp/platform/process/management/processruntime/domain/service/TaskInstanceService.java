@@ -40,6 +40,13 @@ public class TaskInstanceService {
 
   private final UserContext userContext;
 
+  /**
+   * Permissions that grant searching every task (any-of). Configurable because the capability is
+   * granted under whichever IRN module code the deployment created for it — several codes may all
+   * mean "see all tasks". Defaults to our own {@code TASK_INSTANCES:pesquisar_todos}.
+   */
+  private final List<String> taskSearchAllPermissions;
+
   public TaskInstanceService(TaskInstanceRepository taskInstanceRepository,
                              TaskInstanceEventRepository taskInstanceEventRepository,
                              TaskAssignmentRuleRepository taskAssignmentRuleRepository,
@@ -47,7 +54,11 @@ public class TaskInstanceService {
                              ProcessInstanceRepository processInstanceRepository,
                              ProcessDefinitionRepository processDefinitionRepository,
                              UserProfileRepository userProfileRepository,
-                             UserContext userContext
+                             UserContext userContext,
+                             @org.springframework.beans.factory.annotation.Value(
+                                 "${igrp.authorization.task-search-all-permissions:"
+                                     + IgrpAuthorizationConstants.TASK_INSTANCES_SEARCH_ALL + "}")
+                             List<String> taskSearchAllPermissions
   ) {
 
     this.taskInstanceRepository = taskInstanceRepository;
@@ -58,6 +69,10 @@ public class TaskInstanceService {
     this.processDefinitionRepository = processDefinitionRepository;
     this.userProfileRepository = userProfileRepository;
     this.userContext = userContext;
+    // null/empty (e.g. @InjectMocks in tests) falls back to the canonical permission
+    this.taskSearchAllPermissions = (taskSearchAllPermissions == null || taskSearchAllPermissions.isEmpty())
+        ? List.of(IgrpAuthorizationConstants.TASK_INSTANCES_SEARCH_ALL)
+        : taskSearchAllPermissions;
   }
 
 
@@ -244,15 +259,15 @@ public class TaskInstanceService {
   /**
    * Searches task instances, scoped to what the caller is allowed to see.
    *
-   * <p>Callers without {@link IgrpAuthorizationConstants#TASK_INSTANCES_SEARCH_ALL} only ever see their
-   * own tasks and their groups', regardless of the {@code filterByCurrentUser}, {@code user},
+   * <p>Callers without any of {@code igrp.authorization.task-search-all-permissions} only ever see
+   * their own tasks and their groups', regardless of the {@code filterByCurrentUser}, {@code user},
    * {@code candidateUsers} and {@code candidateGroups} values sent in the request. This is the single
    * choke point both the general search and the "my tasks" search go through.
    */
   public PageableLista<TaskInstance> getAllTaskInstances(TaskInstanceFilter filter) {
 
     final var canSearchAll = userContext.isSuperAdmin()
-        || userContext.hasPermission(IgrpAuthorizationConstants.TASK_INSTANCES_SEARCH_ALL);
+        || taskSearchAllPermissions.stream().anyMatch(userContext::hasPermission);
 
     if (!canSearchAll) {
       filter.restrictToCurrentUser(userContext.getCurrentUser(), userContext.getCurrentGroups());

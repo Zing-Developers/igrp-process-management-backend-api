@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstance;
 import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRule;
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundRequestGuard;
 import cv.igrp.platform.process.management.processruntime.domain.repository.ProcessInstanceRepository;
 import cv.igrp.platform.process.management.processruntime.domain.repository.TaskAssignmentRuleRepository;
 import cv.igrp.platform.process.management.shared.application.constants.TaskAssignmentMode;
@@ -38,14 +39,18 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
   private final TaskAssignmentRuleRepository taskAssignmentRuleRepository;
   private final ProcessInstanceRepository processInstanceRepository;
 
+  private final OutboundRequestGuard guard;
+
   public IgrpExternalUserAssignmentDelegate(
       RestClient restClient,
       TaskAssignmentRuleRepository taskAssignmentRuleRepository,
-      ProcessInstanceRepository processInstanceRepository
+      ProcessInstanceRepository processInstanceRepository,
+      OutboundRequestGuard guard
   ) {
     this.restClient = restClient;
     this.taskAssignmentRuleRepository = taskAssignmentRuleRepository;
     this.processInstanceRepository = processInstanceRepository;
+    this.guard = guard;
   }
 
   @Value(value = "${igrp.delegate.webhook.auth-token:}")
@@ -183,6 +188,7 @@ public class IgrpExternalUserAssignmentDelegate implements JavaDelegate {
 
   private String callApi(DelegateExecution execution, String taskId, String url, String method, String payload) {
     try {
+      url = guard.validate(url);
       HttpHeaders headers = new HttpHeaders();
       headers.setContentType(MediaType.APPLICATION_JSON);
       if (globalAuthToken != null && !globalAuthToken.isEmpty()) {

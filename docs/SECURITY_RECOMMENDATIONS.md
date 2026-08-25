@@ -1,28 +1,30 @@
 # Security Recommendations
 
 Reviewed on 2026-06-02 for the iGRP Platform Process Management API.
+**Status updated 2026-08-24** after the security-hardening branch (route authorization, log hygiene,
+CVE remediation — see docs/CHANGELOG.md). DONE items reference the closing work.
 
 This is a static project review. Validate every recommendation against the target production environment, identity provider, deployment platform, and data-classification rules.
 
 ## Priority Summary
 
-| Priority | Area | Recommendation |
-| --- | --- | --- |
-| P0 | JWT decoder | Fail startup when the OIDC provider is unreachable instead of silently disabling JWT validation. |
-| P0 | CORS | Restrict allowed origins and avoid credentials with wildcard origins. |
-| P0 | Message consumers | Do not process unauthenticated broker messages as admin/system by default. |
-| P0 | Task/process access | Enforce authorization on task search, claim, assign, complete, import, deploy, and admin-style operations. |
-| P0 | Webhooks | Add SSRF protections, host allowlists, HTTPS enforcement, timeouts, and response-size limits. |
-| P1 | Secrets | Remove default secrets and use Kubernetes/Docker secrets or a vault. |
-| P1 | Logging/errors | Stop logging sensitive payloads and sanitize ProblemDetail responses. |
-| P1 | Error responses | Do not return internal exception messages, PSQL details, or parser internals to API clients. |
-| P1 | Dependencies/images | Align security dependency versions with the Spring Boot BOM and scan dependencies/images. |
-| P1 | Transport security | Require TLS for ingress, Kafka, webhooks, IAM calls, and mail where applicable. |
-| P1 | Kafka transport | Default Kafka security protocol to SASL_SSL instead of PLAINTEXT. |
-| P2 | Profile defaults | Default active profile to production instead of development to prevent accidental ddl-auto=update and show-sql in production. |
-| P2 | Swagger/actuator | Keep docs and operational endpoints disabled or protected outside development. |
-| P2 | Input limits | Add strict validation for variable filters, JSON payload size, dates, enum values, and webhook headers. |
-| P2 | Dockerfile | Pin container image tags, review keystore password usage, and run as non-root. |
+| Priority | Area | Recommendation | Estado 2026-08 |
+| --- | --- | --- | --- |
+| P0 | JWT decoder | Fail startup when the OIDC provider is unreachable instead of silently disabling JWT validation. | **FEITO** — try/catch removido; arranque falha se o OIDC estiver inacessível |
+| P0 | CORS | Restrict allowed origins and avoid credentials with wildcard origins. | **FEITO** — origins por `IGRP_CORS_ALLOWED_ORIGINS` (vazio = sem cross-origin); wildcard eliminado nas duas apps |
+| P0 | Message consumers | Do not process unauthenticated broker messages as admin/system by default. | **ABERTO** — system-bot ainda ganha ROLE_ACTIVITI_ADMIN |
+| P0 | Task/process access | Enforce authorization on task search, claim, assign, complete, import, deploy, and admin-style operations. | **FEITO** — autorização por permissões IRN + guard de visibilidade (SPEC_ROUTE_AUTHORIZATION.md) |
+| P0 | Webhooks | Add SSRF protections, host allowlists, HTTPS enforcement, timeouts, and response-size limits. | **FEITO** — OutboundRequestGuard: CIDRs privados/loopback/metadata/CGNAT/ULA sempre bloqueados, allowlist opcional (`igrp.delegate.outbound.*`), https obrigatório fora de dev, headers de credenciais filtrados, respostas limitadas a 1MB, redirects desativados no client; `$[VAR]` restrito a allowlist (`allowed-env-vars`, default `IGRP_WEBHOOK_*`) contra exfiltração de segredos; header de credencial só passa se o valor vier de um `$[VAR]` allowlisted, nunca literal |
+| P1 | Secrets | Remove default secrets and use Kubernetes/Docker secrets or a vault. | **FEITO (código)** — default do token removido; placeholder forte no .env.example; vault/Secrets é prática de deployment |
+| P1 | Logging/errors | Stop logging sensitive payloads and sanitize ProblemDetail responses. | **FEITO** — logs PII-estritos + ProblemDetail saneado |
+| P1 | Error responses | Do not return internal exception messages, PSQL details, or parser internals to API clients. | **FEITO** — NPE/ISE/PSQL/parser genéricos (log servidor); IAE e exceções de engine mantêm mensagens de negócio deliberadamente |
+| P1 | Dependencies/images | Align security dependency versions with the Spring Boot BOM and scan dependencies/images. | **FEITO** — pin 6.3.7 removido, 51 CVEs Accenture, gate OWASP CVSS ≥ 7 |
+| P1 | Transport security | Require TLS for ingress, Kafka, webhooks, IAM calls, and mail where applicable. | **ABERTO** |
+| P1 | Kafka transport | Default Kafka security protocol to SASL_SSL instead of PLAINTEXT. | **ABERTO** — default continua PLAINTEXT |
+| P2 | Profile defaults | Default active profile to production instead of development to prevent accidental ddl-auto=update and show-sql in production. | **FEITO** — default production nas duas apps |
+| P2 | Swagger/actuator | Keep docs and operational endpoints disabled or protected outside development. | **FEITO** — staging default false; /actuator/prometheus coberto pelo denyAll do adapter IRN |
+| P2 | Input limits | Add strict validation for variable filters, JSON payload size, dates, enum values, and webhook headers. | **ABERTO** |
+| P2 | Dockerfile | Pin container image tags, review keystore password usage, and run as non-root. | **FEITO** — tags pinadas + USER 1001 non-root nas duas |
 
 ## Authentication And Authorization
 

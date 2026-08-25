@@ -1,5 +1,112 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-08 (c) · Autorização multi-frontend (framework 24.5)
+
+Vários frontends IRN (`FILA_TRABALHO`, `TASK_MANAGEMENT`, `MY_TASKS`, `AVAILABLE_TASKS`) frenteiam os
+mesmos `/tasks-instances/*`, cada um com o seu código de módulo e verbos, e o backend não os distingue.
+Como só os códigos dos frontends estão atribuídos aos perfis, gatear só pelo catálogo `TASK_INSTANCES:*`
+dava **403 a toda a gente**.
+
+- **`accept-also` por ação** — cada tier de rota passa a aceitar **qualquer de**: a permissão derivada
+  (`TASK_INSTANCES:acao`) **ou** as permissões IRN reais dos frontends. Novo campo
+  `ModuleRoutes.acceptAlso` + helper `authoritiesFor` no `process-runtime-auth-irn`; o `SecurityConfig`
+  não muda (o `anyAuthority` já é um `Set`). Config em `irn.authorization.routes.modules[*].accept-also.<acao>`.
+- **`pesquisar_todos` → lista configurável** — `igrp.authorization.task-search-all-permissions`
+  (any-of, default `TASK_INSTANCES:pesquisar_todos`), porque a mesma capacidade tem códigos diferentes
+  por módulo. `TaskInstanceService` concede se o utilizador tiver **qualquer** uma.
+- **Placeholders** — só `TASK_MANAGEMENT:ver` está confirmado; os restantes verbos entram por config
+  (uma linha, sem recompilar) quando saírem do System Administration.
+- **Retrocompatível** — sem `accept-also`, o comportamento é idêntico ao catálogo puro; quem já tem
+  `TASK_INSTANCES:*` continua a passar (híbrido).
+- **Preparado em todas as rotas** — os restantes módulos das duas apps (`AREAS`,
+  `PROCESS_DEFINITIONS`, `PROCESS_INSTANCES`, `ACTIVITIES`, `STUDIO_*`) já trazem as linhas
+  `accept-also.<ação>` comentadas, com botão de env var e TODO dos candidatos. Ativar noutra rota é
+  descomentar o tier e pôr o código real — sem código nem rebuild. Só o bloco de tarefas está ativo.
+
+**Validação:** unitários do adapter (retrocompat + any-of) verdes; management **305/305**; e2e ao vivo
+(`irn-e2e`): `sess-fila-trabalho` → search **200** / complete **403**, `sess-task-mgmt` → search **200**,
+`sess-mgmt-viewer` → search **200** (híbrido), `sess-none` → search **403**. Framework bump
+`0.1.0-beta.24.4` → `0.1.0-beta.24.5` nas duas apps.
+
+## 2026-08 (b) · Endurecimento de segurança (pós-24.4)
+
+Segunda vaga sobre a release 24.4, a fechar itens abertos do `docs/SECURITY_RECOMMENDATIONS.md`.
+Só configuração e código de app — **framework 24.4 mantém-se** (exceto o item residual assinalado no
+fim). Ver o novo estado na tabela de prioridades do `SECURITY_RECOMMENDATIONS.md` (Feito 11 · Aberto 3).
+
+### ⚠️ Breaking / mudanças de comportamento
+
+1. **CORS deixa de ser wildcard.** Sem `IGRP_CORS_ALLOWED_ORIGINS` definido, **nenhuma** origem
+   cross-origin é aceite (antes: qualquer origem, com credenciais). Frontends noutro domínio param de
+   funcionar até a origem ser listada. Ver guia DevOps §3.
+2. **Profile default passa a `production`.** Sem `SPRING_ACTIVE_PROFILE`, a app arranca em `production`
+   (antes: `development`, com `ddl-auto=update` e `show-sql`). Ambientes que dependiam do default de
+   desenvolvimento têm de o definir explicitamente.
+3. **OIDC inacessível no arranque = arranque falha.** O JWT decoder deixou de devolver um decoder que
+   rejeita tudo silenciosamente; se o Keycloak estiver em baixo ao arrancar, a app **não sobe** (usar
+   readiness probes). Falha visível em vez de degradação silenciosa.
+4. **Webhooks: destinos internos bloqueados.** Chamadas de saída dos delegates (webhook + assignment)
+   para loopback/IPs privados/metadata deixam de passar. Um webhook legítimo para um serviço interno
+   exige agora o host em `IGRP_OUTBOUND_ALLOWED_HOSTS`. HTTPS obrigatório fora de `development`.
+4b. **Referências `$[VAR]` restritas.** Um process definition só pode referenciar env vars da allowlist
+   (`IGRP_OUTBOUND_ALLOWED_ENV_VARS`, default `IGRP_WEBHOOK_*`). Processos que referenciam outras vars
+   (email, tópico, payload…) param com erro até a var ser adicionada à lista.
+5. **Imagens correm como não-root** (UID 1001) — volumes/paths montados têm de ser legíveis por esse UID.
+
+### Segurança — itens fechados
+
+- **SSRF nos webhooks (P0)** — `OutboundRequestGuard` em todos os delegates com URL vinda de variáveis
+  de processo: bloqueia loopback/RFC1918/link-local (incl. `169.254.169.254` metadata)/CGNAT/IPv6-ULA/
+  irresolúveis/`user:pass@`; allowlist opcional de hosts (`igrp.delegate.outbound.allowed-hosts`, exato
+  ou `*.sufixo`); HTTPS obrigatório fora de dev; respostas limitadas a 1MB; **redirects desativados** no
+  client (o factory Apache seguia-os por default — um destino público podia 302 para o espaço bloqueado).
+- **Exfiltração de segredos via `$[VAR]` (P0, mesmo bloco)** — a resolução de `$[VAR]` do `EnvVarUtil`
+  referenciava **qualquer** env var; um autor de processo com deploy podia mandar `$[POSTGRES_PASSWORD]`
+  ou `$[KEYCLOAK_CLIENT_SECRET]` para um host público (o guard de SSRF só bloqueia destinos internos).
+  Agora restrita a uma allowlist (`igrp.delegate.outbound.allowed-env-vars`, exato ou `PREFIX*`, default
+  `IGRP_WEBHOOK_*`), imposta no `EnvVarUtil` — cobre **todos** os delegates (webhook, mail, parse,
+  message). Referenciar var fora da lista falha com erro claro.
+- **Headers de credencial por proveniência** — em vez de bloquear `Authorization`/`Cookie`/`Proxy-*`/
+  `X-Forwarded-*` pelo nome (o que também partia o padrão legítimo `Authorization: Bearer $[IGRP_WEBHOOK_…]`),
+  o filtro passou a julgar a **origem do valor**: um header de credencial só passa se o valor for
+  `[esquema] $[VAR-allowlisted]` — segredo do servidor, nunca um literal do processo. Literais e
+  variáveis não-allowlisted continuam a cair. 5 testes novos (3 de proveniência + 2 de allowlist).
+- **JWT decoder fail-closed (P0)** — try/catch removido; arranque falha se o OIDC estiver inacessível.
+- **CORS restrito (P0)** — origens por `IGRP_CORS_ALLOWED_ORIGINS`; vazio = sem cross-origin; wildcard
+  eliminado nas duas apps.
+- **Erros saneados (P1)** — `GlobalExceptionHandler`: NPE/IllegalState/PSQL/Jackson só no log do
+  servidor; `IllegalArgument` e exceções de engine mantêm as mensagens de negócio (o frontend depende).
+- **Segredos (P1)** — default público `delegate-secret-token` removido; password de exemplo → placeholder.
+- **Fuga do OpenAPI (P2)** — `springdoc.api-docs.enabled` amarrado ao `ENABLE_SWAGGER`: o `/v3/api-docs`
+  deixou de servir o contrato completo anonimamente em staging (e em production no Studio). O toggle de UI
+  sozinho não o cobria — **achado do deep test**.
+- **Defaults seguros (P2)** — profile `production`, swagger staging `false`, `USER 1001` non-root nos 2
+  Dockerfiles.
+
+### Validação
+
+- Testes: management **305/305** (guard SSRF + proveniência de headers + allowlist de env vars).
+- Deep test (Docker, 35 verificações, 5 perfis): fail-closed provado com container de issuer inválido
+  (morre em ~4s), CORS nos dois sentidos, imagem non-root com build **real contra o Nexus** (`id -un` →
+  `appuser`), erros saneados com corpos como evidência, matriz de autorização intacta.
+
+### Residual (framework, tarefa separada)
+
+Com `igrp.restclient.provider=irn`, os delegates usam o RestClient **assinado**, cujo interceptor anexa o
+token RS256 da plataforma a **todos** os pedidos — incluindo webhooks para terceiros. A validação de URL
+aplica-se na mesma (o guard vive nos delegates), mas a separação do cliente assinado é uma correção do
+monorepo (prevista para 24.5).
+
+### Ficheiros
+
+**Management** (`features/security-harding`): `7e1906e` (quick-wins), `439f9ef` (fuga api-docs),
+`70fa329` (SSRF), `e944fc9` (allowlist de env vars + proveniência). Novos:
+`shared/delegates/outbound/{OutboundRequestGuard,OutboundGuardProperties,EnvVarAllowlistConfigurer}.java`
++ testes; `e2e/docker-compose.deeptest.yml`.
+**Studio** (`feacture/security-harding`): `4bc8280` (quick-wins), `e1cb759` (fuga api-docs).
+
+---
+
 ## 2026-08 · Autorização IRN + Remediação CVE
 
 **Framework:** `cv.igrp.framework:*` **0.1.0-beta.24.4** (publicado no Nexus `igrp-framework-releases`)

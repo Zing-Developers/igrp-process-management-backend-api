@@ -5,7 +5,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 @Configuration
@@ -17,16 +16,15 @@ public class JwtDecoderConfiguration {
   /**
    * Defines a default JwtDecoder bean if one is not already configured.
    */
+  /**
+   * Fails startup when the OIDC provider is unreachable. The previous catch-all returned a decoder
+   * that rejected every token until restart — a silent, unalertable outage
+   * (SECURITY_RECOMMENDATIONS P0). Readiness probes handle the not-ready window.
+   */
   @Bean
   @ConditionalOnMissingBean(JwtDecoder.class)
   public JwtDecoder jwtDecoder() {
-    try{
-      return NimbusJwtDecoder.withIssuerLocation(url).build();
-    }catch (Exception e){
-      return token -> {
-        throw new JwtException("JWT validation temporarily disabled (Keycloak unavailable)");
-      };
-    }
+    return NimbusJwtDecoder.withIssuerLocation(url).build();
   }
 
 }
