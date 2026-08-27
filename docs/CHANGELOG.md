@@ -1,5 +1,30 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-08 (d) · Autorização machine-to-machine (framework 24.6)
+
+Um backend externo (job) chamava a API com token Keycloak válido mas sem sessão IRN — o `/Auth/me`
+devolvia 401 e a autorização falhava. Desenho revisto em painel (segurança + arquitetura + boas
+práticas Spring); ver `docs/SPEC_M2M_AUTHORIZATION.md`.
+
+- **API keys M2M de credencial única** — `Authorization: Bearer igrpm2m_<32B>`, emitidas por nós.
+  Roteamento por prefixo no `authenticationManagerResolver` do resource server: `igrpm2m_` → introspector
+  opaco (SPI `M2mKeyResolver` no `process-runtime-auth-core`, lookup por HMAC-SHA-256+pepper na BD);
+  resto → caminho JWT+sessão intocado. Sem filtro custom; 401 idênticos aos de JWT.
+- **Principal `m2m:<client>`** — sempre distinguível de humanos na auditoria/`createdBy`; email é só
+  metadado de contacto. `ROLE_ACTIVITI_USER` auto-concedida (o motor exige-a); nunca ADMIN.
+- **Anti-escalada** — permissões validadas (`MODULO:acao`, rejeição de `ROLE_*`) na criação e na
+  resolução; rotas `/m2m-keys/**` com gate dedicado (JWT super-admin only) — uma key nunca cunha keys.
+- **Gestão completa** nas duas apps (mgmt V7, Studio V2 + baseline flyway): `POST` (plaintext uma vez),
+  `GET` (sem segredos), `DELETE` (revogação em runtime, sem restart), `POST /{id}/rotate` (grace
+  `IGRP_M2M_ROTATE_GRACE`, default 7d). Pepper por `IGRP_M2M_KEY_PEPPER` — **obrigatório em produção**.
+- **Fail closed** — key desconhecida/revogada/expirada ou BD em baixo → 401; `last_used_at` best-effort
+  fora do caminho de auth.
+
+**Validação:** framework 4/4 · mgmt **309/309** · studio 18/19 (falha pré-existente). E2e ao vivo:
+criar key → search **200** sem sessão IRN · fora da permissão **403** · key em `/m2m-keys` **403** ·
+key falsa **401** · JWT normal **200** · revogar → **401**. Verificado também via Swagger UI no browser
+(Authorize com a key → Execute → 200).
+
 ## 2026-08 (c) · Autorização multi-frontend (framework 24.5)
 
 Vários frontends IRN (`FILA_TRABALHO`, `TASK_MANAGEMENT`, `MY_TASKS`, `AVAILABLE_TASKS`) frenteiam os

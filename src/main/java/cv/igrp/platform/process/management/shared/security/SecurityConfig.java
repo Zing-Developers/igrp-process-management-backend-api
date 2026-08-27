@@ -2,6 +2,9 @@ package cv.igrp.platform.process.management.shared.security;
 
 import cv.igrp.framework.process.runtime.auth.core.adapter.IAuthorizationServiceAdapter;
 import cv.igrp.framework.process.runtime.auth.core.adapter.IRouteAuthorizationAdapter;
+import cv.igrp.framework.process.runtime.auth.core.m2m.M2mAuthenticationManagers;
+import cv.igrp.framework.process.runtime.auth.core.m2m.M2mKeyResolver;
+import cv.igrp.framework.process.runtime.auth.core.m2m.M2mOpaqueTokenIntrospector;
 import cv.igrp.platform.process.management.shared.security.util.ActivitiConstants;
 import cv.igrp.platform.process.management.shared.security.util.IgrpAuthorizationConstants;
 import jakarta.servlet.DispatcherType;
@@ -26,9 +29,14 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
 import org.springframework.security.oauth2.client.TokenExchangeOAuth2AuthorizedClientProvider;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -68,7 +76,10 @@ public class SecurityConfig {
   }
 
   @Bean
-  public SecurityFilterChain securityFilterChain(HttpSecurity http, IAMUserProfileSyncFilter iamUserProfileSyncFilter) throws Exception {
+  public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                 IAMUserProfileSyncFilter iamUserProfileSyncFilter,
+                                                 JwtDecoder jwtDecoder,
+                                                 M2mKeyResolver m2mKeyResolver) throws Exception {
 
     http.cors(cors -> cors.configurationSource(request -> {
       // No configured origins = no CORS headers at all: cross-origin browser calls are refused.
@@ -92,9 +103,19 @@ public class SecurityConfig {
       return configuration;
     }));
 
-    // Configure OAuth2 Resource Server to use JWT tokens for authentication
+    // Resource server with two bearer shapes on one Authorization header
+    // (docs/SPEC_M2M_AUTHORIZATION.md): "Bearer igrpm2m_…" goes to the opaque M2M introspector
+    // (key resolved against our own store, principal m2m:<client>, MODULE:action authorities);
+    // anything else takes the JWT path exactly as before. ROLE_ACTIVITI_USER is auto-granted to M2M
+    // principals because the engine requires it — mirroring the JWT converter — and never the admin
+    // role (M-16).
+    final var jwtProvider = new JwtAuthenticationProvider(jwtDecoder);
+    jwtProvider.setJwtAuthenticationConverter(jwtAuthenticationConverter());
+    final var m2mIntrospector = new M2mOpaqueTokenIntrospector(m2mKeyResolver,
+        Set.of(ROLE_PREFIX + ActivitiConstants.ROLE_ACTIVITI_USER));
     http.oauth2ResourceServer((oauth2ResourceServer) -> oauth2ResourceServer
-        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+        .authenticationManagerResolver(
+            M2mAuthenticationManagers.m2mAware(new ProviderManager(jwtProvider), m2mIntrospector))
     );
 
     // Configure authorization rules and policy enforcement.
@@ -111,6 +132,18 @@ public class SecurityConfig {
               "/swagger-resources/**", "/webjars/**",
               "/actuator/health", "/actuator/health/**"
           ).permitAll();
+
+          // M2M key management is security plumbing, not a business route: a dedicated gate, never
+          // the catalogue (an IRN-provisionable M2MKEYS:* permission would let a non-super-admin — or
+          // a key — mint keys). Requires a human JWT super-admin: an M2M key can never satisfy this,
+          // whatever authorities it carries (SPEC_M2M_AUTHORIZATION.md M-12).
+          authorize.requestMatchers("/m2m-keys/**").access((authenticationSupplier, context) -> {
+            final var authentication = authenticationSupplier.get();
+            final var superAdmin = ROLE_PREFIX + IgrpAuthorizationConstants.SUPER_ADMIN_ROLE;
+            return new AuthorizationDecision(authentication instanceof JwtAuthenticationToken
+                && authentication.getAuthorities().stream()
+                    .anyMatch(a -> superAdmin.equals(a.getAuthority())));
+          });
 
           routeAuthorization.getRules().forEach(rule -> {
             var matcher = rule.method() == null
