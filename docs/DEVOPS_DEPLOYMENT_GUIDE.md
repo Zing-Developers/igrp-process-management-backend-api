@@ -1,4 +1,4 @@
-# Guia de Instalação DevOps — Release 24.5 (Autorização IRN + CVE)
+# Guia de Instalação DevOps — Release 24.6 (Autorização IRN + CVE)
 
 Aplica-se à **management API** e ao **Studio API**. A ordem das secções é a ordem de execução —
 o passo 1 é pré-requisito de tudo: sem ele, o deploy resulta em 403 generalizado.
@@ -84,6 +84,8 @@ Iguais nas duas apps salvo indicação. Referência viva: `.env.example` de cada
 | `IRN_TASKS_ACCEPT_WRITE` | vazio | idem para **operar** (claim/complete/assign…). Vazio = só quem tiver `TASK_INSTANCES:criar`. Preencher com os verbos de operar de cada frontend quando existirem |
 | `IGRP_TASK_SEARCH_ALL_PERMISSIONS` | `TASK_INSTANCES:pesquisar_todos` (default) | **management API, 24.5**: lista any-of que concede ver as tarefas de todos. Apontar aos códigos reais de supervisão dos módulos |
 | `IGRP_PROCESS_ENGINE_BASE_URL` | URL da **management API** | **Studio API**: motor a que o Studio faz deploy. Vazio = cliente *mock* (deploy não chega a motor real — só dev). O Studio reencaminha o Bearer do utilizador; o motor reaplica `PROCESS_DEFINITIONS:publicar` |
+| `IGRP_M2M_KEY_PEPPER` | segredo forte (secret manager) | **24.6, as duas apps — OBRIGATÓRIO em produção**: chaveia o HMAC dos hashes das API keys M2M; sem ele um dump da tabela expõe hashes não-apimentados. Mudá-lo invalida todas as keys existentes |
+| `IGRP_M2M_ROTATE_GRACE` | `7d` (default) | quanto tempo a key antiga sobrevive após um `rotate` antes de expirar sozinha |
 | `IGRP_SECURITY_PRINCIPAL_CLAIM_NAME` | **`email`** em IRN (default `sub`) | identidade gravada em tarefas, colunas de auditoria e logs. Tem de bater com o formato das atribuições — o IRN atribui por email, senão o match "minhas tarefas" falha. Igual nas duas apps; decidir **antes** do go-live (mudar com dados existentes deixa tarefas antigas órfãs no match). Exige o scope `email` no token Keycloak. |
 | `MANAGEMENT_HEALTH_MAIL_ENABLED` | `false` se não houver SMTP | **management API**: sem SMTP o `MailHealthIndicator` põe `/actuator/health` a 503 e mata os probes do k8s |
 | `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` | URL do Eureka | se service discovery ativo |
@@ -141,7 +143,7 @@ precedência do Spring Boot, do mais forte ao mais fraco:
 
 ## 4. Build e deploy
 
-- O framework **0.1.0-beta.24.5** está publicado no Nexus (`igrp-framework-releases`) — os `docker build`
+- O framework **0.1.0-beta.24.6** está publicado no Nexus (`igrp-framework-releases`) — os `docker build`
   resolvem-no de lá, sem `~/.m2` local. (A 24.5 acrescenta o `accept-also` multi-frontend; sem config
   nova é idêntica à 24.4.)
 - **Runtime Java 25 obrigatório** nas duas apps (bytecode do framework). Dockerfiles já pinados:
