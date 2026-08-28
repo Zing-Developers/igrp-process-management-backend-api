@@ -58,7 +58,7 @@ Content-Type: application/json
 > O utilizador de auditoria segue o **padrão da plataforma** (igual ao `userProfileStartedBy` das
 > tarefas): `createdBy` é a string crua do principal, e `userProfileCreatedBy` é o perfil IAM
 > enriquecido — **pode ser `null`** quando não há perfil correspondente; nesse caso o UI mostra a
-> string crua. (No backend do **Studio** não há store de perfis: só vem `createdBy`.)
+> string crua. Vale para **os dois backends** — o Studio tem o seu próprio store de perfis IAM, sincronizado dos claims do JWT, por isso a resposta tem a mesma forma nas duas consolas.
 
 > **`key` é o plaintext e só existe nesta resposta.** O backend guarda apenas o hash — não há
 > endpoint para o reler. Ver as regras de UX (§4).
