@@ -63,4 +63,8 @@ public class M2mApiKeyEntity {
   @Column(name = "revoked_at")
   private Instant revokedAt;
 
+  /** Audit: the principal that revoked the key (null while active). */
+  @Column(name = "revoked_by")
+  private String revokedBy;
+
 }

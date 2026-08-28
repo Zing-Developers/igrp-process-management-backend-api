@@ -41,9 +41,24 @@ Content-Type: application/json
 {
   "id": "e7824b29-e028-4e4a-a5df-c5f9bb038a35",
   "clientName": "fila-trabalho-job",
-  "key": "igrpm2m_Bq9_SEVSfIck3VfiGz55UiXxBsLkgth-d-FsuYQX6ZM"
+  "key": "igrpm2m_Bq9_SEVSfIck3VfiGz55UiXxBsLkgth-d-FsuYQX6ZM",
+  "createdBy": "admin@nosi.cv",
+  "userProfileCreatedBy": {
+    "id": "739e1518-06a1-4034-b11c-d59550a6604e",
+    "username": "admin",
+    "email": "admin@nosi.cv",
+    "firstName": "Ana",
+    "lastName": "Admin",
+    "fullName": "Ana Admin",
+    "sub": "739e1518-…"
+  }
 }
 ```
+
+> O utilizador de auditoria segue o **padrão da plataforma** (igual ao `userProfileStartedBy` das
+> tarefas): `createdBy` é a string crua do principal, e `userProfileCreatedBy` é o perfil IAM
+> enriquecido — **pode ser `null`** quando não há perfil correspondente; nesse caso o UI mostra a
+> string crua. (No backend do **Studio** não há store de perfis: só vem `createdBy`.)
 
 > **`key` é o plaintext e só existe nesta resposta.** O backend guarda apenas o hash — não há
 > endpoint para o reler. Ver as regras de UX (§4).
@@ -71,8 +86,12 @@ GET /m2m-keys
   "active": true,
   "expiresAt": null,                              // pode ser null
   "createdAt": "2026-08-27T19:05:00Z",
+  "createdBy": "admin@nosi.cv",                   // utilizador de auditoria (string crua)
+  "userProfileCreatedBy": { "username": "admin", "email": "admin@nosi.cv", "fullName": "Ana Admin", "…": "…" }, // perfil enriquecido; pode ser null
   "lastUsedAt": "2026-08-27T19:40:00Z",           // pode ser null (nunca usada)
-  "revokedAt": null
+  "revokedAt": null,                              // quando revogada: timestamp
+  "revokedBy": null,                              // quando revogada: principal de quem revogou
+  "userProfileRevokedBy": null                    // idem, perfil enriquecido (pode ser null mesmo revogada)
 }]
 ```
 
@@ -90,6 +109,10 @@ DELETE /m2m-keys/{id}
 **204 No Content.** Efeito **imediato** — o próximo pedido com essa chave recebe 401. Sem undo.
 **400** com `{"error":…}` se o id não existir.
 
+Auditoria: o backend grava **quem** revogou (o principal do super-admin autenticado); aparece na
+listagem como `revokedBy` + `userProfileRevokedBy`. O UI da chave revogada deve mostrar
+"revogada a *data* por *utilizador*".
+
 ### 2.4 Rodar
 
 ```
@@ -99,10 +122,15 @@ POST /m2m-keys/{id}/rotate
 antiga ganha `expiresAt = agora + grace` (default **7 dias**, env `IGRP_M2M_ROTATE_GRACE`) e expira
 sozinha. O UI deve comunicar **os dois factos**: chave nova + data em que a antiga morre.
 
+Auditoria: quem rodou fica registado como o `createdBy`/`userProfileCreatedBy` da chave **nova**
+(não há campo próprio na antiga — a cadeia reconstrói-se por cliente + timestamps).
+
 ## 3. Ecrãs (ver o protótipo)
 
 1. **Lista** — tabela: cliente (+email como sublinha), `keyPrefix…`, permissões em chips, pill de
-   estado, criada, último uso, ações *Rodar*/*Revogar* (desativadas em chaves mortas). Botão
+   estado, criada (**+ "por *utilizador*"** como sublinha — usar `userProfileCreatedBy.fullName` com
+   fallback para a string `createdBy`), último uso, ações *Rodar*/*Revogar* (desativadas em chaves
+   mortas). Chave revogada mostra **"revogada por *utilizador*"** junto do estado. Botão
    **+ Nova chave**. Se a app servir os dois backends, um seletor; senão, cada frontend mostra só o seu.
 2. **Criar** (modal) — nome (slug), permissões como *chip input* (Enter adiciona; validar formato no
    cliente **e** mostrar erros 400 do backend), email opcional, expiração opcional.

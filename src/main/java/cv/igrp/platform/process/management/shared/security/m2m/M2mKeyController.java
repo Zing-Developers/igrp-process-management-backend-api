@@ -1,5 +1,6 @@
 package cv.igrp.platform.process.management.shared.security.m2m;
 
+import cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -36,14 +37,16 @@ public class M2mKeyController {
   }
 
   public record CreateRequest(String clientName, List<String> permissions, String email, Instant expiresAt) { }
-  public record CreatedResponse(UUID id, String clientName, String key) { }
+  public record CreatedResponse(UUID id, String clientName, String key, String createdBy,
+                                UserProfileDTO userProfileCreatedBy) { }
 
   @PostMapping
   public ResponseEntity<CreatedResponse> create(@RequestBody CreateRequest request, Authentication authentication) {
     final var created = service.create(request.clientName(), request.permissions(), request.email(),
         request.expiresAt(), authentication.getName());
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(new CreatedResponse(created.id(), created.clientName(), created.plaintextKey()));
+        .body(new CreatedResponse(created.id(), created.clientName(), created.plaintextKey(),
+            created.createdBy(), created.userProfileCreatedBy()));
   }
 
   @GetMapping
@@ -52,8 +55,8 @@ public class M2mKeyController {
   }
 
   @DeleteMapping("/{id}")
-  public ResponseEntity<Void> revoke(@PathVariable UUID id) {
-    service.revoke(id);
+  public ResponseEntity<Void> revoke(@PathVariable UUID id, Authentication authentication) {
+    service.revoke(id, authentication.getName());
     return ResponseEntity.noContent().build();
   }
 
@@ -61,7 +64,8 @@ public class M2mKeyController {
   public ResponseEntity<CreatedResponse> rotate(@PathVariable UUID id, Authentication authentication) {
     final var created = service.rotate(id, authentication.getName());
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(new CreatedResponse(created.id(), created.clientName(), created.plaintextKey()));
+        .body(new CreatedResponse(created.id(), created.clientName(), created.plaintextKey(),
+            created.createdBy(), created.userProfileCreatedBy()));
   }
 
   @ExceptionHandler(IllegalArgumentException.class)
