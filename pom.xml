@@ -49,6 +49,11 @@
         <spring-kafka.version>3.3.16</spring-kafka.version>
         <postgresql.version>42.7.13</postgresql.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
+        <!-- CVE remediation (Accenture report refresh, 2026-08-28): 7 tomcat CVEs (5 HIGH) need
+             >=10.1.55 and CVE-2026-47838 needs spring-security >=6.5.11; Boot 3.5.14 pins 10.1.54
+             and 6.5.10. Property overrides on the Boot-managed versions. -->
+        <tomcat.version>10.1.59</tomcat.version>
+        <spring-security.version>6.5.11</spring-security.version>
         <!-- Pin core OpenTelemetry API/SDK to the version required by
              opentelemetry-instrumentation-bom 2.28.1 (core 1.62.0).
              Spring Boot 3.5.x otherwise forces core to 1.49.0, which mismatches
@@ -259,6 +264,16 @@
             <!-- CVE remediation: jackson must be IMPORTED above process-runtime-bom — that BOM's
                  parent chain expands jackson-bom to concrete versions which out-rank the
                  jackson-bom.version property of our own parent. First import wins. -->
+            <!-- CVE remediation: like jackson, spring-security must be IMPORTED above
+                 process-runtime-bom - its parent chain expands security to concrete versions that
+                 out-rank the spring-security.version property. First import wins. -->
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-bom</artifactId>
+                <version>${spring-security.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
