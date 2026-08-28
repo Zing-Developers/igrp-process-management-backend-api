@@ -53,6 +53,13 @@ A request needs BOTH:
 Super admin is decided by `/me` email == `IRN_API_SUPER_ADMIN_EMAIL` (= `superadmin@test.local`,
 session `sess-admin`).
 
+**M2M path (24.6):** machine callers skip both credentials above — one header only,
+`Authorization: Bearer igrpm2m_<key>`. Mint a key with the super admin
+(`POST /m2m-keys` with Bearer `sess-admin` token + its cookie), then call business routes with just
+the key: in-permission → 200, out-of-permission → 403, `/m2m-keys` with a key → 403 (structurally
+barred), revoked/fake key → 401. Keys live in `t_m2m_api_key` (Flyway V7); the pepper defaults to
+empty in e2e.
+
 ### Stubbed sessions (wiremock/irn/mappings/)
 
 | session_id | permissions | email |

@@ -277,7 +277,17 @@ Verificado ao vivo na stack `irn-e2e`: `sess-fila-trabalho` (`FILA_TRABALHO:visu
 (`TASK_MANAGEMENT:ver`) → search **200**; `sess-mgmt-viewer` (`TASK_INSTANCES:visualizar`) → search
 **200** (híbrido); `sess-none` → search **403**.
 
-### 4.4 Riscos assinalados
+### 4.4 Chamadores de máquina (M2M, release 24.6)
+
+Este spec cobre o caminho de **utilizador** (JWT Keycloak + sessão IRN). Sistemas externos sem sessão
+(jobs, integrações) autenticam por **API key M2M** — `Authorization: Bearer igrpm2m_…` — resolvida
+contra a nossa BD, com permissões `MODULO:acao` próprias que passam **nas mesmas regras de rota** desta
+spec (any-of, sem caminho paralelo). As rotas de gestão `/m2m-keys/**` têm um **gate dedicado no
+`SecurityConfig`** (JWT super-admin only), deliberadamente **fora** do catálogo
+`irn.authorization.routes.*` — uma permissão provisionável tipo `M2MKEYS:criar` permitiria a um
+não-super-admin (ou a uma key) cunhar keys. Detalhe completo: `docs/SPEC_M2M_AUTHORIZATION.md`.
+
+### 4.5 Riscos assinalados
 
 | # | Risco | Correção, se decidirem |
 |---|---|---|
