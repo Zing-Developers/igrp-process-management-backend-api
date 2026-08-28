@@ -46,11 +46,17 @@ public class DbM2mKeyResolver implements M2mKeyResolver {
   public Optional<M2mKey> resolve(String rawKey) {
 
     final var entity = repository.findByKeyHash(codec.hash(rawKey)).orElse(null);
-    if (entity == null || !entity.isActive()) {
+    if (entity == null) {
+      // unknown key: the introspector's WARN carries the presented prefix — nothing trustworthy to add
+      return Optional.empty();
+    }
+    if (!entity.isActive()) {
+      logRejected(entity, "revoked");
       return Optional.empty();
     }
     final var now = Instant.now();
     if (entity.getExpiresAt() != null && entity.getExpiresAt().isBefore(now)) {
+      logRejected(entity, "expired");
       return Optional.empty();
     }
 
@@ -64,15 +70,34 @@ public class DbM2mKeyResolver implements M2mKeyResolver {
     return Optional.of(new M2mKey(entity.getClientName(), permissions));
   }
 
+  /** One structured WARN per rejected authentication attempt — auditable at production log levels. */
+  private static void logRejected(M2mApiKeyEntity entity, String reason) {
+    LOGGER.atWarn()
+        .addKeyValue("event", "m2m_auth_rejected")
+        .addKeyValue("m2m.key_id", entity.getId().toString())
+        .addKeyValue("m2m.client_name", entity.getClientName())
+        .addKeyValue("m2m.key_prefix", entity.getKeyPrefix())
+        .addKeyValue("m2m.reject_reason", reason)
+        .log("M2M key [{}] rejected: {} (client {})", entity.getKeyPrefix(), reason, entity.getClientName());
+  }
+
   private void stampLastUsedBestEffort(M2mApiKeyEntity entity, Instant now) {
     final var last = entity.getLastUsedAt();
     if (last != null && last.plus(LAST_USED_THROTTLE).isAfter(now)) {
       return;
     }
+    // throttled by the same gate as the stamp: at most one usage record per key per 60s
+    LOGGER.atInfo()
+        .addKeyValue("event", "m2m_key_used")
+        .addKeyValue("m2m.key_id", entity.getId().toString())
+        .addKeyValue("m2m.client_name", entity.getClientName())
+        .addKeyValue("m2m.key_prefix", entity.getKeyPrefix())
+        .log("M2M key used by client [{}] (prefix {})", entity.getClientName(), entity.getKeyPrefix());
     try {
       transactionTemplate.executeWithoutResult(status -> repository.stampLastUsed(entity.getId(), now));
     } catch (RuntimeException e) {
-      LOGGER.debug("Could not stamp last_used_at for m2m key [{}]", entity.getKeyPrefix());
+      // best-effort by design, but a decaying last_used_at audit column deserves visibility
+      LOGGER.warn("Could not stamp last_used_at for m2m key [{}]: {}", entity.getKeyPrefix(), e.getMessage());
     }
   }
 
