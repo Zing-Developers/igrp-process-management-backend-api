@@ -68,8 +68,15 @@ Authorization: Bearer <access_token>
 ```
 
 - **Esquema:** `bearer`, formato `JWT` (no OpenAPI o esquema chama-se `bearerAuth`).
-- **Sessão:** *stateless* — não há cookies de sessão; o token tem de ser enviado em **todos** os pedidos.
-- **Claim de principal:** configurável no servidor (por omissão `sub`).
+- **Sessão IRN (desde a release 24.4):** com o adapter de autorização IRN ativo (produção), além do
+  Bearer o cliente tem de enviar o **cookie de sessão IRN** em todos os pedidos de negócio:
+  `Cookie: session_id=<sessão>`. Sem o cookie, a resolução de permissões falha e o pedido leva
+  **403** mesmo com token válido. A API em si continua *stateless* (não cria sessões próprias).
+- **Chamadores de máquina (release 24.6):** sistemas externos sem sessão IRN autenticam com uma
+  **API key M2M** — `Authorization: Bearer igrpm2m_…`, sem Keycloak nem cookie. Emissão e gestão são
+  de super-admin (`/m2m-keys`); detalhe em `docs/SPEC_M2M_AUTHORIZATION.md`. Irrelevante para o SDK
+  de frontend de utilizador.
+- **Claim de principal:** configurável no servidor (por omissão `sub`; nos deployments IRN, `email`).
 - **Autorizações:** o servidor enriquece o token com *roles*/grupos (prefixos `ROLE_` e `GROUP_`) e permissões obtidas do serviço de IAM. Um *super admin* recebe também os papéis Activiti `ROLE_ACTIVITI_ADMIN`/`ROLE_ACTIVITI_USER`. **Para o frontend, o relevante é: sem token válido → `401`; token válido mas sem permissão para a operação → `403`.**
 
 **Endpoints públicos (sem token):**
@@ -88,10 +95,14 @@ Authorization: Bearer <access_token>
 | Cabeçalho | Valor | Notas |
 |---|---|---|
 | `Authorization` | `Bearer <jwt>` | Obrigatório em todos os endpoints não públicos. |
+| `Cookie` | `session_id=<sessão IRN>` | Obrigatório nos pedidos de negócio com o adapter IRN ativo (ver §2). |
 | `Content-Type` | `application/json` | Em pedidos com corpo (`POST`/`PUT`). |
 | `Accept` | `application/json` | Recomendado. Respostas de erro usam `application/problem+json`. |
 
-**CORS:** o servidor permite **qualquer origem** (padrão), com `allowCredentials: true`, e os métodos `GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS` e todos os cabeçalhos. Em produção a política de CORS é normalmente restringida ao nível do *gateway* — não assumir que todas as origens estarão sempre permitidas.
+**CORS (desde o endurecimento pós-24.4):** as origens permitidas vêm de `IGRP_CORS_ALLOWED_ORIGINS`
+(lista por vírgulas), com `allowCredentials: true` e os métodos `GET, POST, PUT, PATCH, DELETE, HEAD,
+OPTIONS`. **Vazio = nenhum acesso cross-origin** — o wildcard foi eliminado. Um frontend noutro domínio
+tem de estar listado, senão as chamadas falham silenciosamente no browser.
 
 ---
 
@@ -400,6 +411,18 @@ export type VariablesOperator =
 | `GET` | `/activities/{id}` | Obter atividade por ID. |
 | `GET` | `/activities/instances` | Listar instâncias de atividade (por `processIdentifier`). |
 | `GET` | `/activities/progress` | Progresso das atividades (por `processIdentifier`). |
+
+### Chaves M2M — `/m2m-keys` (só super-admin)
+
+| Método | Caminho | Descrição |
+|---|---|---|
+| `POST` | `/m2m-keys` | Criar API key M2M (devolve o plaintext **uma vez**). |
+| `GET` | `/m2m-keys` | Listar keys (sem segredos). |
+| `DELETE` | `/m2m-keys/{id}` | Revogar — efeito imediato. |
+| `POST` | `/m2m-keys/{id}/rotate` | Rodar (nova key; a antiga expira após o grace). |
+
+> Consola de administração, **fora do SDK de utilizador**: exige JWT de super-admin (uma key M2M nunca
+> acede). Contratos completos e regras de UX: `docs/M2M_FRONTEND_HANDOFF.md`.
 
 ---
 

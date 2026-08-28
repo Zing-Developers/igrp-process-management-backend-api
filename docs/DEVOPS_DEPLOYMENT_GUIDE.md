@@ -144,8 +144,8 @@ precedência do Spring Boot, do mais forte ao mais fraco:
 ## 4. Build e deploy
 
 - O framework **0.1.0-beta.24.6** está publicado no Nexus (`igrp-framework-releases`) — os `docker build`
-  resolvem-no de lá, sem `~/.m2` local. (A 24.5 acrescenta o `accept-also` multi-frontend; sem config
-  nova é idêntica à 24.4.)
+  resolvem-no de lá, sem `~/.m2` local. (24.5 acrescentou o `accept-also` multi-frontend; a 24.6
+  acrescenta a via M2M. Sem config/keys novas, o comportamento é idêntico ao da 24.4.)
 - **Runtime Java 25 obrigatório** nas duas apps (bytecode do framework). Dockerfiles já pinados:
   build `maven:3.9.16-eclipse-temurin-25`, runtime `eclipse-temurin:25-jre`.
 - Branches a fazer build: management `features/security-harding` · studio `feacture/security-harding`

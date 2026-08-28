@@ -46,11 +46,17 @@ public class DbM2mKeyResolver implements M2mKeyResolver {
   public Optional<M2mKey> resolve(String rawKey) {
 
     final var entity = repository.findByKeyHash(codec.hash(rawKey)).orElse(null);
-    if (entity == null || !entity.isActive()) {
+    if (entity == null) {
+      // unknown key: nothing to log here beyond the introspector's WARN — no prefix worth trusting
+      return Optional.empty();
+    }
+    if (!entity.isActive()) {
+      LOGGER.debug("M2M key [{}] rejected: revoked (client {})", entity.getKeyPrefix(), entity.getClientName());
       return Optional.empty();
     }
     final var now = Instant.now();
     if (entity.getExpiresAt() != null && entity.getExpiresAt().isBefore(now)) {
+      LOGGER.debug("M2M key [{}] rejected: expired at {} (client {})", entity.getKeyPrefix(), entity.getExpiresAt(), entity.getClientName());
       return Optional.empty();
     }
 

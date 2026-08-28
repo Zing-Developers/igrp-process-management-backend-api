@@ -1,8 +1,14 @@
 # Security Recommendations
 
 Reviewed on 2026-06-02 for the iGRP Platform Process Management API.
-**Status updated 2026-08-24** after the security-hardening branch (route authorization, log hygiene,
+**Status updated 2026-08-27** after the security-hardening branch (route authorization, log hygiene,
 CVE remediation — see docs/CHANGELOG.md). DONE items reference the closing work.
+
+> **New auth surface since the review (24.6):** machine-to-machine API keys
+> (`docs/SPEC_M2M_AUTHORIZATION.md`) — panel-reviewed design with its own controls: HMAC+pepper at
+> rest, runtime revocation, `MODULO:acao`-only permissions (`ROLE_*` hard-rejected), management routes
+> structurally barred from keys, fail-closed resolution. Not part of the Accenture scope; listed here
+> so future reviews include it.
 
 This is a static project review. Validate every recommendation against the target production environment, identity provider, deployment platform, and data-classification rules.
 

@@ -1,5 +1,18 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-08 (e) · Refresh CVE do relatório Accenture (verificação de 28-08)
+
+Cruzamento linha a linha do `IGRP_Zing-Accenture_v1.0.xlsx` contra as versões resolvidas atuais:
+**43/51 corrigidas** pela vaga 24.4; **8 abertas** por CVEs publicadas depois dela — 7 de
+`tomcat-embed-core` a exigir ≥10.1.55 (5 ALTO: CVE-2026-41284/-41293/-42498/-43512/-43515) e
+CVE-2026-47838 a exigir `spring-security ≥6.5.11`.
+
+Fecho nas duas apps: `tomcat.version=10.1.59` e `spring-security.version=6.5.11` — o security via
+import direto do `spring-security-bom` **acima** do `process-runtime-bom` (o mesmo trap do jackson:
+a cadeia-pai desse BOM expande versões concretas que ganham à property). **51/51 Corrigido**;
+management 309/309, studio 18/19 (falha pré-existente).
+
+
 ## 2026-08 (d) · Autorização machine-to-machine (framework 24.6)
 
 Um backend externo (job) chamava a API com token Keycloak válido mas sem sessão IRN — o `/Auth/me`
