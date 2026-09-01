@@ -69,6 +69,7 @@ openssl rsa -in irn-private-key.pem -pubout -out irn-public-key.pem
 ## 3. Variáveis de ambiente
 
 Iguais nas duas apps salvo indicação. Referência viva: `.env.example` de cada repo.
+Para ambiente de **desenvolvimento local** (adapter default, mocks, valores de arranque): `docs/DEV_ENVIRONMENT_GUIDE.md`.
 
 | Variável | Valor | Notas |
 |---|---|---|
