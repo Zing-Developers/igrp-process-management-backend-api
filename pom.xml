@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.14</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
     <groupId>cv.igrp.platform.process.management</groupId>
@@ -39,7 +39,7 @@
 
     <properties>
         <igrp.version>0.1.0-beta.1</igrp.version>
-        <igrp.process-runtime.version>0.1.0-beta.24.6</igrp.process-runtime.version>
+        <igrp.process-runtime.version>0.1.0-beta.24.7</igrp.process-runtime.version>
         <java.version>25</java.version>
         <spring-cloud.version>2025.0.0</spring-cloud.version>
         <springdoc.version>2.8.9</springdoc.version>
@@ -53,6 +53,12 @@
              >=10.1.55 and CVE-2026-47838 needs spring-security >=6.5.11; Boot 3.5.14 pins 10.1.54
              and 6.5.10. Property overrides on the Boot-managed versions. -->
         <tomcat.version>10.1.59</tomcat.version>
+        <!-- Proactive OSV check on the upgraded stack: spring-framework 6.2.18 carries 8 advisories
+             (7x webmvc incl. XSS/path traversal/request smuggling, 1x core DoS), all fixed in 6.2.19. -->
+        <spring-framework.version>6.2.19</spring-framework.version>
+        <!-- OSV sweep of the full runtime tree (2026-08-28): transitive fixes -->
+        <log4j2.version>2.25.5</log4j2.version>
+        <httpclient5.version>5.6.3</httpclient5.version>
         <spring-security.version>6.5.11</spring-security.version>
         <!-- Pin core OpenTelemetry API/SDK to the version required by
              opentelemetry-instrumentation-bom 2.28.1 (core 1.62.0).
@@ -256,6 +262,19 @@
                  dependencyManagement entry out-ranks every BOM import. 33.x closes CVE-2018-10237,
                  CVE-2023-2976 and CVE-2020-8908 (the report's 24.1.1 target only closes the first).
                  Validate the eureka runtime path in staging. -->
+            <!-- OSV sweep pins: HIGH transitives (protobuf/xstream/jose4j/httpcore5/spring-data-commons)
+                 plus moderate lz4/bcpkix/legacy-httpclient. Direct entries out-rank every BOM import. -->
+            <dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-api</artifactId><version>2.25.5</version></dependency>
+            <dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-to-slf4j</artifactId><version>2.25.5</version></dependency>
+            <dependency><groupId>org.springframework.data</groupId><artifactId>spring-data-commons</artifactId><version>3.5.12</version></dependency>
+            <dependency><groupId>com.google.protobuf</groupId><artifactId>protobuf-java</artifactId><version>3.25.5</version></dependency>
+            <dependency><groupId>com.thoughtworks.xstream</groupId><artifactId>xstream</artifactId><version>1.4.21</version></dependency>
+            <dependency><groupId>org.bitbucket.b_c</groupId><artifactId>jose4j</artifactId><version>0.9.6</version></dependency>
+            <dependency><groupId>at.yawk.lz4</groupId><artifactId>lz4-java</artifactId><version>1.11.1</version></dependency>
+            <dependency><groupId>org.bouncycastle</groupId><artifactId>bcpkix-jdk18on</artifactId><version>1.84</version></dependency>
+            <dependency><groupId>org.apache.httpcomponents</groupId><artifactId>httpclient</artifactId><version>4.5.13</version></dependency>
+            <dependency><groupId>org.apache.httpcomponents.core5</groupId><artifactId>httpcore5</artifactId><version>5.4.3</version></dependency>
+            <dependency><groupId>org.apache.httpcomponents.core5</groupId><artifactId>httpcore5-h2</artifactId><version>5.4.3</version></dependency>
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
@@ -267,6 +286,13 @@
             <!-- CVE remediation: like jackson, spring-security must be IMPORTED above
                  process-runtime-bom - its parent chain expands security to concrete versions that
                  out-rank the spring-security.version property. First import wins. -->
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-framework-bom</artifactId>
+                <version>${spring-framework.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-bom</artifactId>

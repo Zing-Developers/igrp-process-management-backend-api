@@ -1,5 +1,29 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-08 (f) · Sweep OSV proativo da árvore completa (pós-refresh)
+
+A pedido, verificou-se se as próprias versões atualizadas têm vulnerabilidades conhecidas — scan
+OSV.dev aos **307 artefactos runtime** das duas apps. Resultado do primeiro passe: 16 com advisories,
+6 delas HIGH (todas transitivas, fora do relatório Accenture). Fechadas:
+
+- **spring-framework 6.2.18 → 6.2.19** — 8 advisories (7× webmvc: XSS, path traversal, request
+  smuggling, open redirect, DoS; 1× core DoS). Import direto do `spring-framework-bom` acima do
+  `process-runtime-bom` (a property é vencida pela cadeia-pai desse BOM, como jackson/security).
+- **Boot parent 3.5.14 → 3.5.16** — fecha autoconfigure (temp dir Artemis) e starter-mail (TLS), e
+  puxa spring-retry 2.0.13.
+- **Pins diretos de transitivos** (entradas de dependencyManagement ganham a qualquer BOM):
+  spring-data-commons 3.5.12 (2 HIGH: heap/cache exhaustion) · protobuf-java 3.25.5 (HIGH DoS) ·
+  xstream 1.4.21 (HIGH DoS) · jose4j 0.9.6 (HIGH DoS) · httpcore5/-h2 5.4.3 (2 HIGH parsing) ·
+  httpclient5 5.6.3 · bcpkix 1.84 (alinha com bcprov) · lz4-java 1.11.1 · log4j-api/-to-slf4j 2.25.5 ·
+  httpclient 4.5.13.
+
+**Re-scan final: 2 residuais aceites**, ambos do legado Netflix do eureka-client 2.0.4
+(`commons-configuration:1.10` LOW sem fix publicado; `commons-lang:2.6` MODERATE cujo fix é a migração
+para commons-lang3, que já temos — o GA antigo continua exigido pelo archaius). Sem fix na própria
+linha; risco documentado, pendente da modernização do eureka. Suites: management 309/309, studio 18/19
+(falha pré-existente).
+
+
 ## 2026-08 (e) · Refresh CVE do relatório Accenture (verificação de 28-08)
 
 Cruzamento linha a linha do `IGRP_Zing-Accenture_v1.0.xlsx` contra as versões resolvidas atuais:
