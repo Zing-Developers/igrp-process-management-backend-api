@@ -15,7 +15,8 @@ public class ApplicationAuditorAware implements AuditorAware<String> {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ApplicationAuditorAware.class);
 
-  private static final String SYSTEM_FALLBACK = "system-bot@nosi.cv";
+  // Aligned with the Studio's auditor: same fallback name, same anonymous handling
+  private static final String SYSTEM_FALLBACK = "system";
 
   @Override
   public Optional<String> getCurrentAuditor() {
@@ -25,6 +26,12 @@ public class ApplicationAuditorAware implements AuditorAware<String> {
 
   private String getCurrentSubjectName() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+    if (authentication == null || !authentication.isAuthenticated()
+        || "anonymousUser".equals(authentication.getPrincipal())) {
+      LOGGER.debug("No authenticated user found, falling back to system account");
+      return SYSTEM_FALLBACK;
+    }
 
     if (authentication instanceof JwtAuthenticationToken jwtAuth) {
       Jwt jwt = jwtAuth.getToken();
