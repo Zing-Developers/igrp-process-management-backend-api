@@ -13,7 +13,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,14 +37,17 @@ public class M2mKeyController {
     this.service = service;
   }
 
-  public record CreateRequest(String clientName, List<String> permissions, String email, Instant expiresAt) { }
+  // expiresAt comes in as zone-less LocalDateTime, the datetime shape of every other endpoint
+  public record CreateRequest(String clientName, List<String> permissions, String email, LocalDateTime expiresAt) { }
   public record CreatedResponse(UUID id, String clientName, String key, String createdBy,
                                 UserProfileDTO userProfileCreatedBy) { }
 
   @PostMapping
   public ResponseEntity<CreatedResponse> create(@RequestBody CreateRequest request, Authentication authentication) {
+    final var expiresAt = request.expiresAt() == null
+        ? null : request.expiresAt().atZone(ZoneId.systemDefault()).toInstant();
     final var created = service.create(request.clientName(), request.permissions(), request.email(),
-        request.expiresAt(), authentication.getName());
+        expiresAt, authentication.getName());
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(new CreatedResponse(created.id(), created.clientName(), created.plaintextKey(),
             created.createdBy(), created.userProfileCreatedBy()));
