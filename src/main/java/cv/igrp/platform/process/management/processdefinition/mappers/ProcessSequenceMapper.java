@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processdefinition.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.platform.process.management.processdefinition.application.commands.CreateProcessSequenceCommand;
 import cv.igrp.platform.process.management.processdefinition.application.dto.ProcessSequenceDTO;
 import cv.igrp.platform.process.management.processdefinition.domain.models.ProcessSequence;
@@ -44,7 +46,7 @@ public class ProcessSequenceMapper {
 
 
   public ProcessSequence toModel(ProcessInstanceSequenceEntity entity) {
-    return  ProcessSequence.builder()
+    var model = ProcessSequence.builder()
         .id(Identifier.create(entity.getId()))
         .name(Name.create(entity.getName()))
         .prefix(Code.create(entity.getPrefix()))
@@ -56,6 +58,8 @@ public class ProcessSequenceMapper {
         .processDefinitionKey(Code.create(entity.getProcessDefinitionKey()))
         .separator(entity.getSeparator())
         .build();
+    model.setAudit(AuditMapping.trail(entity));
+    return model;
   }
 
 
@@ -71,6 +75,7 @@ public class ProcessSequenceMapper {
     dto.setNumberIncrement(model.getNumberIncrement());
     dto.setProcessDefinitionKey(model.getProcessDefinitionKey().getValue());
     dto.setSeparator(model.getSeparator());
+    AuditMapping.apply(dto, model.getAudit());
     return dto;
   }
 

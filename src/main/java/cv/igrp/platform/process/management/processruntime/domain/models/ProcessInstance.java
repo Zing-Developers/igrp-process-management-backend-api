@@ -21,6 +21,12 @@ import java.util.UUID;
 @ToString
 public class ProcessInstance {
 
+  private cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit;
+
+  public void setAudit(cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit) {
+    this.audit = audit;
+  }
+
   public static final Integer DEFAULT_PRIORITY = 0;
 
   private final Identifier id;
