@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processruntime.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.framework.process.runtime.core.engine.task.model.TaskInfo;
 import cv.igrp.platform.process.management.processruntime.application.commands.GetAllMyTasksCommand;
 import cv.igrp.platform.process.management.processruntime.application.commands.ListTaskInstancesCommand;
@@ -92,7 +94,7 @@ public class TaskInstanceMapper {
 
   public TaskInstance toModel(TaskInstanceEntity taskInstanceEntity, boolean withEvents) {
     var processInstance = taskInstanceEntity.getProcessInstanceId();
-    return TaskInstance.builder()
+    var model = TaskInstance.builder()
         .id(Identifier.create(taskInstanceEntity.getId()))
         .taskKey(Code.create(taskInstanceEntity.getTaskKey()))
         .formKey(taskInstanceEntity.getFormKey()!=null ? Code.create(taskInstanceEntity.getFormKey()) : null)
@@ -120,6 +122,8 @@ public class TaskInstanceMapper {
         .variables(taskInstanceEntity.getVariables())
         .dueDate(taskInstanceEntity.getDueDate())
         .build();
+    model.setAudit(AuditMapping.trail(taskInstanceEntity));
+    return model;
   }
 
   public TaskInstanceListPageDTO toTaskInstanceListPageDTO(PageableLista<TaskInstance> taskInstances) {
@@ -171,6 +175,7 @@ public class TaskInstanceMapper {
     dto.setUserProfileAssignedBy(
         userProfileMapper.toDTO(model.getUserProfileAssignedBy())
     );
+    AuditMapping.apply(dto, model.getAudit());
     return dto;
   }
 
@@ -214,6 +219,7 @@ public class TaskInstanceMapper {
     dto.setUserProfileAssignedBy(
         userProfileMapper.toDTO(taskInstance.getUserProfileAssignedBy())
     );
+    AuditMapping.apply(dto, taskInstance.getAudit());
     return dto;
   }
 

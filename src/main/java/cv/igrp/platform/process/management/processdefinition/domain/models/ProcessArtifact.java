@@ -11,6 +11,12 @@ import java.util.*;
 @Getter
 public class ProcessArtifact {
 
+  private cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit;
+
+  public void setAudit(cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit) {
+    this.audit = audit;
+  }
+
   public static final String DEFAULT_VALUE = "NOT_SET";
 
   private final Identifier id;

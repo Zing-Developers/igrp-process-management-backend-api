@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processruntime.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.platform.process.management.processruntime.application.commands.ListTaskAssignmentRulesCommand;
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskAssignmentRuleListDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskAssignmentRuleListPageDTO;
@@ -62,6 +64,7 @@ public class TaskAssignmentRuleMapper {
     dto.setConsumed(rule.isConsumed());
     dto.setActive(rule.isActive());
     dto.setCreatedByTask(rule.getCreatedByTask() != null ? rule.getCreatedByTask().getValue() : null);
+    AuditMapping.apply(dto, rule.getAudit());
     return dto;
   }
 

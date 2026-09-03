@@ -19,7 +19,17 @@ import java.util.UUID;
 
 
 @IgrpDTO
-public class ProcessDefinitionDTO  {
+// Audit trio (time, raw principal, enriched profile) follows the platform pattern. NOTE for iGRP
+// Studio model owners: mirror these fields in the generator model so a regeneration keeps them.
+public class ProcessDefinitionDTO implements cv.igrp.platform.process.management.shared.security.AuditedResponse {
+
+  private java.time.LocalDateTime updatedAt ;
+
+  private String updatedBy ;
+
+  private cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO userProfileCreatedBy ;
+
+  private cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO userProfileUpdatedBy ;
 
   @NotNull(message = "The field <id> is required")
   
