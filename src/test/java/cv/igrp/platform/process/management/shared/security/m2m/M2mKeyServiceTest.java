@@ -46,6 +46,9 @@ class M2mKeyServiceTest {
     assertThat(saved.getKeyHash()).isNotEqualTo(created.plaintextKey());
     assertThat(saved.getKeyPrefix()).startsWith("igrpm2m_");
     assertThat(saved.isActive()).isTrue();
+    // updated_* mirrors the creation until the row is mutated
+    assertThat(saved.getUpdatedAt()).isEqualTo(saved.getCreatedAt());
+    assertThat(saved.getUpdatedBy()).isEqualTo("admin");
   }
 
   @Test
@@ -81,6 +84,8 @@ class M2mKeyServiceTest {
     // the overlap cannot live forever: old key gets now + grace (M-18)
     assertThat(old.getExpiresAt()).isAfter(Instant.now().plus(Duration.ofDays(6)));
     assertThat(old.getExpiresAt()).isBefore(Instant.now().plus(Duration.ofDays(8)));
+    assertThat(old.getUpdatedBy()).isEqualTo("admin");
+    assertThat(old.getUpdatedAt()).isNotNull();
   }
 
 }

@@ -32,7 +32,7 @@ Content-Type: application/json
   "clientName": "fila-trabalho-job",              // obrigatório, slug ^[a-z0-9._-]+$
   "permissions": ["TASK_INSTANCES:visualizar"],   // obrigatório, ≥1, formato MODULO:acao
   "email": "responsavel@parceiro.cv",             // opcional — só metadado de contacto
-  "expiresAt": "2027-01-01T00:00:00Z"             // opcional, ISO-8601
+  "expiresAt": "2027-01-01T00:00:00"              // opcional, LocalDateTime SEM zona — igual ao resto da plataforma
 }
 ```
 
@@ -85,15 +85,22 @@ GET /m2m-keys
   "email": "responsavel@parceiro.cv",             // pode ser null
   "active": true,
   "expiresAt": null,                              // pode ser null
-  "createdAt": "2026-08-27T19:05:00Z",
+  "createdAt": "2026-08-27T19:05:00",
   "createdBy": "admin@nosi.cv",                   // utilizador de auditoria (string crua)
   "userProfileCreatedBy": { "username": "admin", "email": "admin@nosi.cv", "fullName": "Ana Admin", "…": "…" }, // perfil enriquecido; pode ser null
-  "lastUsedAt": "2026-08-27T19:40:00Z",           // pode ser null (nunca usada)
+  "lastUsedAt": "2026-08-27T19:40:00",            // pode ser null (nunca usada)
   "revokedAt": null,                              // quando revogada: timestamp
   "revokedBy": null,                              // quando revogada: principal de quem revogou
-  "userProfileRevokedBy": null                    // idem, perfil enriquecido (pode ser null mesmo revogada)
+  "userProfileRevokedBy": null,                   // idem, perfil enriquecido (pode ser null mesmo revogada)
+  "updatedAt": "2026-08-27T19:05:00",             // última mutação: criação, revogação ou rotate (carimbo na key antiga)
+  "updatedBy": "admin@nosi.cv",                   // quem fez essa última mutação (string crua)
+  "userProfileUpdatedBy": { "…": "…" }            // perfil enriquecido; pode ser null
 }]
 ```
+
+> **Formato de datas:** todos os campos de data destas rotas são `LocalDateTime` **sem zona**
+> (`2026-08-27T19:05:00`, sem `Z` nem offset) — exatamente o mesmo formato dos restantes endpoints
+> da plataforma. Interpretar na zona do servidor, como já fazem para as outras datas.
 
 Derivação do **estado** para o pill do UI:
 - `active=false` → **revogada**;
