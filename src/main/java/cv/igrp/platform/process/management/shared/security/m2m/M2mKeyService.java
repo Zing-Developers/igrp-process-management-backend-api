@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,11 +49,14 @@ public class M2mKeyService {
   // the raw principal string plus the enriched IAM profile, null when no profile row matches.
   public record CreatedKey(UUID id, String clientName, String plaintextKey, String createdBy,
                            UserProfileDTO userProfileCreatedBy) { }
+  // Dates go out as zone-less LocalDateTime — the same shape every other endpoint serializes
+  // (AuditEntity/TaskInstanceDTO) — so the frontend parses one format everywhere.
   public record KeySummary(UUID id, String clientName, String keyPrefix, String permissions,
-                           String email, boolean active, Instant expiresAt, Instant createdAt,
+                           String email, boolean active, LocalDateTime expiresAt, LocalDateTime createdAt,
                            String createdBy, UserProfileDTO userProfileCreatedBy,
-                           Instant lastUsedAt, Instant revokedAt,
-                           String revokedBy, UserProfileDTO userProfileRevokedBy) { }
+                           LocalDateTime lastUsedAt, LocalDateTime revokedAt,
+                           String revokedBy, UserProfileDTO userProfileRevokedBy,
+                           LocalDateTime updatedAt, String updatedBy, UserProfileDTO userProfileUpdatedBy) { }
 
   public M2mKeyService(M2mApiKeyEntityRepository repository,
                        M2mKeyCodec codec,
@@ -100,6 +105,8 @@ public class M2mKeyService {
     entity.setExpiresAt(expiresAt);
     entity.setCreatedBy(createdBy);
     entity.setCreatedAt(Instant.now());
+    entity.setUpdatedAt(entity.getCreatedAt());
+    entity.setUpdatedBy(createdBy);
     repository.save(entity);
 
     LOGGER.atInfo()
@@ -117,16 +124,22 @@ public class M2mKeyService {
   public List<KeySummary> list() {
     final var entities = repository.findAll();
     final var principals = entities.stream()
-        .flatMap(e -> java.util.stream.Stream.of(e.getCreatedBy(), e.getRevokedBy()))
+        .flatMap(e -> java.util.stream.Stream.of(e.getCreatedBy(), e.getRevokedBy(), e.getUpdatedBy()))
         .filter(java.util.Objects::nonNull)
         .collect(Collectors.toSet());
     final var profiles = profilesOf(principals);
     return entities.stream()
         .map(e -> new KeySummary(e.getId(), e.getClientName(), e.getKeyPrefix(), e.getPermissions(),
-            e.getEmail(), e.isActive(), e.getExpiresAt(), e.getCreatedAt(), e.getCreatedBy(),
-            profiles.get(e.getCreatedBy()), e.getLastUsedAt(), e.getRevokedAt(),
-            e.getRevokedBy(), profiles.get(e.getRevokedBy())))
+            e.getEmail(), e.isActive(), local(e.getExpiresAt()), local(e.getCreatedAt()), e.getCreatedBy(),
+            profiles.get(e.getCreatedBy()), local(e.getLastUsedAt()), local(e.getRevokedAt()),
+            e.getRevokedBy(), profiles.get(e.getRevokedBy()),
+            local(e.getUpdatedAt()), e.getUpdatedBy(), profiles.get(e.getUpdatedBy())))
         .toList();
+  }
+
+  /** The platform serializes dates as zone-less LocalDateTime (see AuditEntity) — match it. */
+  static LocalDateTime local(Instant instant) {
+    return instant == null ? null : LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
   }
 
   /** Batch audit-user enrichment: the principal may be a sub or an email, so both are tried. */
@@ -154,6 +167,8 @@ public class M2mKeyService {
     entity.setActive(false);
     entity.setRevokedAt(Instant.now());
     entity.setRevokedBy(revokedBy);
+    entity.setUpdatedAt(entity.getRevokedAt());
+    entity.setUpdatedBy(revokedBy);
     repository.save(entity);
 
     LOGGER.atInfo()
@@ -182,6 +197,8 @@ public class M2mKeyService {
         createdBy);
 
     old.setExpiresAt(Instant.now().plus(rotateGrace));
+    old.setUpdatedAt(Instant.now());
+    old.setUpdatedBy(createdBy);
     repository.save(old);
 
     LOGGER.atInfo()
