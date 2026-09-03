@@ -22,8 +22,8 @@ SPRING_ACTIVE_PROFILE=development
 
 O default é `production` — **tem de se definir explicitamente**. Em `development`:
 `ddl-auto=update` + `show-sql` ligados, Swagger UI disponível, HTTPS não exigido nos webhooks.
-O auditor (`created_by`/`last_modified_by`) grava **string vazia** em dev/staging por design — os
-campos de auditoria só se preenchem a sério em produção.
+O auditor (`created_by`/`last_modified_by`) preenche-se em **todos** os perfis a partir do token
+(o Studio tinha um guard que gravava string vazia em dev/staging — removido).
 
 ## 2. Variáveis obrigatórias (o boot falha sem elas)
 
