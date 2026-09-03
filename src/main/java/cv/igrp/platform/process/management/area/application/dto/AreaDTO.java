@@ -22,7 +22,13 @@ import java.util.UUID;
 
 
 @IgrpDTO
-public class AreaDTO  {
+// Audit trio (time, raw principal, enriched profile) follows the platform pattern. NOTE for iGRP
+// Studio model owners: mirror the userProfile* fields in the generator model so a regeneration keeps them.
+public class AreaDTO implements cv.igrp.platform.process.management.shared.security.AuditedResponse {
+
+  private cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO userProfileCreatedBy ;
+
+  private cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO userProfileUpdatedBy ;
 
   @NotNull(message = "The field <id> is required")
   

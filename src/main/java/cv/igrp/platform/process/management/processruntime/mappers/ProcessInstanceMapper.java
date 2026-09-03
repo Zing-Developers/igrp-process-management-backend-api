@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processruntime.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.framework.process.runtime.core.engine.process.model.IGRPProcessStatus;
 import cv.igrp.platform.process.management.processruntime.application.dto.*;
 import cv.igrp.platform.process.management.processruntime.domain.models.ProcessInstance;
@@ -76,7 +78,7 @@ public class ProcessInstanceMapper {
   }
 
   public ProcessInstance toModel(ProcessInstanceEntity processInstanceEntity) {
-    return ProcessInstance.builder()
+    var model = ProcessInstance.builder()
         .id(Identifier.create(processInstanceEntity.getId()))
         .name(processInstanceEntity.getName())
         .number(processInstanceEntity.getNumber() != null ? ProcessNumber.create(processInstanceEntity.getNumber()) : null)
@@ -96,6 +98,8 @@ public class ProcessInstanceMapper {
         .applicationBase(processInstanceEntity.getApplicationBase()!=null ? Code.create(processInstanceEntity.getApplicationBase()) : null)
         .priority(processInstanceEntity.getPriority())
         .build();
+    model.setAudit(AuditMapping.trail(processInstanceEntity));
+    return model;
   }
 
   public ProcessInstance toModel(StartProcessRequestDTO startProcessRequestDTO) {
@@ -176,6 +180,7 @@ public class ProcessInstanceMapper {
     processInstanceDTO.setUserProfileEndedBy(
         userProfileMapper.toDTO(processInstance.getUserProfileEndedBy())
     );
+    AuditMapping.apply(processInstanceDTO, processInstance.getAudit());
     return processInstanceDTO;
   }
 
