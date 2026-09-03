@@ -1,0 +1,165 @@
+{
+  "type": "model",
+  "module": "shared",
+  "name": "M2mApiKeyEntity",
+  "tableName": "t_m2m_api_key",
+  "audit": false,
+  "crud": false,
+  "revision": false,
+  "attributes": [
+    {
+      "name": "id",
+      "type": "uuid",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": true,
+      "skipFieldRevision": false,
+      "objectType": "java",
+      "generationType": "NONE"
+    },
+    {
+      "name": "client_name",
+      "type": "string",
+      "length": 255,
+      "nullable": false,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
+      "name": "key_prefix",
+      "type": "string",
+      "length": 255,
+      "nullable": false,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
+      "name": "key_hash",
+      "type": "string",
+      "length": 255,
+      "nullable": false,
+      "unique": true,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
+      "name": "permissions",
+      "type": "string",
+      "length": 255,
+      "nullable": false,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
+      "name": "active",
+      "type": "boolean",
+      "length": 255,
+      "nullable": false,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false,
+      "objectType": "java"
+    },
+    {
+      "name": "expires_at",
+      "type": "datetime",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false,
+      "objectType": "java"
+    },
+    {
+      "name": "created_by",
+      "type": "string",
+      "length": 255,
+      "nullable": false,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
+      "name": "created_at",
+      "type": "datetime",
+      "length": 255,
+      "nullable": false,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false,
+      "objectType": "java"
+    },
+    {
+      "name": "last_used_at",
+      "type": "datetime",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false,
+      "objectType": "java"
+    },
+    {
+      "name": "revoked_at",
+      "type": "datetime",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false,
+      "objectType": "java"
+    },
+    {
+      "name": "revoked_by",
+      "type": "string",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
+      "name": "updated_at",
+      "type": "datetime",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false,
+      "objectType": "java"
+    },
+    {
+      "name": "updated_by",
+      "type": "string",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    }
+  ],
+  "indexes": [
+    {
+      "name": "idx_m2m_api_key_client_name",
+      "columns": [
+        "client_name"
+      ],
+      "unique": false
+    }
+  ],
+  "uniqueConstraints": [],
+  "id": "a6rby4qvk2"
+}

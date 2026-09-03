@@ -1,12 +1,24 @@
 {
   "type": "dto",
   "module": "shared",
-  "name": "ProcessEventDTO",
+  "name": "M2mKeyCreatedDTO",
   "template": "classic",
   "enableCustonValidation": false,
   "attributes": [
     {
-      "name": "messageName",
+      "name": "id",
+      "objectType": "java",
+      "type": "uuid",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    },
+    {
+      "name": "clientName",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -18,7 +30,7 @@
       "primaryKey": false
     },
     {
-      "name": "taskId",
+      "name": "key",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -30,7 +42,7 @@
       "primaryKey": false
     },
     {
-      "name": "businessKey",
+      "name": "createdBy",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -42,9 +54,9 @@
       "primaryKey": false
     },
     {
-      "name": "variables",
+      "name": "userProfileCreatedBy",
       "objectType": "dto",
-      "type": "ProcessVariableDTO",
+      "type": "UserProfileDTO",
       "required": false,
       "before": false,
       "after": false,
@@ -52,9 +64,8 @@
       "isEmail": false,
       "isUrl": false,
       "primaryKey": false,
-      "collectionType": "list",
-      "module": "shared"
+      "module": "processruntime"
     }
   ],
-  "id": "d6wa7nsgdu"
+  "id": "eg0m5xp4vc"
 }
