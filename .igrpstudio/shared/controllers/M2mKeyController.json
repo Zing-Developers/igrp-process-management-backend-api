@@ -1,0 +1,122 @@
+{
+  "type": "controller",
+  "name": "M2mKey",
+  "module": "shared",
+  "description": "Super-admin management of M2M API keys (SPEC_M2M_AUTHORIZATION.md). JWT super-admin only — an M2M key can never reach these routes.",
+  "basePath": "m2m-keys",
+  "id": "m81yrxocof-CONTROLLER",
+  "actions": [
+    {
+      "actionName": "createKey",
+      "method": "POST",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "M2mKeyRequestDTO",
+              "objectType": "dto",
+              "name": "data",
+              "collectionType": "none",
+              "module": "shared"
+            }
+          }
+        }
+      },
+      "responses": {
+        "201": {
+          "name": "Created",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "M2mKeyCreatedDTO",
+                "objectType": "dto",
+                "name": "data",
+                "collectionType": "none",
+                "module": "shared"
+              }
+            }
+          },
+          "description": "Plaintext key, shown once"
+        }
+      }
+    },
+    {
+      "actionName": "listKeys",
+      "method": "GET",
+      "responses": {
+        "200": {
+          "name": "OK",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "M2mKeySummaryDTO",
+                "objectType": "dto",
+                "name": "data",
+                "collectionType": "list",
+                "module": "shared"
+              }
+            }
+          },
+          "description": "All keys, no secrets"
+        }
+      }
+    },
+    {
+      "actionName": "revokeKey",
+      "path": "{id}",
+      "method": "DELETE",
+      "responses": {
+        "204": {
+          "name": "OK",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "name": "data",
+                "collectionType": "none"
+              }
+            }
+          }
+        }
+      },
+      "pathVariables": [
+        {
+          "name": "id",
+          "type": "string",
+          "isRequired": true,
+          "description": "Key id"
+        }
+      ]
+    },
+    {
+      "actionName": "rotateKey",
+      "path": "{id}/rotate",
+      "method": "POST",
+      "responses": {
+        "201": {
+          "name": "Created",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "M2mKeyCreatedDTO",
+                "objectType": "dto",
+                "name": "data",
+                "collectionType": "none",
+                "module": "shared"
+              }
+            }
+          },
+          "description": "Replacement key; old one expires after the rotate grace"
+        }
+      },
+      "pathVariables": [
+        {
+          "name": "id",
+          "type": "string",
+          "isRequired": true,
+          "description": "Key id to rotate"
+        }
+      ]
+    }
+  ]
+}

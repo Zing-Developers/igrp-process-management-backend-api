@@ -1,15 +1,15 @@
 {
   "type": "dto",
   "module": "shared",
-  "name": "ProcessEventDTO",
+  "name": "M2mKeyRequestDTO",
   "template": "classic",
   "enableCustonValidation": false,
   "attributes": [
     {
-      "name": "messageName",
+      "name": "clientName",
       "objectType": "java",
       "type": "string",
-      "required": false,
+      "required": true,
       "before": false,
       "after": false,
       "positive": false,
@@ -18,43 +18,42 @@
       "primaryKey": false
     },
     {
-      "name": "taskId",
+      "name": "permissions",
       "objectType": "java",
       "type": "string",
-      "required": false,
-      "before": false,
-      "after": false,
-      "positive": false,
-      "isEmail": false,
-      "isUrl": false,
-      "primaryKey": false
-    },
-    {
-      "name": "businessKey",
-      "objectType": "java",
-      "type": "string",
-      "required": false,
-      "before": false,
-      "after": false,
-      "positive": false,
-      "isEmail": false,
-      "isUrl": false,
-      "primaryKey": false
-    },
-    {
-      "name": "variables",
-      "objectType": "dto",
-      "type": "ProcessVariableDTO",
-      "required": false,
+      "required": true,
       "before": false,
       "after": false,
       "positive": false,
       "isEmail": false,
       "isUrl": false,
       "primaryKey": false,
-      "collectionType": "list",
-      "module": "shared"
+      "collectionType": "list"
+    },
+    {
+      "name": "email",
+      "objectType": "java",
+      "type": "string",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    },
+    {
+      "name": "expiresAt",
+      "objectType": "java",
+      "type": "datetime",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
     }
   ],
-  "id": "d6wa7nsgdu"
+  "id": "fzzvqiemu6"
 }

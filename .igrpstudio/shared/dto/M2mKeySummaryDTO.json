@@ -1,7 +1,7 @@
 {
   "type": "dto",
-  "module": "processdefinition",
-  "name": "ProcessArtifactDTO",
+  "module": "shared",
+  "name": "M2mKeySummaryDTO",
   "template": "classic",
   "enableCustonValidation": false,
   "attributes": [
@@ -18,7 +18,7 @@
       "primaryKey": false
     },
     {
-      "name": "name",
+      "name": "clientName",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -30,7 +30,7 @@
       "primaryKey": false
     },
     {
-      "name": "key",
+      "name": "keyPrefix",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -42,7 +42,7 @@
       "primaryKey": false
     },
     {
-      "name": "processDefinitionId",
+      "name": "permissions",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -54,7 +54,7 @@
       "primaryKey": false
     },
     {
-      "name": "formKey",
+      "name": "email",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -66,22 +66,9 @@
       "primaryKey": false
     },
     {
-      "name": "candidateGroups",
+      "name": "active",
       "objectType": "java",
-      "type": "string",
-      "required": false,
-      "before": false,
-      "after": false,
-      "positive": false,
-      "isEmail": false,
-      "isUrl": false,
-      "primaryKey": false,
-      "collectionType": "none"
-    },
-    {
-      "name": "dueDate",
-      "objectType": "java",
-      "type": "string",
+      "type": "boolean",
       "required": false,
       "before": false,
       "after": false,
@@ -91,9 +78,9 @@
       "primaryKey": false
     },
     {
-      "name": "priority",
+      "name": "expiresAt",
       "objectType": "java",
-      "type": "integer",
+      "type": "datetime",
       "required": false,
       "before": false,
       "after": false,
@@ -115,31 +102,7 @@
       "primaryKey": false
     },
     {
-      "name": "updatedAt",
-      "objectType": "java",
-      "type": "datetime",
-      "required": false,
-      "before": false,
-      "after": false,
-      "positive": false,
-      "isEmail": false,
-      "isUrl": false,
-      "primaryKey": false
-    },
-    {
       "name": "createdBy",
-      "objectType": "java",
-      "type": "string",
-      "required": false,
-      "before": false,
-      "after": false,
-      "positive": false,
-      "isEmail": false,
-      "isUrl": false,
-      "primaryKey": false
-    },
-    {
-      "name": "updatedBy",
       "objectType": "java",
       "type": "string",
       "required": false,
@@ -164,6 +127,79 @@
       "module": "processruntime"
     },
     {
+      "name": "lastUsedAt",
+      "objectType": "java",
+      "type": "datetime",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    },
+    {
+      "name": "revokedAt",
+      "objectType": "java",
+      "type": "datetime",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    },
+    {
+      "name": "revokedBy",
+      "objectType": "java",
+      "type": "string",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    },
+    {
+      "name": "userProfileRevokedBy",
+      "objectType": "dto",
+      "type": "UserProfileDTO",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false,
+      "module": "processruntime"
+    },
+    {
+      "name": "updatedAt",
+      "objectType": "java",
+      "type": "datetime",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    },
+    {
+      "name": "updatedBy",
+      "objectType": "java",
+      "type": "string",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    },
+    {
       "name": "userProfileUpdatedBy",
       "objectType": "dto",
       "type": "UserProfileDTO",
@@ -177,5 +213,5 @@
       "module": "processruntime"
     }
   ],
-  "id": "wmgpckbut3"
+  "id": "7cf8zit7o5"
 }
