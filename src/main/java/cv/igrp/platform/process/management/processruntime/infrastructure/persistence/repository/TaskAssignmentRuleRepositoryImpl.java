@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processruntime.infrastructure.persistence.repository;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRule;
 import cv.igrp.platform.process.management.processruntime.domain.models.TaskAssignmentRuleFilter;
 import cv.igrp.platform.process.management.processruntime.domain.repository.TaskAssignmentRuleRepository;
@@ -245,7 +247,7 @@ public class TaskAssignmentRuleRepositoryImpl implements TaskAssignmentRuleRepos
   }
 
   private TaskAssignmentRule toModel(TaskAssignmentRuleEntity entity) {
-    return TaskAssignmentRule.builder()
+    var model = TaskAssignmentRule.builder()
         .id(Identifier.create(entity.getId()))
         .processDefinitionKey(Code.create(entity.getProcessDefinitionKey()))
         .processInstanceId(entity.getProcessInstanceId() != null
@@ -264,6 +266,8 @@ public class TaskAssignmentRuleRepositoryImpl implements TaskAssignmentRuleRepos
             : null)
         .persisted(true)
         .build();
+    model.setAudit(AuditMapping.trail(entity));
+    return model;
   }
 
   private ProcessInstanceEntity toProcessInstanceEntity(TaskAssignmentRule rule) {

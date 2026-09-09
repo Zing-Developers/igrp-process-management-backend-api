@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processdefinition.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.platform.process.management.processdefinition.application.dto.ProcessArtifactDTO;
 import cv.igrp.platform.process.management.processdefinition.application.dto.ProcessArtifactRequestDTO;
 import cv.igrp.platform.process.management.processdefinition.domain.models.ProcessArtifact;
@@ -41,6 +43,7 @@ public class ProcessArtifactMapper {
     );
     dto.setPriority(model.getPriority());
     dto.setDueDate(model.getDueDate());
+    AuditMapping.apply(dto, model.getAudit());
     return dto;
   }
 
@@ -60,7 +63,7 @@ public class ProcessArtifactMapper {
   }
 
   public ProcessArtifact toModel(ProcessArtifactEntity entity) {
-    return ProcessArtifact.builder()
+    var model = ProcessArtifact.builder()
         .id(Identifier.create(entity.getId()))
         .name(Name.create(entity.getName()))
         .processDefinitionId(Code.create(entity.getProcessDefinitionId()))
@@ -72,6 +75,8 @@ public class ProcessArtifactMapper {
         .dueDate(entity.getDueDate())
         .priority(entity.getPriority())
         .build();
+    model.setAudit(AuditMapping.trail(entity));
+    return model;
   }
 
   public List<ProcessArtifactDTO> toDTO(List<ProcessArtifact> processArtifacts) {

@@ -19,7 +19,7 @@ import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)
 @IgrpDTO
-public class TaskInstanceListPageDTO extends PageDTO {
+public class TaskInstanceListPageDTO extends PageDTO implements cv.igrp.platform.process.management.shared.security.AuditedPage {
 
 
   @Valid

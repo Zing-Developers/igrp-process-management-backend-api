@@ -67,4 +67,11 @@ public class M2mApiKeyEntity {
   @Column(name = "revoked_by")
   private String revokedBy;
 
+  /** Audit: last mutation of the row — create, revoke, or the rotate stamp on the old key. */
+  @Column(name = "updated_at")
+  private Instant updatedAt;
+
+  @Column(name = "updated_by")
+  private String updatedBy;
+
 }

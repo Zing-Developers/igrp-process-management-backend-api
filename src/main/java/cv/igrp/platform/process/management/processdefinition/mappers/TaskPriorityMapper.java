@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processdefinition.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.platform.process.management.processdefinition.application.dto.TaskPriorityDTO;
 import cv.igrp.platform.process.management.processdefinition.application.dto.TaskPriorityRequestDTO;
 import cv.igrp.platform.process.management.processdefinition.domain.models.TaskPriority;
@@ -38,6 +40,7 @@ public class TaskPriorityMapper {
     dto.setProcessDefinitionKey(model.getProcessDefinitionKey());
     dto.setId(model.getId().getValue());
     dto.setColor(model.getColor());
+    AuditMapping.apply(dto, model.getAudit());
     return dto;
   }
 
@@ -53,7 +56,7 @@ public class TaskPriorityMapper {
   }
 
   public TaskPriority toModel(TaskPriorityEntity entity) {
-    return TaskPriority.builder()
+    var model = TaskPriority.builder()
         .weight(entity.getWeight())
         .label(entity.getLabel())
         .code(Code.create(entity.getCode()))
@@ -61,6 +64,8 @@ public class TaskPriorityMapper {
         .id(Identifier.create(entity.getId()))
         .color(entity.getColor())
         .build();
+    model.setAudit(AuditMapping.trail(entity));
+    return model;
   }
 
   public List<TaskPriorityDTO> toDTO(List<TaskPriority> taskPriorities) {

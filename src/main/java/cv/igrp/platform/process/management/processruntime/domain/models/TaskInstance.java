@@ -17,6 +17,12 @@ import java.util.*;
 @Getter
 public class TaskInstance {
 
+  private cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit;
+
+  public void setAudit(cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit) {
+    this.audit = audit;
+  }
+
   private final Identifier id;
   private final Code taskKey;
   private final Code formKey;

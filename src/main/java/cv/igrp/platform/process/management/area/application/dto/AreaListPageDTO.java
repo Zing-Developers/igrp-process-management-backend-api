@@ -20,7 +20,7 @@ import lombok.EqualsAndHashCode;
 
 @EqualsAndHashCode(callSuper = true)
 @IgrpDTO
-public class AreaListPageDTO extends PageDTO {
+public class AreaListPageDTO extends PageDTO implements cv.igrp.platform.process.management.shared.security.AuditedPage {
 
   
   @Valid

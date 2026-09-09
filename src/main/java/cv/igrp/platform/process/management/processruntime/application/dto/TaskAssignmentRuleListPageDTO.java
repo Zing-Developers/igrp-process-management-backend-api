@@ -16,7 +16,7 @@ import java.util.List;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @IgrpDTO
-public class TaskAssignmentRuleListPageDTO extends PageDTO {
+public class TaskAssignmentRuleListPageDTO extends PageDTO implements cv.igrp.platform.process.management.shared.security.AuditedPage {
 
   @Valid
   private List<TaskAssignmentRuleListDTO> content = new ArrayList<>();

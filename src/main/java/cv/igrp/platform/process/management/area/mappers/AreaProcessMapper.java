@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.area.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.platform.process.management.area.application.dto.ProcessDefinitionDTO;
 import cv.igrp.platform.process.management.area.application.dto.ProcessDefinitionListPageDTO;
 import cv.igrp.platform.process.management.area.application.dto.ProcessDefinitionRequestDTO;
@@ -39,11 +41,12 @@ public class AreaProcessMapper {
     processDefinitionDTO.setRemovedAt(areaProcess.getRemovedAt());
     processDefinitionDTO.setRemovedBy(areaProcess.getRemovedBy());
     processDefinitionDTO.setName(areaProcess.getName());
+    AuditMapping.apply(processDefinitionDTO, areaProcess.getAudit());
     return processDefinitionDTO;
   }
 
   public AreaProcess toModel(AreaProcessEntity areaProcessEntity) {
-    return AreaProcess.builder()
+    var model = AreaProcess.builder()
         .id(Identifier.create(areaProcessEntity.getId()))
         .areaId(Identifier.create(areaProcessEntity.getAreaId().getId()))
         .processKey(Code.create(areaProcessEntity.getProcReleaseKey()))
@@ -56,6 +59,8 @@ public class AreaProcessMapper {
         .status(areaProcessEntity.getStatus())
         .name(areaProcessEntity.getName())
         .build();
+    model.setAudit(AuditMapping.trail(areaProcessEntity));
+    return model;
   }
 
   public AreaProcessEntity toEntity(AreaProcess areaProcess) {

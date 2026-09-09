@@ -12,7 +12,20 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @IgrpDTO
-public class TaskAssignmentRuleListDTO {
+// Audit trio (time, raw principal, enriched profile) follows the platform pattern.
+public class TaskAssignmentRuleListDTO implements cv.igrp.platform.process.management.shared.security.AuditedResponse {
+
+  private java.time.LocalDateTime createdAt;
+
+  private java.time.LocalDateTime updatedAt;
+
+  private String createdBy;
+
+  private String updatedBy;
+
+  private UserProfileDTO userProfileCreatedBy;
+
+  private UserProfileDTO userProfileUpdatedBy;
 
   private UUID id;
   private String processDefinitionKey;

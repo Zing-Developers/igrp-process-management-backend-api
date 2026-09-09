@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processruntime.mappers;
 
+import cv.igrp.platform.process.management.shared.config.AuditMapping;
+
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskInstanceEventListDTO;
 import cv.igrp.platform.process.management.processruntime.domain.models.TaskInstanceEvent;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
@@ -46,7 +48,7 @@ public class TaskInstanceEventMapper {
 
 
   public TaskInstanceEvent toEventModel(TaskInstanceEventEntity eventEntity) {
-      return TaskInstanceEvent.builder()
+      var model = TaskInstanceEvent.builder()
           .id(Identifier.create(eventEntity.getId()))
           .taskInstanceId(Identifier.create(eventEntity.getTaskInstanceId().getId()))
           .eventType(eventEntity.getEventType())
@@ -55,6 +57,8 @@ public class TaskInstanceEventMapper {
           .performedBy(Code.create(eventEntity.getPerformedBy()))
           .note(eventEntity.getNote())
           .build();
+      model.setAudit(AuditMapping.trail(eventEntity));
+      return model;
   }
 
 
@@ -75,6 +79,7 @@ public class TaskInstanceEventMapper {
       eventDto.setUserProfilePerformedBy(
           userProfileMapper.toDTO(event.getUserProfilePerformedBy())
       );
+      AuditMapping.apply(eventDto, event.getAudit());
       return eventDto;
   }
 

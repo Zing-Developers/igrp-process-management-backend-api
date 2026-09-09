@@ -12,6 +12,12 @@ import java.util.Objects;
 
 @Getter
 public class TaskInstanceEvent {
+
+  private cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit;
+
+  public void setAudit(cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit) {
+    this.audit = audit;
+  }
     private final Identifier id;
     private final Identifier taskInstanceId;
     private final TaskEventType eventType;

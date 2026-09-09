@@ -19,6 +19,12 @@ import java.util.Objects;
 @Getter
 public class ProcessSequence {
 
+  private cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit;
+
+  public void setAudit(cv.igrp.platform.process.management.shared.domain.models.AuditTrail audit) {
+    this.audit = audit;
+  }
+
   private static final Logger LOGGER = LoggerFactory.getLogger(ProcessSequence.class);
 
   private final Identifier id;

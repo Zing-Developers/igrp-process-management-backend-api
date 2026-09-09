@@ -37,8 +37,11 @@ associá-las aos perfis. Um utilizador sem permissão associada recebe 403 em to
   sem ela, cada utilizador vê apenas as suas tarefas e as dos seus grupos, independentemente dos
   filtros que o cliente enviar. A partir da 24.5 é uma **lista** (`IGRP_TASK_SEARCH_ALL_PERMISSIONS`),
   por isso pode apontar-se ao código real do módulo em vez de `TASK_INSTANCES:pesquisar_todos`.
-- O **super admin** é identificado pelo email do `/Auth/me` igual a `IRN_API_SUPER_ADMIN_EMAIL` —
-  passa em todas as regras sem precisar de permissões.
+- O **super admin** é identificado por email igual a `IRN_API_SUPER_ADMIN_EMAIL` (trim, case-insensitive)
+  e passa em todas as regras sem precisar de permissões. Com cookie `session_id` decide o email do
+  `/Auth/me`, como sempre: o IRN continua a mandar nos utilizadores que conhece, e revogar lá continua
+  a tirar a role. A partir da **24.8**, um pedido **sem** cookie cai no claim `email` do JWT validado.
+  É esse o caso do super admin a chamar a API só com o token.
 
 ### Frontends que partilham `/tasks-instances` (accept-also, 24.5)
 
@@ -69,12 +72,13 @@ openssl rsa -in irn-private-key.pem -pubout -out irn-public-key.pem
 ## 3. Variáveis de ambiente
 
 Iguais nas duas apps salvo indicação. Referência viva: `.env.example` de cada repo.
+Para ambiente de **desenvolvimento local** (adapter default, mocks, valores de arranque): `docs/DEV_ENVIRONMENT_GUIDE.md`.
 
 | Variável | Valor | Notas |
 |---|---|---|
 | `IGRP_AUTHORIZATION_SERVICE_ADAPTER` | `irn` | **`igrp` é inválido** nestas apps — o arranque falha. `default` = sem regras de permissão (só dev). |
 | `IRN_API_BASE_URL` | `https://<host-irn>/exp-cvt-system-administration` | o cliente acrescenta `/api/v1/Auth/me` |
-| `IRN_API_SUPER_ADMIN_EMAIL` | email do super admin | comparação exata com o email do `/Auth/me` |
+| `IRN_API_SUPER_ADMIN_EMAIL` | email do super admin | trim, case-insensitive. Com cookie decide o `/Auth/me`; sem cookie decide o claim `email` do JWT (24.8) |
 | `IRN_API_SESSION_COOKIE_NAME` | `session_id` (default) | nome do cookie de sessão IRN |
 | `IGRP_RESTCLIENT_PROVIDER` | `irn` | ativa o RestClient assinado RS256 |
 | `IGRP_AUTHORIZATION_JWT_KEY` | id da chave registada no IRN | |
@@ -86,6 +90,7 @@ Iguais nas duas apps salvo indicação. Referência viva: `.env.example` de cada
 | `IGRP_PROCESS_ENGINE_BASE_URL` | URL da **management API** | **Studio API**: motor a que o Studio faz deploy. Vazio = cliente *mock* (deploy não chega a motor real — só dev). O Studio reencaminha o Bearer do utilizador; o motor reaplica `PROCESS_DEFINITIONS:publicar` |
 | `IGRP_M2M_KEY_PEPPER` | segredo forte (secret manager) | **24.6, as duas apps — OBRIGATÓRIO em produção**: chaveia o HMAC dos hashes das API keys M2M; sem ele um dump da tabela expõe hashes não-apimentados. Mudá-lo invalida todas as keys existentes |
 | `IGRP_M2M_ROTATE_GRACE` | `7d` (default) | quanto tempo a key antiga sobrevive após um `rotate` antes de expirar sozinha |
+| `IGRP_DEFAULT_SUPER_ADMIN_EMAIL` | vazio (default) | **24.7, só `adapter=default` (dev)**: JWT cujo claim `email` bater (case-insensitive) vira super-admin — espelha o `IRN_API_SUPER_ADMIN_EMAIL` do adapter IRN. Vazio = ninguém, como antes. Sem efeito com `adapter=irn` |
 | `IGRP_SECURITY_PRINCIPAL_CLAIM_NAME` | **`email`** em IRN (default `sub`) | identidade gravada em tarefas, colunas de auditoria e logs. Tem de bater com o formato das atribuições — o IRN atribui por email, senão o match "minhas tarefas" falha. Igual nas duas apps; decidir **antes** do go-live (mudar com dados existentes deixa tarefas antigas órfãs no match). Exige o scope `email` no token Keycloak. |
 | `MANAGEMENT_HEALTH_MAIL_ENABLED` | `false` se não houver SMTP | **management API**: sem SMTP o `MailHealthIndicator` põe `/actuator/health` a 503 e mata os probes do k8s |
 | `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` | URL do Eureka | se service discovery ativo |
