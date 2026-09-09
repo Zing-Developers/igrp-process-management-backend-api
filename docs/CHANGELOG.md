@@ -1,5 +1,24 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-09 · Super admin sem sessão IRN (framework 24.8)
+
+Com `adapter=irn` o super admin só era reconhecido pelo email do `/Auth/me`, que exige o cookie
+`session_id`; um JWT válido do super admin sem esse cookie era um utilizador normal (e cada pedido
+gerava três WARN "No IRN session id").
+
+- **JWT primeiro** — o adapter IRN compara o claim `email` do token com `IRN_API_SUPER_ADMIN_EMAIL`
+  antes de olhar para a sessão: bate → `ROLE_DEPT_IGRP.superadmin` sem consultar o IRN (a role
+  sozinha passa em todas as regras de rota, grupos/permissões ficam vazios); não bate → cai no
+  `/Auth/me` da sessão, como antes, para utilizadores IRN cujo email do IdP seja diferente.
+- **Comparação unificada** — trim + case-insensitive nos dois adapters (o IRN usava `equals` exato),
+  via `SuperAdminEmail` no `process-runtime-auth-core`. Propriedades mantêm-se separadas
+  (`IRN_API_SUPER_ADMIN_EMAIL` / `IGRP_DEFAULT_SUPER_ADMIN_EMAIL`).
+- **Cookie em falta é caso normal** — o aviso passa a DEBUG. Sem alterações nas apps além do bump.
+
+**Validação:** framework 26/26 (9 novos: adapter IRN + cache service). O artefacto **24.8 tem de ser
+publicado no Sonatype** antes do build das apps.
+
+
 ## 2026-08 (f) · Sweep OSV proativo da árvore completa (pós-refresh)
 
 A pedido, verificou-se se as próprias versões atualizadas têm vulnerabilidades conhecidas — scan
