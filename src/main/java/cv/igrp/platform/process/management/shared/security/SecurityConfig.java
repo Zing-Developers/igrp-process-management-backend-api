@@ -204,7 +204,6 @@ public class SecurityConfig {
 
     converter.setJwtGrantedAuthoritiesConverter(jwt -> {
 
-      final String email = jwt.getClaimAsString("email");
       final String sub = jwt.getSubject();
 
       HttpServletRequest request =
@@ -231,7 +230,8 @@ public class SecurityConfig {
             .forEach(p -> authorities.add(new SimpleGrantedAuthority(p)));
 
         // Activiti Admin or User role
-        if (authorizationService.isSuperAdmin(token, request)) {
+        // the decoded token goes in, so the adapter reads claims without re-parsing or trusting a raw string
+        if (authorizationService.isSuperAdmin(jwt, request)) {
           LOGGER.info("User [{}] granted super admin privileges", sub);
           authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + IgrpAuthorizationConstants.SUPER_ADMIN_ROLE));
           authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + ActivitiConstants.ROLE_ACTIVITI_ADMIN));
