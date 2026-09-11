@@ -24,7 +24,7 @@ consultada quando o pedido **não traz sessão IRN**, e concede ao portador do t
 | E-3 | **Só `MODULO:acao`.** Mesma regex do M2M (`^[A-Z0-9_.]+:[a-z_]+$`) mais rejeição dos prefixos `ROLE_`/`GROUP_`, que a regex sozinha deixava passar (`ROLE_X:y`). Validado na escrita pela app e na leitura pelo framework (`PermissionFormat`, partilhado com o introspector M2M). O mapeamento nunca dá grupos, nem super admin, nem `ROLE_ACTIVITI_ADMIN`. |
 | E-4 | **Quem não está mapeado fica como hoje**: sem sessão, zero permissões, 403 nas rotas do catálogo. |
 | E-5 | **SPI no `process-runtime-auth-core`, store em cada app**, como o M2M: `EmailAccessResolver` com default no-op; tabela `t_email_access_mapping`, `DbEmailAccessResolver` e `/email-access-mappings` em cada backend. |
-| E-6 | **Gestão super-admin only**, no mesmo gate do `/m2m-keys/**` no `SecurityConfig`, fora do catálogo. Um token mapeado nunca chega lá: a role de super admin só vem de `isSuperAdmin`, e o mapeamento não a consegue dar (E-3). |
+| E-6 | **Gestão por permissão do catálogo, só com sessão IRN.** As rotas `/email-access-mappings` entram no catálogo como qualquer outra (`EMAIL_ACCESS_MAPPINGS:visualizar/criar/editar/eliminar`, `STUDIO_` no Studio, com `accept-also` por env para o código real do frontend), mas o `SecurityConfig` só aceita a permissão num pedido **com cookie `session_id`**: com sessão o mapeamento nunca é consultado (E-1), logo a permissão veio do System Administration. Um token mapeado não tem sessão e um cookie forjado manda-o para o caminho de sessão, onde o IRN o nega. Super admin passa sem sessão. Sem catálogo (`adapter=default`) fica super-admin only. Chave M2M continua barrada por não ser `JwtAuthenticationToken`. `/m2m-keys` mantém-se super-admin only (M-12). |
 | E-7 | **Criar, listar, editar, revogar.** Sem rotate: não há segredo. Revogação é soft (`active=false`, `revoked_by/at`), efectiva no pedido seguinte; sem cache. |
 | E-8 | **Uma linha activa por email**, garantido por índice único parcial na BD (`email WHERE active`). Depois de revogar pode criar-se outra. |
 | E-9 | **M2M mantém-se** tal como está. Quem preferir chave opaca continua a poder usá-la. |
@@ -53,7 +53,7 @@ Com cookie presente, `getPermissions` vai ao `/Auth/me` e o resolver nunca é ch
 `AuditEntity`/Envers, como `t_m2m_api_key`. Sem `last_used_at`: só serviria para limpeza, acrescenta-se
 quando alguém precisar de saber se um mapeamento ainda é usado.
 
-## 5. API (`/email-access-mappings`, JWT super admin)
+## 5. API (`/email-access-mappings`, JWT com `EMAIL_ACCESS_MAPPINGS:<acao>` e sessão IRN, ou super admin)
 
 | Método | Rota | Resposta |
 |---|---|---|
@@ -68,6 +68,7 @@ email já com mapeamento activo, mapeamento revogado no `PUT`). Contratos comple
 
 ## 6. Pré-condições operacionais (devops)
 
+- Registar no System Administration o módulo `EMAIL_ACCESS_MAPPINGS` (Studio: `STUDIO_EMAIL_ACCESS_MAPPINGS`) com `visualizar`, `criar`, `editar`, `eliminar`, e atribuí-lo aos perfis que gerem acessos; ou apontar o código real do ecrã do frontend nas env `IRN_EMAIL_ACCESS_MAPPINGS_ACCEPT_READ/WRITE/EDIT/DELETE`.
 - O token do service account traz o claim `email` (scope `email`), e o email é um endereço dedicado
   num domínio controlado, nunca o de um humano.
 - Realm Keycloak com "Duplicate emails" desligado e auto-registo desligado (ou verificação de email
@@ -86,4 +87,6 @@ Framework: `PermissionFormatTest`, `DefaultAuthorizationServiceAdapterTest`,
 falha propaga). App: `EmailAccessMappingServiceTest`, `DbEmailAccessResolverTest` e
 `SecurityConfigEmailAccessTest`, a primeira slice MockMvc do filter chain: token mapeado passa só na
 rota mapeada, role escrita na coluna não chega a `/email-access-mappings` nem a `/m2m-keys`, token sem
-email é negado sem consulta, falha do store nega até ao super admin, chave M2M não chega à gestão.
+email é negado sem consulta, falha do store nega até ao super admin, chave M2M não chega à gestão,
+gestor com sessão IRN e permissão usa a consola só nos verbos que tem, a permissão da consola vinda
+do mapeamento nunca conta (com ou sem cookie forjado), sessão sem a permissão é negada.

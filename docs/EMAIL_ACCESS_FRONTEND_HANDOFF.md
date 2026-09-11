@@ -13,10 +13,14 @@ independentes por backend; o UI é idêntico. É a irmã da consola de chaves M2
 
 ## 1. Autenticação e autorização da consola
 
-- As rotas `/email-access-mappings/**` exigem um **JWT de utilizador com role de super-admin** (o
-  mesmo Bearer + cookie de sessão IRN que o resto da app usa). Qualquer outro utilizador, um token
-  mapeado ou uma chave M2M recebem **403**.
-- O frontend deve **esconder a entrada de menu** para não-super-admins, mas o gate real é o backend.
+- As rotas `/email-access-mappings/**` estão no catálogo de permissões como qualquer outra: o
+  utilizador precisa de `EMAIL_ACCESS_MAPPINGS:visualizar` (listar), `:criar`, `:editar`, `:eliminar`
+  (revogar), ou do código do próprio ecrã do frontend quando devops o apontar via `accept-also`. No
+  Studio o módulo é `STUDIO_EMAIL_ACCESS_MAPPINGS`. O super admin passa sempre.
+- A permissão só conta com o **cookie de sessão IRN** presente (o mesmo Bearer + cookie que o resto da
+  app usa). Um token mapeado ou uma chave M2M recebem **403** seja qual for a permissão que carreguem.
+- O frontend deve **esconder a entrada de menu** a quem não tem `:visualizar`, e as acções *Editar* /
+  *Revogar* / *Novo* a quem não tem o verbo respectivo, mas o gate real é o backend.
 
 ## 2. Contratos da API
 
@@ -123,6 +127,7 @@ undo; para voltar a dar acesso cria-se um mapeamento novo. **400** se o id não 
 | Email não editável depois de criado | Um mapeamento é um grant a um endereço; mudar o endereço é outro grant |
 | Chips de permissão em maiúsculas/minúsculas tal como escritas; validar `MODULO:acao` no cliente | Evita ida ao backend por erro de digitação |
 | A consola não é acessível por token mapeado nem por chave M2M | O backend devolve 403; não tratar como erro inesperado |
+| Botões de acção seguem os verbos do perfil (`:criar`, `:editar`, `:eliminar`) | Um 403 numa acção é um perfil incompleto, não um bug |
 
 ## 5. Notas para QA
 
@@ -130,6 +135,6 @@ undo; para voltar a dar acesso cria-se um mapeamento novo. **400** se o id não 
 - Criar duas vezes o mesmo email (activo) → segunda dá **400**; revogar a primeira e repetir → **201**.
 - Revogar e repetir um pedido do sistema externo → **403** no pedido seguinte.
 - `PUT` num revogado → **400**.
-- Utilizador sem super-admin: **403** em todos os `/email-access-mappings/**`.
+- Utilizador sem a permissão do verbo (nem super admin): **403** nessa rota; com `:visualizar` só, a lista abre e as acções dão 403.
 - Sistema externo: token com `email` mapeado e **sem cookie** → 200 nas rotas mapeadas, 403 nas
   outras; o mesmo token **com** cookie de sessão IRN → permissões do IRN, não as do mapeamento.

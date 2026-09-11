@@ -13,8 +13,9 @@ passar (`ROLE_X:y`). M2M fica como estava.
 - Framework 24.9: SPI `EmailAccessResolver` (default no-op), sobrecarga
   `IAuthorizationServiceAdapter.getPermissions(Jwt, request)`, `PermissionFormat`.
 - App: `t_email_access_mapping` (V10, índice único parcial por email activo), `DbEmailAccessResolver`,
-  `/email-access-mappings` (POST/GET/PUT/DELETE) no mesmo gate super-admin do `/m2m-keys`. O converter
-  passa a chamar as sobrecargas `Jwt` de `getPermissions` e `isSuperAdmin`.
+  `/email-access-mappings` (POST/GET/PUT/DELETE) no catálogo como módulo `EMAIL_ACCESS_MAPPINGS`, com
+  a permissão honrada só em pedidos com sessão IRN (super admin isento; sem catálogo fica super-admin
+  only). O converter passa a chamar as sobrecargas `Jwt` de `getPermissions` e `isSuperAdmin`.
 - Primeira slice MockMvc do filter chain (`SecurityConfigEmailAccessTest`). Suite: 322/322.
 - Docs: `SPEC_EMAIL_ACCESS_MAPPING.md`, `EMAIL_ACCESS_FRONTEND_HANDOFF.md`, guia devops (pré-condições
   do realm Keycloak), e2e README.
