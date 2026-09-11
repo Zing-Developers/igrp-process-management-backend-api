@@ -1,5 +1,6 @@
 package cv.igrp.platform.process.management.shared.security.m2m;
 
+import cv.igrp.framework.process.runtime.auth.core.adapter.PermissionFormat;
 import cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO;
 import cv.igrp.platform.process.management.processruntime.domain.models.UserProfile;
 import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
@@ -36,8 +37,6 @@ public class M2mKeyService {
   // mutation (key-values become OTLP log attributes). Never the plaintext key, never the email.
   private static final Logger LOGGER = LoggerFactory.getLogger(M2mKeyService.class);
 
-  /** MODULE:action — role/group strings can never be granted through the permissions column (M-11). */
-  private static final Pattern PERMISSION_FORMAT = Pattern.compile("^[A-Z0-9_.]+:[a-z_]+$");
   private static final Pattern CLIENT_NAME_FORMAT = Pattern.compile("^[a-z0-9._-]+$");
 
   private final M2mApiKeyEntityRepository repository;
@@ -74,7 +73,8 @@ public class M2mKeyService {
       throw new IllegalArgumentException("at least one permission is required");
     }
     for (String permission : permissions) {
-      if (permission == null || !PERMISSION_FORMAT.matcher(permission.trim()).matches()) {
+      // MODULE:action only, never a role or group (M-11): the framework's gate, shared with the email mapping
+      if (!PermissionFormat.isValid(permission)) {
         LOGGER.atWarn()
             .addKeyValue("event", "m2m_key_permission_rejected")
             .addKeyValue("m2m.client_name", clientName)

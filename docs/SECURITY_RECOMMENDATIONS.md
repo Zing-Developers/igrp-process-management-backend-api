@@ -9,6 +9,14 @@ CVE remediation — see docs/CHANGELOG.md). DONE items reference the closing wor
 > rest, runtime revocation, `MODULO:acao`-only permissions (`ROLE_*` hard-rejected), management routes
 > structurally barred from keys, fail-closed resolution. Not part of the Accenture scope; listed here
 > so future reviews include it.
+>
+> **Second surface (24.9):** email access mappings (`docs/SPEC_EMAIL_ACCESS_MAPPING.md`) — a
+> validated Keycloak token without an IRN session is granted the `MODULO:acao` permissions mapped to
+> its `email` claim. Controls: session first (with a cookie IRN decides, no fallback), format gate in
+> the framework (`ROLE_*`/`GROUP_*` rejected on write and on read), console routes catalogued but
+> honoured only with an IRN session so a mapped token can never manage mappings, no secret at rest.
+> Trust boundary is the Keycloak realm (duplicate/self-registered emails), documented in the devops
+> guide rather than mitigated in code; keying by `azp` is the recorded fallback.
 
 This is a static project review. Validate every recommendation against the target production environment, identity provider, deployment platform, and data-classification rules.
 

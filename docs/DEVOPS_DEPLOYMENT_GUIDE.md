@@ -1,4 +1,4 @@
-# Guia de Instalação DevOps — Release 24.6 (Autorização IRN + CVE)
+# Guia de Instalação DevOps — Release 24.9 (Autorização IRN + CVE + acesso por email)
 
 Aplica-se à **management API** e ao **Studio API**. A ordem das secções é a ordem de execução —
 o passo 1 é pré-requisito de tudo: sem ele, o deploy resulta em 403 generalizado.
@@ -10,7 +10,7 @@ o passo 1 é pré-requisito de tudo: sem ele, o deploy resulta em 403 generaliza
 Não existe API de registo — é manual, na UI. Criar os **módulos** e as **permissões**, depois
 associá-las aos perfis. Um utilizador sem permissão associada recebe 403 em todas as rotas.
 
-### Management API — 5 módulos, 17 permissões
+### Management API — 6 módulos, 21 permissões
 
 | Módulo | Permissões |
 |---|---|
@@ -19,14 +19,16 @@ associá-las aos perfis. Um utilizador sem permissão associada recebe 403 em to
 | `PROCESS_INSTANCES` | `visualizar` · `criar` |
 | `ACTIVITIES` | `visualizar` |
 | `TASK_INSTANCES` | `visualizar` · `criar` · `editar` · `eliminar` · `pesquisar_todos` |
+| `EMAIL_ACCESS_MAPPINGS` | `visualizar` · `criar` · `editar` · `eliminar` (24.9, consola de acessos por email; só com sessão IRN) |
 
-### Studio API — 3 módulos, 8 permissões
+### Studio API — 4 módulos, 12 permissões
 
 | Módulo | Permissões |
 |---|---|
 | `STUDIO_PROJECTS` | `visualizar` · `criar` · `editar` |
 | `STUDIO_PROCESS_DEFINITIONS` | `visualizar` · `criar` · `editar` · `publicar` |
 | `STUDIO_PARAMETERIZATION` | `visualizar` |
+| `STUDIO_EMAIL_ACCESS_MAPPINGS` | `visualizar` · `criar` · `editar` · `eliminar` (24.9, consola de acessos por email; só com sessão IRN) |
 
 ### Permissões a atribuir com critério
 
@@ -54,6 +56,25 @@ os códigos dos frontends. Só `TASK_MANAGEMENT:ver` está confirmado; os verbos
 var quando forem definidos no System Administration (sem recompilar).
 
 Mapa completo rota→permissão: `docs/SPEC_ROUTE_AUTHORIZATION.md` em cada repo.
+
+## 1b. Acesso por email para sistemas externos (24.9)
+
+Em vez de chaves M2M, um integrador pode chamar a API com o **seu** token Keycloak (client credentials)
+sem sessão IRN: quem tiver `EMAIL_ACCESS_MAPPINGS:*` no perfil (ou o super admin) mapeia o email do
+service account às permissões `MODULO:acao` na consola `/email-access-mappings` (spec:
+`docs/SPEC_EMAIL_ACCESS_MAPPING.md`). A consola só honra essa permissão com sessão IRN, por isso um
+token mapeado nunca gere mapeamentos. Sem pepper. O que devops garante no Keycloak:
+
+- o token do service account traz o claim **`email`** (scope `email`; definir o email no
+  service-account user do client), num endereço **dedicado** de um domínio controlado, nunca o de um
+  humano (partilharia atribuição em `created_by`/`started_by`);
+- realm com **"Duplicate emails" desligado** e **auto-registo desligado** (ou verificação de email
+  ligada): senão alguém regista o email do service account antes dele existir;
+- o `IRN_API_SUPER_ADMIN_EMAIL` pertence a uma conta humana real: desde o 24.8 um service account com
+  esse email num token válido é super admin sem sessão;
+- o integrador **não envia cookies**; um `session_id` obsoleto dá 403 e um ERROR por pedido.
+
+Com cookie de sessão IRN presente, o mapeamento nunca é consultado: o `/Auth/me` decide como sempre.
 
 ## 2. Segredos e chaves
 
@@ -91,6 +112,7 @@ Para ambiente de **desenvolvimento local** (adapter default, mocks, valores de a
 | `IGRP_M2M_KEY_PEPPER` | segredo forte (secret manager) | **24.6, as duas apps — OBRIGATÓRIO em produção**: chaveia o HMAC dos hashes das API keys M2M; sem ele um dump da tabela expõe hashes não-apimentados. Mudá-lo invalida todas as keys existentes |
 | `IGRP_M2M_ROTATE_GRACE` | `7d` (default) | quanto tempo a key antiga sobrevive após um `rotate` antes de expirar sozinha |
 | `IGRP_DEFAULT_SUPER_ADMIN_EMAIL` | vazio (default) | **24.7, só `adapter=default` (dev)**: JWT cujo claim `email` bater (case-insensitive) vira super-admin — espelha o `IRN_API_SUPER_ADMIN_EMAIL` do adapter IRN. Vazio = ninguém, como antes. Sem efeito com `adapter=irn` |
+| `IRN_EMAIL_ACCESS_MAPPINGS_ACCEPT_READ` / `_WRITE` / `_EDIT` / `_DELETE` | vazio | **24.9, as duas apps**: códigos reais do ecrã de gestão de acessos no System Administration, aceites a par de `EMAIL_ACCESS_MAPPINGS:<acao>` (Studio: `STUDIO_…`). Vazio = só o módulo do catálogo. Sem segredo novo; o resto é o realm Keycloak, secção 1b. |
 | `IGRP_SECURITY_PRINCIPAL_CLAIM_NAME` | **`email`** em IRN (default `sub`) | identidade gravada em tarefas, colunas de auditoria e logs. Tem de bater com o formato das atribuições — o IRN atribui por email, senão o match "minhas tarefas" falha. Igual nas duas apps; decidir **antes** do go-live (mudar com dados existentes deixa tarefas antigas órfãs no match). Exige o scope `email` no token Keycloak. |
 | `MANAGEMENT_HEALTH_MAIL_ENABLED` | `false` se não houver SMTP | **management API**: sem SMTP o `MailHealthIndicator` põe `/actuator/health` a 503 e mata os probes do k8s |
 | `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` | URL do Eureka | se service discovery ativo |
