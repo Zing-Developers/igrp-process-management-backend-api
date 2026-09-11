@@ -133,11 +133,12 @@ public class SecurityConfig {
               "/actuator/health", "/actuator/health/**"
           ).permitAll();
 
-          // M2M key management is security plumbing, not a business route: a dedicated gate, never
-          // the catalogue (an IRN-provisionable M2MKEYS:* permission would let a non-super-admin — or
-          // a key — mint keys). Requires a human JWT super-admin: an M2M key can never satisfy this,
-          // whatever authorities it carries (SPEC_M2M_AUTHORIZATION.md M-12).
-          authorize.requestMatchers("/m2m-keys/**").access((authenticationSupplier, context) -> {
+          // Credential and grant management is security plumbing, not a business route: a dedicated
+          // gate, never the catalogue (an IRN-provisionable permission would let a non-super-admin, a
+          // key or a mapped token mint grants). Requires a JWT super-admin: an M2M key is never a
+          // JwtAuthenticationToken, and neither store can grant the super-admin role, so nothing they
+          // carry satisfies this (SPEC_M2M_AUTHORIZATION.md M-12, SPEC_EMAIL_ACCESS_MAPPING.md E-6).
+          authorize.requestMatchers("/m2m-keys/**", "/email-access-mappings/**").access((authenticationSupplier, context) -> {
             final var authentication = authenticationSupplier.get();
             final var superAdmin = ROLE_PREFIX + IgrpAuthorizationConstants.SUPER_ADMIN_ROLE;
             return new AuthorizationDecision(authentication instanceof JwtAuthenticationToken
@@ -226,12 +227,14 @@ public class SecurityConfig {
               authorities.add(new SimpleGrantedAuthority(groupValue));
             });
 
+        // the Jwt overload: without an IRN session the adapter grants what the application mapped to
+        // the validated token's email claim (docs/SPEC_EMAIL_ACCESS_MAPPING.md)
         authorizationService
-            .getPermissions(token, request)
+            .getPermissions(jwt, request)
             .forEach(p -> authorities.add(new SimpleGrantedAuthority(p)));
 
         // Activiti Admin or User role
-        if (authorizationService.isSuperAdmin(token, request)) {
+        if (authorizationService.isSuperAdmin(jwt, request)) {
           LOGGER.info("User [{}] granted super admin privileges", sub);
           authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + IgrpAuthorizationConstants.SUPER_ADMIN_ROLE));
           authorities.add(new SimpleGrantedAuthority(ROLE_PREFIX + ActivitiConstants.ROLE_ACTIVITI_ADMIN));

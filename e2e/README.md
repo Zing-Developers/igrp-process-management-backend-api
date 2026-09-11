@@ -60,6 +60,13 @@ the key: in-permission → 200, out-of-permission → 403, `/m2m-keys` with a ke
 barred), revoked/fake key → 401. Keys live in `t_m2m_api_key` (Flyway V7); the pepper defaults to
 empty in e2e.
 
+**Email access mapping (24.9):** the same token, no cookie. `./mint-token.sh svc svc@test.local`
+without `Cookie:` → 403 on every catalogued route; `POST /email-access-mappings` as the super admin
+(Bearer `sess-admin` token + its cookie) with `{"email":"svc@test.local","permissions":["AREAS:visualizar"]}`
+→ that token now gets 200 on `GET /areas` and 403 elsewhere; `DELETE /email-access-mappings/{id}`
+→ 403 on the next request; the same token **with** `Cookie: session_id=sess-mgmt-creator` → IRN
+permissions, not the mapping. Rows live in `t_email_access_mapping` (Flyway V10).
+
 ### Stubbed sessions (wiremock/irn/mappings/)
 
 | session_id | permissions | email |

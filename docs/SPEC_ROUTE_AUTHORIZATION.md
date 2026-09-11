@@ -287,6 +287,11 @@ spec (any-of, sem caminho paralelo). As rotas de gestão `/m2m-keys/**` têm um 
 `irn.authorization.routes.*` — uma permissão provisionável tipo `M2MKEYS:criar` permitiria a um
 não-super-admin (ou a uma key) cunhar keys. Detalhe completo: `docs/SPEC_M2M_AUTHORIZATION.md`.
 
+Desde a **24.9** há a segunda via, sem chave nossa: o integrador chama com o seu token Keycloak sem
+sessão IRN e recebe as permissões `MODULO:acao` que o super admin mapeou ao claim `email` do token em
+`/email-access-mappings` (mesmo gate do `/m2m-keys`). Com sessão presente o IRN decide sempre.
+Detalhe: `docs/SPEC_EMAIL_ACCESS_MAPPING.md`.
+
 ### 4.5 Riscos assinalados
 
 | # | Risco | Correção, se decidirem |

@@ -24,6 +24,9 @@ Verificação: `python3 scripts/check_igrpstudio_drift.py` (falha com exit 1 se 
 | `shared/models/M2mApiKeyEntity.json` | `shared/infrastructure/persistence/entity/M2mApiKeyEntity` | Sem `AuditEntity`/Envers **por design** (`audit:false`, `revision:false`). A implementação manual tem regras (hash HMAC, `active`, `expires_at`) que o gerador não conhece — reconciliar, não substituir. |
 | `shared/controllers/M2mKeyController.json` | `shared/security/m2m/M2mKeyController` | Gate super-admin JWT-only está no `SecurityConfig`, não no controller. |
 | `shared/dto/M2mKey*DTO.json` | `shared/application/dto/M2mKey*DTO` | Payloads das rotas `/m2m-keys`. |
+| `shared/models/EmailAccessMappingEntity.json` | `shared/infrastructure/persistence/entity/EmailAccessMappingEntity` | Sem `AuditEntity`/Envers **por design**. O índice único parcial (`email WHERE active`) vive no V10; o gerador não o exprime. |
+| `shared/controllers/EmailAccessMappingController.json` | `shared/security/access/EmailAccessMappingController` | Gate super-admin JWT-only no `SecurityConfig` (partilhado com `/m2m-keys`). |
+| `shared/dto/EmailAccessMapping*DTO.json` | `shared/application/dto/EmailAccessMapping*DTO` | Payloads das rotas `/email-access-mappings`. |
 
 Fora do gerador, sem modelo (infra de segurança): `SecurityConfig`, `IAMUserProfileSyncFilter`,
 `AuditUserResponseAdvice`, `AuditedResponse`/`AuditedPage`, `AuditMapping`, `ApplicationAuditorAware`.
