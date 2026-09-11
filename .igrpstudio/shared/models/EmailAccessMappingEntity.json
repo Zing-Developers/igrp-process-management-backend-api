@@ -40,6 +40,15 @@
       "skipFieldRevision": false
     },
     {
+      "name": "notes",
+      "type": "string",
+      "length": 255,
+      "nullable": true,
+      "unique": false,
+      "primaryKey": false,
+      "skipFieldRevision": false
+    },
+    {
       "name": "permissions",
       "type": "string",
       "length": 255,

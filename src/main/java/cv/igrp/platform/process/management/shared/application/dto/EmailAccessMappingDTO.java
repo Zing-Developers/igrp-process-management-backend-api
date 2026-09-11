@@ -23,6 +23,8 @@ public class EmailAccessMappingDTO {
 
   private String description;
 
+  private String notes;
+
   private List<String> permissions;
 
   private boolean active;

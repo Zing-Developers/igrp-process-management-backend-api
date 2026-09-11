@@ -22,6 +22,8 @@ public class EmailAccessMappingRequestDTO {
 
   private String description;
 
+  private String notes;
+
   // zone-less LocalDateTime, the datetime shape of every other endpoint
   private LocalDateTime expiresAt;
 

@@ -43,7 +43,7 @@ public class EmailAccessMappingController {
   public ResponseEntity<EmailAccessMappingDTO> create(@RequestBody EmailAccessMappingRequestDTO request,
                                                       Authentication authentication) {
     final var created = service.create(request.getEmail(), request.getPermissions(), request.getDescription(),
-        toInstant(request.getExpiresAt()), authentication.getName());
+        request.getNotes(), toInstant(request.getExpiresAt()), authentication.getName());
     return ResponseEntity.status(HttpStatus.CREATED).body(created);
   }
 
@@ -57,7 +57,7 @@ public class EmailAccessMappingController {
                                                       @RequestBody EmailAccessMappingRequestDTO request,
                                                       Authentication authentication) {
     return ResponseEntity.ok(service.update(id, request.getPermissions(), request.getDescription(),
-        toInstant(request.getExpiresAt()), authentication.getName()));
+        request.getNotes(), toInstant(request.getExpiresAt()), authentication.getName()));
   }
 
   @DeleteMapping("/{id}")

@@ -36,7 +36,8 @@ Content-Type: application/json
 {
   "email": "svc-fila@parceiro.cv",               // obrigatório; guardado em minúsculas
   "permissions": ["TASK_INSTANCES:visualizar"],   // obrigatório, ≥1, formato MODULO:acao
-  "description": "Job da fila de trabalho",       // opcional
+  "description": "Job da fila de trabalho",       // opcional, uma linha
+  "notes": "Pedido no ticket IRN-4521; contacto: ops@parceiro.cv",  // opcional, texto livre
   "expiresAt": "2027-01-01T00:00:00"              // opcional, LocalDateTime SEM zona
 }
 ```
@@ -47,6 +48,7 @@ Content-Type: application/json
   "id": "e7824b29-e028-4e4a-a5df-c5f9bb038a35",
   "email": "svc-fila@parceiro.cv",
   "description": "Job da fila de trabalho",
+  "notes": "Pedido no ticket IRN-4521; contacto: ops@parceiro.cv",
   "permissions": ["TASK_INSTANCES:visualizar"],
   "active": true,
   "expiresAt": null,
@@ -93,9 +95,9 @@ Derivação do **estado** para o pill:
 
 ```
 PUT /email-access-mappings/{id}
-{ "permissions": [...], "description": "...", "expiresAt": "..." }   // email ignorado, nunca muda
+{ "permissions": [...], "description": "...", "notes": "...", "expiresAt": "..." }   // email ignorado, nunca muda
 ```
-**200 OK** — mapeamento actualizado. Substitui os três campos por inteiro (enviar sempre a lista
+**200 OK** — mapeamento actualizado. Substitui os quatro campos por inteiro (enviar sempre a lista
 completa de permissões). **400** se o mapeamento estiver revogado ("create a new one"), se a lista
 vier vazia ou com permissão inválida, ou se o id não existir.
 
@@ -110,10 +112,11 @@ undo; para voltar a dar acesso cria-se um mapeamento novo. **400** se o id não 
 ## 3. Ecrãs (ver o protótipo)
 
 1. **Lista** — tabela: email (+ descrição como sublinha), permissões em chips, pill de estado, expira
-   em, criado (+ "por *utilizador*"), última alteração, acções *Editar*/*Revogar* (desactivadas em
+   em, criado (+ "por *utilizador*"), última alteração, ícone de notas com tooltip quando `notes` existe, acções *Editar*/*Revogar* (desactivadas em
    revogados). Revogado mostra "revogado a *data* por *utilizador*". Botão **+ Novo mapeamento**.
 2. **Criar** (modal) — email, permissões como *chip input* (Enter adiciona; validar formato no cliente
-   **e** mostrar erros 400 do backend), descrição opcional, expiração opcional.
+   **e** mostrar erros 400 do backend), descrição opcional (uma linha), notas opcionais (texto livre,
+   multi-linha: quem pediu, ticket, contacto), expiração opcional.
 3. **Editar** (modal) — mesmo formulário com o email bloqueado.
 4. **Revogar** (confirmação) — email + consequência ("o sistema passa a receber 403 já no próximo
    pedido").

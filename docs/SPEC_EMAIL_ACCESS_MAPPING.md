@@ -47,7 +47,7 @@ Com cookie presente, `getPermissions` vai ao `/Auth/me` e o resolver nunca é ch
 
 ## 4. Modelo de dados (`V10__create_email_access_mapping.sql`; Studio `V6`)
 
-`t_email_access_mapping`: `id`, `email` (minúsculas), `description`, `permissions` (CSV
+`t_email_access_mapping`: `id`, `email` (minúsculas), `description`, `notes` (texto livre para os operadores, V11/V7, nunca entra numa decisão), `permissions` (CSV
 `MODULO:acao`), `active`, `expires_at`, `created_by/at`, `updated_by/at`, `revoked_by/at`.
 Índice único parcial `uq_email_access_mapping_active_email ON (email) WHERE active`. Sem
 `AuditEntity`/Envers, como `t_m2m_api_key`. Sem `last_used_at`: só serviria para limpeza, acrescenta-se
@@ -59,7 +59,7 @@ quando alguém precisar de saber se um mapeamento ainda é usado.
 |---|---|---|
 | `POST` | `/email-access-mappings` | `201` mapeamento |
 | `GET` | `/email-access-mappings` | `200` lista, revogados incluídos |
-| `PUT` | `/email-access-mappings/{id}` | `200` mapeamento (permissões, descrição, expiração substituídas; email nunca muda) |
+| `PUT` | `/email-access-mappings/{id}` | `200` mapeamento (permissões, descrição, notas, expiração substituídas; email nunca muda) |
 | `DELETE` | `/email-access-mappings/{id}` | `204` revogação |
 
 Erros de validação: `400 {"error": "..."}` (email inválido, lista vazia, permissão fora do formato,

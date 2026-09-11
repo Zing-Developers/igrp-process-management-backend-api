@@ -34,6 +34,10 @@ public class EmailAccessMappingEntity {
   @Column(name = "description")
   private String description;
 
+  /** Free text for the operators: who asked for the grant, ticket, contact. Never part of any decision. */
+  @Column(name = "notes")
+  private String notes;
+
   /** Comma-separated MODULE:action list — validated on write here, re-checked on read by the framework. */
   @Column(name = "permissions", nullable = false)
   private String permissions;
