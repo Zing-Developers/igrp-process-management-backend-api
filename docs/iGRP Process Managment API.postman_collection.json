@@ -3328,6 +3328,151 @@
      "response": []
     }
    ]
+  },
+  {
+   "name": "email-access-mappings (EMAIL_ACCESS_MAPPINGS:* + sessão IRN, ou super-admin)",
+   "description": "Mapeamentos email → permissões (docs/SPEC_EMAIL_ACCESS_MAPPING.md, release 24.9). Um sistema externo chama com o SEU token Keycloak sem cookie e recebe as permissões mapeadas ao claim email. A consola exige JWT + cookie de sessão IRN com EMAIL_ACCESS_MAPPINGS:<acao> (super-admin passa sem sessão); um token mapeado ou uma key M2M levam 403 nestas rotas.",
+   "item": [
+    {
+     "name": "Criar mapeamento",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Cookie",
+        "value": "session_id={{irnSessionId}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/email-access-mappings",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "email-access-mappings"
+       ]
+      },
+      "description": "201 com o mapeamento activo (EMAIL_ACCESS_MAPPINGS:criar). 400 se o email for inválido, a lista vier vazia, uma permissão sair de MODULO:acao (ROLE_*/GROUP_* rejeitados) ou o email já tiver mapeamento activo.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"email\": \"svc-fila@parceiro.cv\",\n  \"permissions\": [\n    \"TASK_INSTANCES:visualizar\"\n  ],\n  \"description\": \"Job da fila de trabalho\",\n  \"notes\": \"Pedido no ticket IRN-4521; contacto ops@parceiro.cv\",\n  \"expiresAt\": null\n}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Listar mapeamentos",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Cookie",
+        "value": "session_id={{irnSessionId}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/email-access-mappings",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "email-access-mappings"
+       ]
+      },
+      "description": "200 — todos, revogados incluídos (EMAIL_ACCESS_MAPPINGS:visualizar). Estado: active=false → revogado; expiresAt no passado → expirado."
+     },
+     "response": []
+    },
+    {
+     "name": "Editar mapeamento",
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Cookie",
+        "value": "session_id={{irnSessionId}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/email-access-mappings/:id",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "email-access-mappings",
+        ":id"
+       ]
+      },
+      "description": "200 (EMAIL_ACCESS_MAPPINGS:editar). Substitui permissões, descrição, notas e expiração; o email nunca muda. 400 se o mapeamento estiver revogado.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"permissions\": [\n    \"TASK_INSTANCES:visualizar\",\n    \"PROCESS_INSTANCES:visualizar\"\n  ],\n  \"description\": \"Job da fila de trabalho\",\n  \"notes\": \"Alargado ao BI a pedido do ticket IRN-4610\",\n  \"expiresAt\": null\n}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Revogar mapeamento",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Cookie",
+        "value": "session_id={{irnSessionId}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/email-access-mappings/:id",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "email-access-mappings",
+        ":id"
+       ]
+      },
+      "description": "204 (EMAIL_ACCESS_MAPPINGS:eliminar) — efeito no pedido seguinte do sistema externo. Sem undo: para voltar a dar acesso cria-se outro mapeamento."
+     },
+     "response": []
+    },
+    {
+     "name": "Exemplo sistema externo: pesquisar tarefas com o token mapeado",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{baseUrl}}/tasks-instances/search",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "tasks-instances",
+        "search"
+       ]
+      },
+      "description": "Chamada de MÁQUINA: Bearer {{externalSystemToken}} (token Keycloak client_credentials cujo claim email está mapeado), SEM cookie de sessão. Passa nas rotas cobertas pelas permissões mapeadas; fora delas → 403; mapeamento revogado/expirado → 403. Se enviar cookie de sessão, o IRN decide e o mapeamento é ignorado.",
+      "auth": {
+       "type": "bearer",
+       "bearer": [
+        {
+         "key": "token",
+         "value": "{{externalSystemToken}}",
+         "type": "string"
+        }
+       ]
+      }
+     },
+     "response": []
+    }
+   ]
   }
  ],
  "auth": {
@@ -3404,6 +3549,12 @@
    "value": "",
    "type": "string",
    "description": "API key M2M (igrpm2m_…) para chamadas de máquina — dispensa Keycloak e sessão"
+  },
+  {
+   "key": "externalSystemToken",
+   "value": "",
+   "type": "string",
+   "description": "Token Keycloak (client_credentials) do sistema externo cujo email está mapeado"
   }
  ]
 }

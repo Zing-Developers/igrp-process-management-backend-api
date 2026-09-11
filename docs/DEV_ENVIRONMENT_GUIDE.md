@@ -94,6 +94,16 @@ Fluxo: com o `IGRP_DEFAULT_SUPER_ADMIN_EMAIL` definido, cria uma key via
 `POST /m2m-keys` (Swagger UI serve) e usa-a com `Authorization: Bearer igrpm2m_…` — sem cookie, sem
 Keycloak. Nota: mudar o pepper depois invalida as keys criadas.
 
+## 4b. Acesso por email em dev (24.9)
+
+Sem env nova. Com `adapter=default` não há sessão IRN, por isso **qualquer** token é autorizado pelo
+mapeamento do seu claim `email` (em produção só os pedidos sem cookie). A consola
+`/email-access-mappings` fica só super-admin no adapter default (não há catálogo), logo o fluxo é:
+`IGRP_DEFAULT_SUPER_ADMIN_EMAIL` definido → `POST /email-access-mappings` com
+`{"email":"<email de outro token de dev>","permissions":["AREAS:visualizar"]}` → esse token passa a
+ter a permissão. Para testar a consola por permissão (`EMAIL_ACCESS_MAPPINGS:*` + cookie) é preciso o
+adapter `irn` com o mock do e2e (`e2e/README.md`, sessão `sess-access-manager`).
+
 ## 5. O resto — defaults de dev já corretos
 
 Estas têm default são e só se mexem se precisares do comportamento:
@@ -147,6 +157,7 @@ Studio: igual, trocando `SERVICE_PORT=8082`, a BD, e acrescentando
 curl -s localhost:8080/actuator/health            # 200 {"status":"UP"}
 # token do teu Keycloak dev com o email do escape:
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/m2m-keys -H "Authorization: Bearer $TOK"   # 200 = super-admin ok
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/email-access-mappings -H "Authorization: Bearer $TOK"   # 200 = super-admin ok (24.9)
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/areas -H "Authorization: Bearer $TOK"      # 200 = auth-only ok
 ```
 

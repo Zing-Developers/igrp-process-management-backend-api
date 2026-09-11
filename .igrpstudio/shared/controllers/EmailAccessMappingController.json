@@ -1,0 +1,135 @@
+{
+  "type": "controller",
+  "name": "EmailAccessMapping",
+  "module": "shared",
+  "description": "Super-admin management of email access mappings (SPEC_EMAIL_ACCESS_MAPPING.md). JWT super-admin only; the gate is in SecurityConfig, not here.",
+  "basePath": "email-access-mappings",
+  "id": "eamctrl001-CONTROLLER",
+  "actions": [
+    {
+      "actionName": "createMapping",
+      "method": "POST",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "EmailAccessMappingRequestDTO",
+              "objectType": "dto",
+              "name": "data",
+              "collectionType": "none",
+              "module": "shared"
+            }
+          }
+        }
+      },
+      "responses": {
+        "201": {
+          "name": "Created",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "EmailAccessMappingDTO",
+                "objectType": "dto",
+                "name": "data",
+                "collectionType": "none",
+                "module": "shared"
+              }
+            }
+          },
+          "description": "The mapping, active"
+        }
+      }
+    },
+    {
+      "actionName": "listMappings",
+      "method": "GET",
+      "responses": {
+        "200": {
+          "name": "OK",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "EmailAccessMappingDTO",
+                "objectType": "dto",
+                "name": "data",
+                "collectionType": "list",
+                "module": "shared"
+              }
+            }
+          },
+          "description": "All mappings, revoked included"
+        }
+      }
+    },
+    {
+      "actionName": "updateMapping",
+      "path": "{id}",
+      "method": "PUT",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "EmailAccessMappingRequestDTO",
+              "objectType": "dto",
+              "name": "data",
+              "collectionType": "none",
+              "module": "shared"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "name": "OK",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "EmailAccessMappingDTO",
+                "objectType": "dto",
+                "name": "data",
+                "collectionType": "none",
+                "module": "shared"
+              }
+            }
+          },
+          "description": "Permissions, description, expiry replaced"
+        }
+      },
+      "pathVariables": [
+        {
+          "name": "id",
+          "type": "string",
+          "isRequired": true,
+          "description": "Mapping id"
+        }
+      ]
+    },
+    {
+      "actionName": "revokeMapping",
+      "path": "{id}",
+      "method": "DELETE",
+      "responses": {
+        "204": {
+          "name": "OK",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "name": "data",
+                "collectionType": "none"
+              }
+            }
+          }
+        }
+      },
+      "pathVariables": [
+        {
+          "name": "id",
+          "type": "string",
+          "isRequired": true,
+          "description": "Mapping id"
+        }
+      ]
+    }
+  ]
+}

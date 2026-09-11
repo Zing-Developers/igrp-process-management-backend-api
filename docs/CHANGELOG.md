@@ -1,5 +1,27 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-09 (a) · Mapeamento de acesso por email (framework 24.9)
+
+A alternativa ao M2M para integradores que já têm token Keycloak (client credentials) com claim
+`email`: em vez de uma chave nossa, uma tabela **email → permissões** gerida por super admin. O
+adaptador IRN mantém a regra **sessão primeiro**: com cookie `session_id` o `/Auth/me` decide e uma
+falha do IRN continua a negar; só um pedido sem sessão consulta o mapeamento pelo `email` do JWT
+validado. Só `MODULO:acao`, nunca grupos nem super admin: o novo `PermissionFormat` do framework, agora
+partilhado com o introspector M2M, rejeita também os prefixos `ROLE_`/`GROUP_` que a regex deixava
+passar (`ROLE_X:y`). M2M fica como estava.
+
+- Framework 24.9: SPI `EmailAccessResolver` (default no-op), sobrecarga
+  `IAuthorizationServiceAdapter.getPermissions(Jwt, request)`, `PermissionFormat`.
+- App: `t_email_access_mapping` (V10, índice único parcial por email activo), `DbEmailAccessResolver`,
+  `/email-access-mappings` (POST/GET/PUT/DELETE) no catálogo como módulo `EMAIL_ACCESS_MAPPINGS`, com
+  a permissão honrada só em pedidos com sessão IRN (super admin isento; sem catálogo fica super-admin
+  only). O converter passa a chamar as sobrecargas `Jwt` de `getPermissions` e `isSuperAdmin`.
+- Primeira slice MockMvc do filter chain (`SecurityConfigEmailAccessTest`). Suite: 325/325. e2e
+  `e2e/email-access-mapping.sh` 46/46 nas duas apps; apanhou um `Set.of` com o mesmo principal (criador a
+  editar o próprio mapeamento dava 400), corrigido.
+- Docs: `SPEC_EMAIL_ACCESS_MAPPING.md`, `EMAIL_ACCESS_FRONTEND_HANDOFF.md`, guia devops (pré-condições
+  do realm Keycloak), e2e README.
+
 ## 2026-09 · Super admin sem sessão IRN (framework 24.8)
 
 Com `adapter=irn` o super admin só era reconhecido pelo email do `/Auth/me`, que exige o cookie

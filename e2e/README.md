@@ -60,6 +60,16 @@ the key: in-permission → 200, out-of-permission → 403, `/m2m-keys` with a ke
 barred), revoked/fake key → 401. Keys live in `t_m2m_api_key` (Flyway V7); the pepper defaults to
 empty in e2e.
 
+**Email access mapping (24.9):** the same token, no cookie. `./mint-token.sh svc svc@test.local`
+without `Cookie:` → 403 on every catalogued route; `POST /email-access-mappings` as the super admin
+(Bearer `sess-admin` token + its cookie) or as `sess-access-manager` (profile with
+`EMAIL_ACCESS_MAPPINGS:*`; the same profile with no cookie, or a mapped token carrying those codes,
+gets 403 on the console) with `{"email":"svc@test.local","permissions":["AREAS:visualizar"]}`
+→ that token now gets 200 on `GET /areas` and 403 elsewhere; `DELETE /email-access-mappings/{id}`
+→ 403 on the next request; the same token **with** `Cookie: session_id=sess-mgmt-creator` → IRN
+permissions, not the mapping. Rows live in `t_email_access_mapping` (Flyway V10). Scripted:
+`./email-access-mapping.sh` runs the whole flow on both apps (23 checks each, console included).
+
 ### Stubbed sessions (wiremock/irn/mappings/)
 
 | session_id | permissions | email |
@@ -73,6 +83,7 @@ empty in e2e.
 | sess-studio-publisher | STUDIO_PROCESS_DEFINITIONS:publicar | studio-publisher@test.local |
 | sess-cache-probe-a | AREAS:visualizar — RESERVED for cache tests | cache-probe-a@test.local |
 | sess-cache-probe-b | STUDIO_PROJECTS:visualizar — RESERVED for cache tests | cache-probe-b@test.local |
+| sess-access-manager | EMAIL_ACCESS_MAPPINGS:visualizar/criar/editar/eliminar, STUDIO_EMAIL_ACCESS_MAPPINGS:visualizar/criar/editar/eliminar | access-manager@test.local |
 | sess-admin | (none — super admin by email) | superadmin@test.local |
 
 Count `/Auth/me` calls via WireMock admin: `POST http://localhost:18089/__admin/requests/count`
