@@ -2,7 +2,7 @@
 
 Guia para as equipas de frontend construírem a consola de mapeamentos email → permissões
 (`SPEC_EMAIL_ACCESS_MAPPING.md`). Protótipo clicável com os ecrãs e as regras de UX: artifact
-**"Consola de Acessos por Email"** (pedir o link a quem gere os artifacts do projeto).
+**"Consola de Acessos por Email"** — https://claude.ai/code/artifact/66f048ce-3cf7-452f-b1b0-b9e2c74bda8f (privado; pedir acesso a quem gere os artifacts do projeto).
 
 A consola existe **nos dois frontends**, Process Management e Process Studio, cada uma contra o
 **seu** backend (`/email-access-mappings` na Management API e na Studio API). Os mapeamentos são
