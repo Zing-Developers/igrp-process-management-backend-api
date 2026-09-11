@@ -20,6 +20,33 @@ passar (`ROLE_X:y`). M2M fica como estava.
 - Docs: `SPEC_EMAIL_ACCESS_MAPPING.md`, `EMAIL_ACCESS_FRONTEND_HANDOFF.md`, guia devops (pré-condições
   do realm Keycloak), e2e README.
 
+## 2026-09 · Super admin sem sessão IRN (framework 24.8)
+
+Com `adapter=irn` o super admin só era reconhecido pelo email do `/Auth/me`, que exige o cookie
+`session_id`. Um JWT válido do super admin sem esse cookie era um utilizador normal, e cada pedido
+gerava três WARN "No IRN session id".
+
+- **Sem cookie, decide o JWT.** Um pedido sem `session_id` compara o claim `email` do token validado
+  com `IRN_API_SUPER_ADMIN_EMAIL`. Bate: `ROLE_DEPT_IGRP.superadmin` sem consultar o IRN. A role
+  sozinha passa em todas as regras de rota; grupos e permissões ficam vazios.
+- **Com cookie, decide o IRN, como sempre.** O `/Auth/me` continua a ser a autoridade para quem tem
+  sessão. Revogar ou desativar no IRN continua a tirar a role dentro do TTL do cache (5 min).
+- **O adapter recebe o token já decodificado.** Nova forma `isSuperAdmin(Jwt, request)` no SPI; a
+  forma com string continua a existir mas nunca faz parse (só sessão). Nenhum claim é lido de um token
+  que o resource server não tenha validado.
+- **Comparação unificada.** Trim + case-insensitive nos dois adapters (o IRN usava `equals` exato),
+  via `SuperAdminEmail` no `process-runtime-auth-core`.
+- **Cookie em falta é caso normal.** O aviso passa a DEBUG. Uma negação continua a ser registada em
+  WARN pelo `AuthorizationAuditListener`.
+
+**Risco assumido.** No caminho sem cookie, a identidade do super admin é o claim `email` do IdP. Só
+funciona com segurança se o Keycloak não permitir que utilizadores editem o próprio email nem emita
+tokens do mesmo realm para clientes que não controlamos. Enquanto o cookie existir, o IRN manda.
+
+**Validação:** framework 28/28 (novos: `SuperAdminEmailTest`, adapter IRN, cache service). Ambas as
+apps passam o `Jwt` decodificado ao adapter. O artefacto **24.8 tem de estar no Sonatype** antes do
+build das apps.
+
 
 ## 2026-08 (f) · Sweep OSV proativo da árvore completa (pós-refresh)
 
