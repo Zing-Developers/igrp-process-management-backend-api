@@ -76,6 +76,10 @@ Authorization: Bearer <access_token>
   **API key M2M** — `Authorization: Bearer igrpm2m_…`, sem Keycloak nem cookie. Emissão e gestão são
   de super-admin (`/m2m-keys`); detalhe em `docs/SPEC_M2M_AUTHORIZATION.md`. Irrelevante para o SDK
   de frontend de utilizador.
+- **Acesso por email (release 24.9):** a alternativa sem chave: o sistema externo chama com o **seu**
+  token Keycloak, sem cookie, e recebe as permissões que um gestor mapeou ao claim `email` do token
+  na consola `/email-access-mappings`. Com cookie de sessão presente o IRN decide sempre. Detalhe em
+  `docs/SPEC_EMAIL_ACCESS_MAPPING.md`.
 - **Claim de principal:** configurável no servidor (por omissão `sub`; nos deployments IRN, `email`).
 - **Autorizações:** o servidor enriquece o token com *roles*/grupos (prefixos `ROLE_` e `GROUP_`) e permissões obtidas do serviço de IAM. Um *super admin* recebe também os papéis Activiti `ROLE_ACTIVITI_ADMIN`/`ROLE_ACTIVITI_USER`. **Para o frontend, o relevante é: sem token válido → `401`; token válido mas sem permissão para a operação → `403`.**
 
@@ -423,6 +427,18 @@ export type VariablesOperator =
 
 > Consola de administração, **fora do SDK de utilizador**: exige JWT de super-admin (uma key M2M nunca
 > acede). Contratos completos e regras de UX: `docs/M2M_FRONTEND_HANDOFF.md`.
+
+### Acessos por email — `/email-access-mappings` (permissão `EMAIL_ACCESS_MAPPINGS:*` com sessão IRN, ou super-admin)
+
+| Método | Caminho | Descrição |
+|---|---|---|
+| `POST` | `/email-access-mappings` | Criar mapeamento email → permissões (`:criar`). |
+| `GET` | `/email-access-mappings` | Listar mapeamentos, revogados incluídos (`:visualizar`). |
+| `PUT` | `/email-access-mappings/{id}` | Editar permissões, descrição, notas, expiração (`:editar`). |
+| `DELETE` | `/email-access-mappings/{id}` | Revogar — efeito no pedido seguinte (`:eliminar`). |
+
+> A permissão só conta num pedido com cookie de sessão IRN; um token mapeado ou uma key M2M recebem
+> 403. Contratos completos e regras de UX: `docs/EMAIL_ACCESS_FRONTEND_HANDOFF.md`.
 
 ---
 
