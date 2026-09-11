@@ -26,14 +26,15 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authorization.AuthorityAuthorizationDecision;
 import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
-import org.springframework.security.authorization.AuthorizationManagers;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
 import org.springframework.security.oauth2.client.TokenExchangeOAuth2AuthorizedClientProvider;
@@ -161,8 +162,7 @@ public class SecurityConfig {
               // but the permission only counts on a request with an IRN session: with a session the
               // mapping is never consulted, so the authority came from System Administration. A mapped
               // token has no session and can never grant access here (SPEC_EMAIL_ACCESS_MAPPING E-6).
-              matcher.access(AuthorizationManagers.allOf(
-                  irnSessionOrSuperAdmin(), AuthorityAuthorizationManager.hasAnyAuthority(permitted)));
+              matcher.access(consoleGate(permitted));
             } else {
               matcher.hasAnyAuthority(permitted);
             }
@@ -205,28 +205,43 @@ public class SecurityConfig {
     return new SpringAuthorizationEventPublisher(publisher);
   }
 
-  /** A Keycloak user JWT carrying the super-admin role. An M2M key is a BearerTokenAuthentication, never this. */
+  /**
+   * A Keycloak user JWT carrying the super-admin role. An M2M key is a BearerTokenAuthentication, never
+   * this. The decision carries the required authority so the audit line names it.
+   */
   private static AuthorizationManager<RequestAuthorizationContext> jwtSuperAdmin() {
-    return (authenticationSupplier, context) -> {
-      final var authentication = authenticationSupplier.get();
-      return new AuthorizationDecision(authentication instanceof JwtAuthenticationToken && isSuperAdmin(authentication));
-    };
+      final var required = AuthorityUtils.createAuthorityList(ROLE_PREFIX + IgrpAuthorizationConstants.SUPER_ADMIN_ROLE);
+      return (authenticationSupplier, context) -> {
+          final var authentication = authenticationSupplier.get();
+          return new AuthorityAuthorizationDecision(
+                  authentication instanceof JwtAuthenticationToken && isSuperAdmin(authentication), required);
+      };
   }
 
   /**
-   * A JWT that is either the super admin or a caller with an IRN session cookie. The cookie value
-   * is not checked here: a bogus one sends the adapter down the session path, where IRN denies it
-   * and the mapping is never consulted, so the caller ends up with no permissions at all.
+   * The console gate: a JWT that is the super admin, or a caller with an IRN session cookie holding one
+   * of the catalogue authorities. The cookie value is not checked here: a bogus one sends the adapter
+   * down the session path, where IRN denies it and the mapping is never consulted, so the caller ends
+   * up with no permissions at all. The decision always carries the accepted authorities, so a denial
+   * logs them (the session requirement itself is documented, not listed).
    */
-  private AuthorizationManager<RequestAuthorizationContext> irnSessionOrSuperAdmin() {
-    return (authenticationSupplier, context) -> {
-      final var authentication = authenticationSupplier.get();
-      final var cookies = context.getRequest().getCookies();
-      final var hasSession = cookies != null && Arrays.stream(cookies)
-          .anyMatch(c -> sessionCookieName.equals(c.getName()) && c.getValue() != null && !c.getValue().isBlank());
-      return new AuthorizationDecision(authentication instanceof JwtAuthenticationToken
-          && (isSuperAdmin(authentication) || hasSession));
-    };
+  private AuthorizationManager<RequestAuthorizationContext> consoleGate(String[] permitted) {
+      final var byAuthority = AuthorityAuthorizationManager.<RequestAuthorizationContext>hasAnyAuthority(permitted);
+      final var required = AuthorityUtils.createAuthorityList(permitted);
+      return (authenticationSupplier, context) -> {
+          final var authentication = authenticationSupplier.get();
+          if (!(authentication instanceof JwtAuthenticationToken)) {
+              return new AuthorityAuthorizationDecision(false, required);
+          }
+          final var cookies = context.getRequest().getCookies();
+          final var hasSession = cookies != null && Arrays.stream(cookies)
+                  .anyMatch(c -> sessionCookieName.equals(c.getName()) && c.getValue() != null && !c.getValue().isBlank());
+          if (!isSuperAdmin(authentication) && !hasSession) {
+              return new AuthorityAuthorizationDecision(false, required);
+          }
+          // AuthorityAuthorizationManager answers with an AuthorityAuthorizationDecision (an AuthorizationDecision)
+          return (AuthorizationDecision) byAuthority.authorize(authenticationSupplier, context);
+      };
   }
 
   private static boolean isSuperAdmin(org.springframework.security.core.Authentication authentication) {
