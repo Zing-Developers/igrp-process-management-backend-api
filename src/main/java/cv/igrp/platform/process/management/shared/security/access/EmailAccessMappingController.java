@@ -3,6 +3,7 @@ package cv.igrp.platform.process.management.shared.security.access;
 import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingDTO;
 import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingRequestDTO;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -73,7 +74,8 @@ public class EmailAccessMappingController {
 
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<Map<String, String>> badRequest(IllegalArgumentException e) {
-    return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+    // always JSON: with an XML converter on the classpath a request without Accept would get <Map>
+    return ResponseEntity.badRequest().contentType(MediaType.APPLICATION_JSON).body(Map.of("error", e.getMessage()));
   }
 
 }

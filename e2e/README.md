@@ -67,7 +67,8 @@ without `Cookie:` → 403 on every catalogued route; `POST /email-access-mapping
 gets 403 on the console) with `{"email":"svc@test.local","permissions":["AREAS:visualizar"]}`
 → that token now gets 200 on `GET /areas` and 403 elsewhere; `DELETE /email-access-mappings/{id}`
 → 403 on the next request; the same token **with** `Cookie: session_id=sess-mgmt-creator` → IRN
-permissions, not the mapping. Rows live in `t_email_access_mapping` (Flyway V10).
+permissions, not the mapping. Rows live in `t_email_access_mapping` (Flyway V10). Scripted:
+`./email-access-mapping.sh` runs the whole flow on both apps (23 checks each, console included).
 
 ### Stubbed sessions (wiremock/irn/mappings/)
 

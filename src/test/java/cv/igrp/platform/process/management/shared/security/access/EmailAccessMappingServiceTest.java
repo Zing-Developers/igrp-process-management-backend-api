@@ -85,6 +85,9 @@ class EmailAccessMappingServiceTest {
     assertThat(entity.getUpdatedBy()).isEqualTo("admin2");
     assertThat(updated.getPermissions()).containsExactly("TASK_INSTANCES:editar");
 
+    // the creator editing their own mapping: same principal twice in the audit lookup (e2e caught a Set.of here)
+    assertThat(service.update(entity.getId(), List.of("TASK_INSTANCES:editar"), null, null, null, "admin").getUpdatedBy()).isEqualTo("admin");
+
     entity.setActive(false);
     assertThatThrownBy(() -> service.update(entity.getId(), List.of("TASK_INSTANCES:editar"), null, null, null, "admin2"))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("revoked");

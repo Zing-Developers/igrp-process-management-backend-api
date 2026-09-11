@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -120,7 +121,8 @@ public class EmailAccessMappingService {
         .addKeyValue("enduser.id", updatedBy)
         .log("Email access mapping updated for [{}]", entity.getEmail());
 
-    return toDto(entity, profilesOf(Set.of(entity.getCreatedBy(), updatedBy)));
+    // not Set.of: the creator editing their own mapping is the same principal twice
+    return toDto(entity, profilesOf(new HashSet<>(List.of(entity.getCreatedBy(), updatedBy))));
   }
 
   @Transactional

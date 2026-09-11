@@ -16,7 +16,9 @@ passar (`ROLE_X:y`). M2M fica como estava.
   `/email-access-mappings` (POST/GET/PUT/DELETE) no catálogo como módulo `EMAIL_ACCESS_MAPPINGS`, com
   a permissão honrada só em pedidos com sessão IRN (super admin isento; sem catálogo fica super-admin
   only). O converter passa a chamar as sobrecargas `Jwt` de `getPermissions` e `isSuperAdmin`.
-- Primeira slice MockMvc do filter chain (`SecurityConfigEmailAccessTest`). Suite: 322/322.
+- Primeira slice MockMvc do filter chain (`SecurityConfigEmailAccessTest`). Suite: 325/325. e2e
+  `e2e/email-access-mapping.sh` 46/46 nas duas apps; apanhou um `Set.of` com o mesmo principal (criador a
+  editar o próprio mapeamento dava 400), corrigido.
 - Docs: `SPEC_EMAIL_ACCESS_MAPPING.md`, `EMAIL_ACCESS_FRONTEND_HANDOFF.md`, guia devops (pré-condições
   do realm Keycloak), e2e README.
 
