@@ -43,6 +43,14 @@ run_app() { # base module business-path business-perm viewer-session
   call GET $B$P "$SVC";                                   check "svc token after revoke" 403 $CODE
   call PUT $B/email-access-mappings/$ID "$MGR" sess-access-manager '{"permissions":["'$PERM'"]}'; check "PUT on revoked mapping" 400 $CODE "($(msg))"
   call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"svc@test.local","permissions":["'$PERM'"]}'; check "re-create after revoke" 201 $CODE "$(msg)"
+  # an expired mapping still holds the active slot: creating again must retire it, not fail
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"old@test.local","permissions":["'$PERM'"],"expiresAt":"2020-01-01T00:00:00"}'; check "create already-expired mapping" 201 $CODE "$(msg)"
+  OLD=$(./mint-token.sh old old@test.local)
+  call GET $B$P "$OLD";                                   check "expired mapping grants nothing" 403 $CODE
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"old@test.local","permissions":["'$PERM'"]}'; check "re-create over the expired one" 201 $CODE "$(msg)"
+  call GET $B$P "$OLD";                                   check "new mapping works" 200 $CODE
+  call GET $B/email-access-mappings "$ADMIN"
+  check "old one retired, new one active" "1 1" "$(python3 -c 'import json,sys; ms=[m for m in json.load(sys.stdin) if m["email"]=="old@test.local"]; print(sum(1 for m in ms if not m["active"]), sum(1 for m in ms if m["active"]))' <<<"$BODY")"
 }
 run_app http://localhost:18080 EMAIL_ACCESS_MAPPINGS /areas AREAS:visualizar sess-mgmt-viewer
 run_app http://localhost:18082 STUDIO_EMAIL_ACCESS_MAPPINGS /api/v1/projects STUDIO_PROJECTS:visualizar sess-studio-viewer
