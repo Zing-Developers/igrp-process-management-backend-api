@@ -58,6 +58,7 @@ public class EmailAccessMappingService {
                                       String notes, Instant expiresAt, String createdBy) {
     final var normalised = normalise(email);
     final var granted = validated(permissions, normalised, createdBy);
+    retireExpiredOrConflict(normalised, createdBy);
     warnIfHuman(normalised);
 
     final var entity = new EmailAccessMappingEntity();
@@ -172,14 +173,52 @@ public class EmailAccessMappingService {
     return permissions.stream().map(String::trim).distinct().toList();
   }
 
-  /** The partial unique index is the real guard; here it just becomes a 400 instead of a 500. */
+  /**
+   * One active mapping per email. An expired one still holds that slot (active=true, expiresAt in the
+   * past), which surprised the console: creating again for the same email failed. Expired mappings are
+   * retired here (revoked by the actor) so the new grant takes over; a live one is a real conflict and
+   * the message names it so the operator can edit or revoke it.
+   */
+  private void retireExpiredOrConflict(String email, String actor) {
+    repository.findByEmailAndActiveTrue(email).ifPresent(existing -> {
+      if (existing.getExpiresAt() != null && existing.getExpiresAt().isBefore(Instant.now())) {
+        existing.setActive(false);
+        existing.setRevokedAt(Instant.now());
+        existing.setRevokedBy(actor);
+        existing.setUpdatedAt(existing.getRevokedAt());
+        existing.setUpdatedBy(actor);
+        repository.saveAndFlush(existing);
+        LOGGER.atInfo()
+            .addKeyValue("event", "email_access_superseded")
+            .addKeyValue("access.mapping_id", existing.getId().toString())
+            .addKeyValue("access.email", email)
+            .addKeyValue("enduser.id", actor)
+            .log("Expired email access mapping [{}] retired; a new one replaces it", existing.getId());
+        return;
+      }
+      throw new IllegalArgumentException("email already has an active mapping (" + existing.getId()
+          + "): edit it, or revoke it before creating a new one");
+    });
+  }
+
+  /**
+   * The partial unique index is the real guard against a race; that one violation becomes a 400. Any
+   * other integrity error (a column too narrow, a missing NOT NULL value) is a server problem and must
+   * surface as such, never disguised as a duplicate.
+   */
   private void saveOrConflict(EmailAccessMappingEntity entity) {
     try {
       repository.saveAndFlush(entity);
     } catch (DataIntegrityViolationException e) {
-      throw new IllegalArgumentException("email already has an active mapping: " + entity.getEmail());
+      final var cause = String.valueOf(e.getMostSpecificCause().getMessage());
+      if (cause.contains(ACTIVE_EMAIL_INDEX)) {
+        throw new IllegalArgumentException("email already has an active mapping: " + entity.getEmail());
+      }
+      throw e;
     }
   }
+
+  static final String ACTIVE_EMAIL_INDEX = "uq_email_access_mapping_active_email";
 
   /**
    * Tripwire, not a rule: mappings are meant for dedicated service-account addresses. A known human

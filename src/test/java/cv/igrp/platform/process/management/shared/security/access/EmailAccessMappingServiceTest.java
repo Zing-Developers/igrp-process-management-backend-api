@@ -69,9 +69,38 @@ class EmailAccessMappingServiceTest {
 
   @Test
   void secondActiveMappingForTheSameEmailIsA400NotA500() {
+    // the service sees the live one first and names it
+    var live = active("svc@x.cv", "TASK_INSTANCES:visualizar");
+    when(repository.findByEmailAndActiveTrue("svc@x.cv")).thenReturn(Optional.of(live));
+    assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, null, null, "admin"))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already has an active mapping (" + live.getId());
+    // the index still backs a race
+    when(repository.findByEmailAndActiveTrue("svc@x.cv")).thenReturn(Optional.empty());
     when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uq_email_access_mapping_active_email"));
     assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, null, null, "admin"))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already has an active mapping");
+  }
+
+  @Test
+  void otherIntegrityErrorsAreNotDisguisedAsDuplicates() {
+    // a varchar(255) permissions column in a Hibernate-created schema surfaced as "already exists" once
+    when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("value too long for type character varying(255)"));
+    assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, null, null, "admin"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void expiredMappingIsRetiredWhenTheEmailIsMappedAgain() {
+    var expired = active("svc@x.cv", "TASK_INSTANCES:visualizar");
+    expired.setExpiresAt(Instant.now().minusSeconds(60));
+    when(repository.findByEmailAndActiveTrue("svc@x.cv")).thenReturn(Optional.of(expired));
+
+    var created = service.create("svc@x.cv", List.of("PROCESS_INSTANCES:visualizar"), null, null, null, "admin2");
+
+    assertThat(expired.isActive()).isFalse();
+    assertThat(expired.getRevokedBy()).isEqualTo("admin2");
+    assertThat(created.getPermissions()).containsExactly("PROCESS_INSTANCES:visualizar");
+    assertThat(created.isActive()).isTrue();
   }
 
   @Test

@@ -74,7 +74,13 @@ Content-Type: application/json
 - lista de permissões vazia;
 - permissão fora do formato `MODULO:acao`, incluindo qualquer `ROLE_*`/`GROUP_*` (anti-escalada;
   mostrar a mensagem do backend tal como vem);
-- o email já tem um mapeamento activo (revogar primeiro, ou editar o existente).
+- o email já tem um mapeamento **activo e não expirado**: a mensagem traz o id
+  (`email already has an active mapping (<id>): edit it, or revoke it before creating a new one`);
+  o UI deve oferecer editar ou revogar esse mapeamento.
+
+> **Expirado não bloqueia.** Um mapeamento expirado ainda conta como activo na tabela, mas criar
+> outro para o mesmo email é aceite: o backend retira o expirado (fica como revogado por quem criou
+> o novo) e cria o novo. Revogado também não bloqueia: pode criar-se outro para o mesmo email.
 
 ### 2.2 Listar
 
@@ -135,7 +141,8 @@ undo; para voltar a dar acesso cria-se um mapeamento novo. **400** se o id não 
 ## 5. Notas para QA
 
 - Criar com permissão `ROLE_DEPT_IGRP.superadmin` → **400**.
-- Criar duas vezes o mesmo email (activo) → segunda dá **400**; revogar a primeira e repetir → **201**.
+- Criar duas vezes o mesmo email (activo) → segunda dá **400** com o id do existente; revogar a primeira e repetir → **201**.
+- Mapeamento expirado no mesmo email → criar dá **201** e o expirado passa a revogado.
 - Revogar e repetir um pedido do sistema externo → **403** no pedido seguinte.
 - `PUT` num revogado → **400**.
 - Utilizador sem a permissão do verbo (nem super admin): **403** nessa rota; com `:visualizar` só, a lista abre e as acções dão 403.
