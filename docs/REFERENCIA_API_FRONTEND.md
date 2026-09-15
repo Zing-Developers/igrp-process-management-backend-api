@@ -428,14 +428,14 @@ export type VariablesOperator =
 > Consola de administração, **fora do SDK de utilizador**: exige JWT de super-admin (uma key M2M nunca
 > acede). Contratos completos e regras de UX: `docs/M2M_FRONTEND_HANDOFF.md`.
 
-### Acessos por email — `/email-access-mappings` (permissão `EMAIL_ACCESS_MAPPINGS:*` com sessão IRN, ou super-admin)
+### Acessos por email, `/email-access-mappings` (permissão `EMAIL_ACCESS_MAPPINGS:*` com sessão IRN, ou super-admin)
 
 | Método | Caminho | Descrição |
 |---|---|---|
 | `POST` | `/email-access-mappings` | Criar mapeamento email → permissões (`:criar`). |
-| `GET` | `/email-access-mappings` | Listar mapeamentos, revogados incluídos (`:visualizar`). |
+| `GET` | `/email-access-mappings` | Listar, paginado (`page`/`size`, default 20, máx. 100; `content` + `pageNumber`/`pageSize`/`totalElements`/`totalPages`/`first`/`last`), mais recentes primeiro, revogados incluídos; filtros `email` (contém) e `status` = `active`/`revoked`/`expired` (`:visualizar`). |
 | `PUT` | `/email-access-mappings/{id}` | Editar permissões, descrição, notas, expiração (`:editar`). |
-| `DELETE` | `/email-access-mappings/{id}` | Revogar — efeito no pedido seguinte (`:eliminar`). |
+| `DELETE` | `/email-access-mappings/{id}` | Revogar, efeito no pedido seguinte; idempotente num já revogado (`:eliminar`). |
 
 > A permissão só conta num pedido com cookie de sessão IRN; um token mapeado ou uma key M2M recebem
 > 403. Contratos completos e regras de UX: `docs/EMAIL_ACCESS_FRONTEND_HANDOFF.md`.

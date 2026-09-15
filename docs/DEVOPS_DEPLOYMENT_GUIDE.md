@@ -1,4 +1,4 @@
-# Guia de Instalação DevOps — Release 24.9 (Autorização IRN + CVE + acesso por email)
+# Guia de Instalação DevOps: Release 24.10 (Autorização IRN, CVE, acesso por email)
 
 Aplica-se à **management API** e ao **Studio API**. A ordem das secções é a ordem de execução —
 o passo 1 é pré-requisito de tudo: sem ele, o deploy resulta em 403 generalizado.
@@ -75,6 +75,11 @@ token mapeado nunca gere mapeamentos. Sem pepper. O que devops garante no Keyclo
 - o integrador **não envia cookies**; um `session_id` obsoleto dá 403 e um ERROR por pedido.
 
 Com cookie de sessão IRN presente, o mapeamento nunca é consultado: o `/Auth/me` decide como sempre.
+
+Desde a 24.10 a consola pergunta ao adaptador se o pedido tem sessão (`hasSession`), a mesma regra que
+decide o caminho de sessão do próprio adaptador; não há leitura de cookies na app. A listagem da
+consola é paginada (`page`/`size`, no Studio `pageNumber`/`pageSize`) com filtros `email` e `status`, e
+revogar um mapeamento já revogado devolve 204 sem alterar a auditoria.
 
 ## 2. Segredos e chaves
 
