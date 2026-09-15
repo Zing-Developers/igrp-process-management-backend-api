@@ -201,14 +201,24 @@ public class EmailAccessMappingService {
     });
   }
 
-  /** The partial unique index is the real guard against a race; here it just becomes a 400 instead of a 500. */
+  /**
+   * The partial unique index is the real guard against a race; that one violation becomes a 400. Any
+   * other integrity error (a column too narrow, a missing NOT NULL value) is a server problem and must
+   * surface as such, never disguised as a duplicate.
+   */
   private void saveOrConflict(EmailAccessMappingEntity entity) {
     try {
       repository.saveAndFlush(entity);
     } catch (DataIntegrityViolationException e) {
-      throw new IllegalArgumentException("email already has an active mapping: " + entity.getEmail());
+      final var cause = String.valueOf(e.getMostSpecificCause().getMessage());
+      if (cause.contains(ACTIVE_EMAIL_INDEX)) {
+        throw new IllegalArgumentException("email already has an active mapping: " + entity.getEmail());
+      }
+      throw e;
     }
   }
+
+  static final String ACTIVE_EMAIL_INDEX = "uq_email_access_mapping_active_email";
 
   /**
    * Tripwire, not a rule: mappings are meant for dedicated service-account addresses. A known human

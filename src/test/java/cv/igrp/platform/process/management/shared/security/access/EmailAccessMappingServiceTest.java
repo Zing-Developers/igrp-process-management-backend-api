@@ -82,6 +82,14 @@ class EmailAccessMappingServiceTest {
   }
 
   @Test
+  void otherIntegrityErrorsAreNotDisguisedAsDuplicates() {
+    // a varchar(255) permissions column in a Hibernate-created schema surfaced as "already exists" once
+    when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("value too long for type character varying(255)"));
+    assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, null, null, "admin"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
   void expiredMappingIsRetiredWhenTheEmailIsMappedAgain() {
     var expired = active("svc@x.cv", "TASK_INSTANCES:visualizar");
     expired.setExpiresAt(Instant.now().minusSeconds(60));
