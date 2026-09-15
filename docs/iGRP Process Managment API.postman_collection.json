@@ -3356,7 +3356,7 @@
         "email-access-mappings"
        ]
       },
-      "description": "201 com o mapeamento activo (EMAIL_ACCESS_MAPPINGS:criar). 400 se o email for inválido, a lista vier vazia, uma permissão sair de MODULO:acao (ROLE_*/GROUP_* rejeitados) ou o email já tiver mapeamento activo.",
+      "description": "201 com o mapeamento activo (EMAIL_ACCESS_MAPPINGS:criar). 400 se o email for inválido, a lista vier vazia, uma permissão sair de MODULO:acao (ROLE_*/GROUP_* rejeitados) ou o email já tiver mapeamento activo. notes: máx. 2000 caracteres.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"email\": \"svc-fila@parceiro.cv\",\n  \"permissions\": [\n    \"TASK_INSTANCES:visualizar\"\n  ],\n  \"description\": \"Job da fila de trabalho\",\n  \"notes\": \"Pedido no ticket IRN-4521; contacto ops@parceiro.cv\",\n  \"expiresAt\": null\n}"
@@ -3365,7 +3365,7 @@
      "response": []
     },
     {
-     "name": "Listar mapeamentos",
+     "name": "Listar mapeamentos (paginado)",
      "request": {
       "method": "GET",
       "header": [
@@ -3375,15 +3375,37 @@
        }
       ],
       "url": {
-       "raw": "{{baseUrl}}/email-access-mappings",
+       "raw": "{{baseUrl}}/email-access-mappings?page=0&size=20&email=&status=",
        "host": [
         "{{baseUrl}}"
        ],
        "path": [
         "email-access-mappings"
+       ],
+       "query": [
+        {
+         "key": "page",
+         "value": "0",
+         "description": "página, a começar em 0"
+        },
+        {
+         "key": "size",
+         "value": "20",
+         "description": "default 20, máx. 100"
+        },
+        {
+         "key": "email",
+         "value": "",
+         "description": "contém, sem distinção de maiúsculas"
+        },
+        {
+         "key": "status",
+         "value": "",
+         "description": "active | revoked | expired (vazio = todos)"
+        }
        ]
       },
-      "description": "200 — todos, revogados incluídos (EMAIL_ACCESS_MAPPINGS:visualizar). Estado: active=false → revogado; expiresAt no passado → expirado."
+      "description": "200 — página {content, pageNumber, pageSize, totalElements, totalPages, first, last}, mais recentes primeiro (EMAIL_ACCESS_MAPPINGS:visualizar). Estado: active=false → revogado; expiresAt no passado → expirado. 400 se status for outro valor. No Studio os parâmetros chamam-se pageNumber/pageSize."
      },
      "response": []
     },

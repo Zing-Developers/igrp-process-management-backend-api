@@ -1,5 +1,18 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-09 (b) · Revisão de código do acesso por email (framework 24.10)
+
+Revisão com oito ângulos e verificação; nove correcções aplicadas nas duas apps e no framework:
+`IAuthorizationServiceAdapter.hasSession` (24.10) passa a ser a única leitura de "tem sessão", usada
+pelo gate da consola em vez de ler cookies (dois cookies `session_id` com o primeiro vazio abriam a
+consola a um token mapeado); filtro por email com `%` e `_` escapados; revogar um revogado é 204 sem
+tocar na auditoria; validações do create antes de qualquer escrita; conflito do índice único detectado
+pelo nome da constraint e outros erros de integridade a subir como 500; `requestParams` no modelo do
+gerador; helper `AuditPrincipals` partilhado pelo M2M e pelo acesso por email; sobrecargas `Jwt` com
+cache no adaptador igrp. e2e 78/78. Não aplicado por decisão: nomes de env do `accept-also` no studio
+continuam partilhados com a management.
+
+
 ## 2026-09 (a) · Mapeamento de acesso por email (framework 24.9)
 
 A alternativa ao M2M para integradores que já têm token Keycloak (client credentials) com claim

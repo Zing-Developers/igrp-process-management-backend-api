@@ -7,7 +7,13 @@ import cv.igrp.platform.process.management.shared.infrastructure.persistence.rep
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import cv.igrp.platform.process.management.shared.security.AuditPrincipals;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
 import java.util.List;
@@ -31,7 +37,7 @@ class EmailAccessMappingServiceTest {
     repository = mock(EmailAccessMappingEntityRepository.class);
     var profiles = mock(UserProfileRepository.class);
     when(profiles.findBySubjectOrEmail(any(), any())).thenReturn(Optional.empty());
-    service = new EmailAccessMappingService(repository, profiles, new UserProfileMapper());
+    service = new EmailAccessMappingService(repository, new AuditPrincipals(profiles, new UserProfileMapper()), profiles);
   }
 
   @Test
@@ -76,7 +82,8 @@ class EmailAccessMappingServiceTest {
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already has an active mapping (" + live.getId());
     // the index still backs a race
     when(repository.findByEmailAndActiveTrue("svc@x.cv")).thenReturn(Optional.empty());
-    when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uq_email_access_mapping_active_email"));
+    when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("dup",
+        new ConstraintViolationException("dup", null, "uq_email_access_mapping_active_email")));
     assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, null, null, "admin"))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already has an active mapping");
   }
@@ -86,7 +93,7 @@ class EmailAccessMappingServiceTest {
     // a varchar(255) permissions column in a Hibernate-created schema surfaced as "already exists" once
     when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("value too long for type character varying(255)"));
     assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, null, null, "admin"))
-        .isInstanceOf(DataIntegrityViolationException.class);
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("value too long");
   }
 
   @Test
@@ -146,6 +153,59 @@ class EmailAccessMappingServiceTest {
     e.setCreatedBy("admin");
     e.setCreatedAt(Instant.now());
     return e;
+  }
+
+  @Test
+  void notesAreCappedAtTwoThousandCharacters() {
+    assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, "x".repeat(2001), null, "admin"))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("2000");
+    service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, "x".repeat(2000), null, "admin");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void listIsAPageNewestFirstWithBoundedSizeAndValidatedStatus() {
+    var row = active("svc@x.cv", "TASK_INSTANCES:visualizar");
+    var captor = ArgumentCaptor.forClass(Pageable.class);
+    when(repository.findAll(any(Specification.class), captor.capture())).thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+
+    var page = service.list(" SVC ", "active", null, 500);
+
+    assertThat(page.getContent()).hasSize(1);
+    assertThat(page.getTotalElements()).isEqualTo(1);
+    assertThat(page.isFirst()).isTrue();
+    assertThat(captor.getValue().getPageSize()).isEqualTo(EmailAccessMappingService.PAGE_SIZE_MAX);
+    assertThat(captor.getValue().getSort().getOrderFor("createdAt").getDirection().isDescending()).isTrue();
+    assertThatThrownBy(() -> service.list(null, "deleted", 0, 20)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("status");
+  }
+
+  @Test
+  void revokeIsIdempotentAndKeepsTheOriginalRevoker() {
+    var entity = active("svc@x.cv", "TASK_INSTANCES:visualizar");
+    when(repository.findById(entity.getId())).thenReturn(Optional.of(entity));
+    service.revoke(entity.getId(), "admin-a");
+    var firstAt = entity.getRevokedAt();
+    service.revoke(entity.getId(), "admin-b");
+    assertThat(entity.getRevokedBy()).isEqualTo("admin-a");
+    assertThat(entity.getRevokedAt()).isEqualTo(firstAt);
+    verify(repository, org.mockito.Mockito.times(1)).save(any());
+  }
+
+  @Test
+  void validationFailuresHappenBeforeAnExpiredMappingIsRetired() {
+    var expired = active("svc@x.cv", "TASK_INSTANCES:visualizar");
+    expired.setExpiresAt(Instant.now().minusSeconds(60));
+    when(repository.findByEmailAndActiveTrue("svc@x.cv")).thenReturn(Optional.of(expired));
+    assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, "x".repeat(2001), null, "admin"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(expired.isActive()).isTrue();
+    verify(repository, org.mockito.Mockito.never()).saveAndFlush(any());
+  }
+
+  @Test
+  void likePatternEscapesTheWildcards() {
+    assertThat(EmailAccessMappingService.likePattern(" Svc_A%\\ ")).isEqualTo("%svc\\_a\\%\\\\%");
+    assertThat(EmailAccessMappingService.likePattern("  ")).isNull();
   }
 
 }
