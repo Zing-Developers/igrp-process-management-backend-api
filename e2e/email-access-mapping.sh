@@ -40,6 +40,9 @@ run_app() { # base module business-path business-perm viewer-session
   call GET $B$P "$K";                                     check "m2m key on business route" 200 $CODE
   call GET $B/email-access-mappings "$K";                 check "m2m key on console" 403 $CODE
   call DELETE $B/email-access-mappings/$ID "$MGR" sess-access-manager; check "manager revokes (DELETE)" 204 $CODE
+  call DELETE $B/email-access-mappings/$ID "$ADMIN" sess-admin; check "revoking again is a no-op 204" 204 $CODE
+  call GET "$B/email-access-mappings?email=svc@test" "$ADMIN"
+  check "second revoke kept the original revoker" "manager" "$(python3 -c 'import json,sys; print([m for m in json.load(sys.stdin)["content"] if m["id"]=="'$ID'"][0]["revokedBy"])' <<<"$BODY")"
   call GET $B$P "$SVC";                                   check "svc token after revoke" 403 $CODE
   call PUT $B/email-access-mappings/$ID "$MGR" sess-access-manager '{"permissions":["'$PERM'"]}'; check "PUT on revoked mapping" 400 $CODE "($(msg))"
   call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"svc@test.local","permissions":["'$PERM'"]}'; check "re-create after revoke" 201 $CODE "$(msg)"
@@ -59,6 +62,12 @@ run_app() { # base module business-path business-perm viewer-session
   call GET "$B/email-access-mappings?status=active" "$ADMIN"
   check "status=active excludes revoked and expired" "true" "$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(all(m["active"] and not (m.get("expiresAt") or "2999") < "2026" for m in d["content"]) and d["totalElements"]>0).lower())' <<<"$BODY")"
   call GET "$B/email-access-mappings?status=deleted" "$ADMIN";  check "bad status" 400 $CODE "($(msg))"
+  call GET "$B/email-access-mappings?email=_" "$ADMIN";  check "email=_ is a literal underscore, not a wildcard" 0 "$(python3 -c 'import json,sys; print(json.load(sys.stdin)["totalElements"])' <<<"$BODY")"
+  # two session cookies, blank first: adapter and gate must agree there is no session -> mapped token stays out
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"dup@test.local","permissions":["'$MOD':visualizar","'$MOD':criar"]}'; check "mapping that carries console permissions (for the cookie test)" 201 $CODE "$(msg)"
+  DUP=$(./mint-token.sh dup dup@test.local)
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' $B/email-access-mappings -H "Authorization: Bearer $DUP" -H "Cookie: session_id=; session_id=bogus"); check "duplicate cookies, blank first: console denied" 403 $CODE
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' $B/email-access-mappings -H "Authorization: Bearer $DUP" -H "Cookie: session_id=bogus; session_id="); check "duplicate cookies, bogus first: console denied" 403 $CODE
   LONG=$(python3 -c 'print("x"*2001)')
   call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"notes@test.local","permissions":["'$PERM'"],"notes":"'$LONG'"}'; check "notes over 2000 chars" 400 $CODE "($(msg))"
 }

@@ -2,12 +2,10 @@ package cv.igrp.platform.process.management.shared.security.m2m;
 
 import cv.igrp.framework.process.runtime.auth.core.adapter.PermissionFormat;
 import cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO;
-import cv.igrp.platform.process.management.processruntime.domain.models.UserProfile;
-import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
-import cv.igrp.platform.process.management.processruntime.mappers.UserProfileMapper;
 import cv.igrp.platform.process.management.shared.application.dto.M2mKeySummaryDTO;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.entity.M2mApiKeyEntity;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.M2mApiKeyEntityRepository;
+import cv.igrp.platform.process.management.shared.security.AuditPrincipals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,9 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,8 +36,7 @@ public class M2mKeyService {
 
   private final M2mApiKeyEntityRepository repository;
   private final M2mKeyCodec codec;
-  private final UserProfileRepository userProfileRepository;
-  private final UserProfileMapper userProfileMapper;
+  private final AuditPrincipals principals;
   private final Duration rotateGrace;
 
   // createdBy follows the platform's audit-user pattern (see userProfileStartedBy on tasks):
@@ -52,13 +46,11 @@ public class M2mKeyService {
 
   public M2mKeyService(M2mApiKeyEntityRepository repository,
                        M2mKeyCodec codec,
-                       UserProfileRepository userProfileRepository,
-                       UserProfileMapper userProfileMapper,
+                       AuditPrincipals principals,
                        @Value("${igrp.authorization.m2m.rotate-grace:7d}") Duration rotateGrace) {
     this.repository = repository;
     this.codec = codec;
-    this.userProfileRepository = userProfileRepository;
-    this.userProfileMapper = userProfileMapper;
+    this.principals = principals;
     this.rotateGrace = rotateGrace;
   }
 
@@ -110,7 +102,7 @@ public class M2mKeyService {
         .addKeyValue("enduser.id", createdBy)
         .log("M2M key created for client [{}] (prefix {})", clientName, entity.getKeyPrefix());
 
-    return new CreatedKey(entity.getId(), clientName, plaintext, createdBy, profileOf(createdBy));
+    return new CreatedKey(entity.getId(), clientName, plaintext, createdBy, principals.profileOf(createdBy));
   }
 
   @Transactional(readOnly = true)
@@ -120,37 +112,14 @@ public class M2mKeyService {
         .flatMap(e -> java.util.stream.Stream.of(e.getCreatedBy(), e.getRevokedBy(), e.getUpdatedBy()))
         .filter(java.util.Objects::nonNull)
         .collect(Collectors.toSet());
-    final var profiles = profilesOf(principals);
+    final var profiles = this.principals.profilesOf(principals);
     return entities.stream()
         .map(e -> new M2mKeySummaryDTO(e.getId(), e.getClientName(), e.getKeyPrefix(), e.getPermissions(),
-            e.getEmail(), e.isActive(), local(e.getExpiresAt()), local(e.getCreatedAt()), e.getCreatedBy(),
-            profiles.get(e.getCreatedBy()), local(e.getLastUsedAt()), local(e.getRevokedAt()),
+            e.getEmail(), e.isActive(), AuditPrincipals.local(e.getExpiresAt()), AuditPrincipals.local(e.getCreatedAt()), e.getCreatedBy(),
+            profiles.get(e.getCreatedBy()), AuditPrincipals.local(e.getLastUsedAt()), AuditPrincipals.local(e.getRevokedAt()),
             e.getRevokedBy(), profiles.get(e.getRevokedBy()),
-            local(e.getUpdatedAt()), e.getUpdatedBy(), profiles.get(e.getUpdatedBy())))
+            AuditPrincipals.local(e.getUpdatedAt()), e.getUpdatedBy(), profiles.get(e.getUpdatedBy())))
         .toList();
-  }
-
-  /** The platform serializes dates as zone-less LocalDateTime (see AuditEntity) — match it. */
-  static LocalDateTime local(Instant instant) {
-    return instant == null ? null : LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
-  }
-
-  /** Batch audit-user enrichment: the principal may be a sub or an email, so both are tried. */
-  private Map<String, UserProfileDTO> profilesOf(Set<String> principals) {
-    final var lookup = new HashMap<String, UserProfileDTO>();
-    if (principals.isEmpty()) {
-      return lookup;
-    }
-    for (UserProfile p : userProfileRepository.findBySubjectOrEmails(principals, principals)) {
-      final var dto = userProfileMapper.toDTO(p);
-      if (p.getSub() != null) lookup.put(p.getSub(), dto);
-      if (p.getEmail() != null) lookup.put(p.getEmail(), dto);
-    }
-    return lookup;
-  }
-
-  private UserProfileDTO profileOf(String principal) {
-    return principal == null ? null : profilesOf(Set.of(principal)).get(principal);
   }
 
   @Transactional

@@ -196,4 +196,14 @@ class SecurityConfigEmailAccessTest {
         .andExpect(status().isForbidden());
   }
 
+  @Test
+  void duplicateSessionCookiesCannotOpenTheConsoleToAMappedToken() throws Exception {
+    // blank first: the adapter takes the mapping path; the gate must agree there is no session
+    when(resolver.resolve("svc@parceiro.cv")).thenReturn(Set.of("EMAIL_ACCESS_MAPPINGS:visualizar", "EMAIL_ACCESS_MAPPINGS:criar"));
+    mvc.perform(get("/email-access-mappings").header("Authorization", "Bearer mapped")
+        .cookie(new Cookie("session_id", ""), new Cookie("session_id", "bogus"))).andExpect(status().isForbidden());
+    mvc.perform(get("/email-access-mappings").header("Authorization", "Bearer mapped")
+        .cookie(new Cookie("session_id", "bogus"), new Cookie("session_id", ""))).andExpect(status().isForbidden());
+  }
+
 }

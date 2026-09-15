@@ -2,15 +2,15 @@ package cv.igrp.platform.process.management.shared.security.access;
 
 import cv.igrp.framework.process.runtime.auth.core.adapter.PermissionFormat;
 import cv.igrp.platform.process.management.processruntime.application.dto.UserProfileDTO;
-import cv.igrp.platform.process.management.processruntime.domain.models.UserProfile;
-import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
-import cv.igrp.platform.process.management.processruntime.mappers.UserProfileMapper;
 import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingDTO;
 import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingListPageDTO;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.entity.EmailAccessMappingEntity;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.EmailAccessMappingEntityRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
+import cv.igrp.platform.process.management.shared.security.AuditPrincipals;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -19,9 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -49,15 +46,15 @@ public class EmailAccessMappingService {
   static final int PAGE_SIZE_MAX = 100;
 
   private final EmailAccessMappingEntityRepository repository;
+  private final AuditPrincipals principals;
   private final UserProfileRepository userProfileRepository;
-  private final UserProfileMapper userProfileMapper;
 
   public EmailAccessMappingService(EmailAccessMappingEntityRepository repository,
-                                   UserProfileRepository userProfileRepository,
-                                   UserProfileMapper userProfileMapper) {
+                                   AuditPrincipals principals,
+                                   UserProfileRepository userProfileRepository) {
     this.repository = repository;
+    this.principals = principals;
     this.userProfileRepository = userProfileRepository;
-    this.userProfileMapper = userProfileMapper;
   }
 
   @Transactional
@@ -65,14 +62,17 @@ public class EmailAccessMappingService {
                                       String notes, Instant expiresAt, String createdBy) {
     final var normalised = normalise(email);
     final var granted = validated(permissions, normalised, createdBy);
+    // every validation runs before anything is written, so a 400 can never leave an audit line behind
+    final var cleanDescription = blankToNull(description);
+    final var cleanNotes = notesOrNull(notes);
     retireExpiredOrConflict(normalised, createdBy);
     warnIfHuman(normalised);
 
     final var entity = new EmailAccessMappingEntity();
     entity.setId(UUID.randomUUID());
     entity.setEmail(normalised);
-    entity.setDescription(blankToNull(description));
-    entity.setNotes(notesOrNull(notes));
+    entity.setDescription(cleanDescription);
+    entity.setNotes(cleanNotes);
     entity.setPermissions(String.join(",", granted));
     entity.setActive(true);
     entity.setExpiresAt(expiresAt);
@@ -90,7 +90,7 @@ public class EmailAccessMappingService {
         .addKeyValue("enduser.id", createdBy)
         .log("Email access mapping created for [{}]", normalised);
 
-    return toDto(entity, profilesOf(Set.of(createdBy)));
+    return toDto(entity, principals.profilesOf(Set.of(createdBy)));
   }
 
   /**
@@ -106,7 +106,7 @@ public class EmailAccessMappingService {
         .flatMap(e -> Stream.of(e.getCreatedBy(), e.getRevokedBy(), e.getUpdatedBy()))
         .filter(Objects::nonNull)
         .collect(Collectors.toSet());
-    final var profiles = profilesOf(principals);
+    final var profiles = this.principals.profilesOf(principals);
     final var dto = new EmailAccessMappingListPageDTO();
     dto.setContent(result.getContent().stream().map(e -> toDto(e, profiles)).toList());
     dto.setPageNumber(result.getNumber());
@@ -118,16 +118,24 @@ public class EmailAccessMappingService {
     return dto;
   }
 
+  /** Contains-match pattern with the LIKE metacharacters escaped, so "svc_a" does not match "svcxa". */
+  static String likePattern(String email) {
+    if (email == null || email.isBlank()) return null;
+    final var escaped = email.trim().toLowerCase(Locale.ROOT)
+        .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    return "%" + escaped + "%";
+  }
+
   static Specification<EmailAccessMappingEntity> filter(String email, String status) {
     final var now = Instant.now();
-    final var needle = email == null || email.isBlank() ? null : "%" + email.trim().toLowerCase(Locale.ROOT) + "%";
+    final var needle = likePattern(email);
     final var state = status == null || status.isBlank() ? null : status.trim().toLowerCase(Locale.ROOT);
     if (state != null && !Set.of("active", "revoked", "expired").contains(state)) {
       throw new IllegalArgumentException("status must be one of active, revoked, expired");
     }
     return (root, query, cb) -> {
       final var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
-      if (needle != null) predicates.add(cb.like(root.get("email"), needle));
+      if (needle != null) predicates.add(cb.like(root.get("email"), needle, '\\'));
       if ("revoked".equals(state)) predicates.add(cb.isFalse(root.get("active")));
       if ("active".equals(state)) predicates.add(cb.and(cb.isTrue(root.get("active")),
           cb.or(cb.isNull(root.get("expiresAt")), cb.greaterThan(root.get("expiresAt"), now))));
@@ -163,13 +171,16 @@ public class EmailAccessMappingService {
         .log("Email access mapping updated for [{}]", entity.getEmail());
 
     // not Set.of: the creator editing their own mapping is the same principal twice
-    return toDto(entity, profilesOf(new HashSet<>(List.of(entity.getCreatedBy(), updatedBy))));
+    return toDto(entity, principals.profilesOf(new HashSet<>(List.of(entity.getCreatedBy(), updatedBy))));
   }
 
   @Transactional
   public void revoke(UUID id, String revokedBy) {
     final var entity = repository.findById(id)
         .orElseThrow(() -> new IllegalArgumentException("email access mapping not found: " + id));
+    if (!entity.isActive()) {
+      return;   // already revoked: idempotent, and the original revokedBy/revokedAt stay as they were
+    }
     entity.setActive(false);
     entity.setRevokedAt(Instant.now());
     entity.setRevokedBy(revokedBy);
@@ -242,19 +253,18 @@ public class EmailAccessMappingService {
   }
 
   /**
-   * The partial unique index is the real guard against a race; that one violation becomes a 400. Any
-   * other integrity error (a column too narrow, a missing NOT NULL value) is a server problem and must
-   * surface as such, never disguised as a duplicate.
+   * The partial unique index is the real guard against a race; that one violation becomes a 400, told
+   * apart by the constraint name Hibernate reports. Any other integrity error (a column too narrow, a
+   * missing NOT NULL value) is a server problem and surfaces as a 500 with its cause in the log.
    */
   private void saveOrConflict(EmailAccessMappingEntity entity) {
     try {
       repository.saveAndFlush(entity);
     } catch (DataIntegrityViolationException e) {
-      final var cause = String.valueOf(e.getMostSpecificCause().getMessage());
-      if (cause.contains(ACTIVE_EMAIL_INDEX)) {
+      if (e.getCause() instanceof ConstraintViolationException cve && ACTIVE_EMAIL_INDEX.equals(cve.getConstraintName())) {
         throw new IllegalArgumentException("email already has an active mapping: " + entity.getEmail());
       }
-      throw e;
+      throw new IllegalStateException("could not save email access mapping: " + e.getMostSpecificCause().getMessage(), e);
     }
   }
 
@@ -286,32 +296,12 @@ public class EmailAccessMappingService {
     return value == null || value.isBlank() ? null : value.trim();
   }
 
-  /** The platform serializes dates as zone-less LocalDateTime (see AuditEntity) — match it. */
-  static LocalDateTime local(Instant instant) {
-    return instant == null ? null : LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
-  }
-
   private static EmailAccessMappingDTO toDto(EmailAccessMappingEntity e, Map<String, UserProfileDTO> profiles) {
     return new EmailAccessMappingDTO(e.getId(), e.getEmail(), e.getDescription(), e.getNotes(),
-        List.copyOf(DbEmailAccessResolver.split(e.getPermissions())), e.isActive(), local(e.getExpiresAt()),
-        local(e.getCreatedAt()), e.getCreatedBy(), profiles.get(e.getCreatedBy()),
-        local(e.getUpdatedAt()), e.getUpdatedBy(), profiles.get(e.getUpdatedBy()),
-        local(e.getRevokedAt()), e.getRevokedBy(), profiles.get(e.getRevokedBy()));
-  }
-
-  /** Batch audit-user enrichment: the principal may be a sub or an email, so both are tried. */
-  private Map<String, UserProfileDTO> profilesOf(Set<String> principals) {
-    final var lookup = new HashMap<String, UserProfileDTO>();
-    final var keys = principals.stream().filter(Objects::nonNull).collect(Collectors.toSet());
-    if (keys.isEmpty()) {
-      return lookup;
-    }
-    for (UserProfile p : userProfileRepository.findBySubjectOrEmails(keys, keys)) {
-      final var dto = userProfileMapper.toDTO(p);
-      if (p.getSub() != null) lookup.put(p.getSub(), dto);
-      if (p.getEmail() != null) lookup.put(p.getEmail(), dto);
-    }
-    return lookup;
+        List.copyOf(DbEmailAccessResolver.split(e.getPermissions())), e.isActive(), AuditPrincipals.local(e.getExpiresAt()),
+        AuditPrincipals.local(e.getCreatedAt()), e.getCreatedBy(), profiles.get(e.getCreatedBy()),
+        AuditPrincipals.local(e.getUpdatedAt()), e.getUpdatedBy(), profiles.get(e.getUpdatedBy()),
+        AuditPrincipals.local(e.getRevokedAt()), e.getRevokedBy(), profiles.get(e.getRevokedBy()));
   }
 
 }
