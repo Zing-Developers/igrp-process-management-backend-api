@@ -40,11 +40,38 @@ run_app() { # base module business-path business-perm viewer-session
   call GET $B$P "$K";                                     check "m2m key on business route" 200 $CODE
   call GET $B/email-access-mappings "$K";                 check "m2m key on console" 403 $CODE
   call DELETE $B/email-access-mappings/$ID "$MGR" sess-access-manager; check "manager revokes (DELETE)" 204 $CODE
+  call DELETE $B/email-access-mappings/$ID "$ADMIN" sess-admin; check "revoking again is a no-op 204" 204 $CODE
+  call GET "$B/email-access-mappings?email=svc@test" "$ADMIN"
+  check "second revoke kept the original revoker" "manager" "$(python3 -c 'import json,sys; print([m for m in json.load(sys.stdin)["content"] if m["id"]=="'$ID'"][0]["revokedBy"])' <<<"$BODY")"
   call GET $B$P "$SVC";                                   check "svc token after revoke" 403 $CODE
   call PUT $B/email-access-mappings/$ID "$MGR" sess-access-manager '{"permissions":["'$PERM'"]}'; check "PUT on revoked mapping" 400 $CODE "($(msg))"
   call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"svc@test.local","permissions":["'$PERM'"]}'; check "re-create after revoke" 201 $CODE "$(msg)"
+  # a whole catalogue in one mapping is longer than varchar(255): the column must be TEXT
+  BIG=$(python3 -c "import json; mods=['AREAS','PROCESS_DEFINITIONS','PROCESS_INSTANCES','ACTIVITIES','TASK_INSTANCES','$MOD','STUDIO_PROJECTS','STUDIO_PROCESS_DEFINITIONS']; print(json.dumps([m+':'+a for m in mods for a in ('visualizar','criar','editar','eliminar')]))")
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"big@test.local","permissions":'"$BIG"'}'; check "32-permission mapping (>255 chars) is accepted" 201 $CODE "$(msg)"
+  # an expired mapping still holds the active slot: creating again must retire it, not fail
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"old@test.local","permissions":["'$PERM'"],"expiresAt":"2020-01-01T00:00:00"}'; check "create already-expired mapping" 201 $CODE "$(msg)"
+  OLD=$(./mint-token.sh old old@test.local)
+  call GET $B$P "$OLD";                                   check "expired mapping grants nothing" 403 $CODE
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"old@test.local","permissions":["'$PERM'"]}'; check "re-create over the expired one" 201 $CODE "$(msg)"
+  call GET $B$P "$OLD";                                   check "new mapping works" 200 $CODE
+  call GET $B/email-access-mappings?email=old "$ADMIN"
+  check "list is a page; old one retired, new one active" "1 1" "$(python3 -c 'import json,sys; ms=[m for m in json.load(sys.stdin)["content"] if m["email"]=="old@test.local"]; print(sum(1 for m in ms if not m["active"]), sum(1 for m in ms if m["active"]))' <<<"$BODY")"
+  call GET "$B/email-access-mappings?status=revoked&$PS=1" "$ADMIN"
+  check "status=revoked, one per page: all rows inactive, totalPages>1" "true true" "$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(all(not m["active"] for m in d["content"])).lower(), str(d["totalPages"]>1 and len(d["content"])==1).lower())' <<<"$BODY")"
+  call GET "$B/email-access-mappings?status=active" "$ADMIN"
+  check "status=active excludes revoked and expired" "true" "$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(all(m["active"] and not (m.get("expiresAt") or "2999") < "2026" for m in d["content"]) and d["totalElements"]>0).lower())' <<<"$BODY")"
+  call GET "$B/email-access-mappings?status=deleted" "$ADMIN";  check "bad status" 400 $CODE "($(msg))"
+  call GET "$B/email-access-mappings?email=_" "$ADMIN";  check "email=_ is a literal underscore, not a wildcard" 0 "$(python3 -c 'import json,sys; print(json.load(sys.stdin)["totalElements"])' <<<"$BODY")"
+  # two session cookies, blank first: adapter and gate must agree there is no session -> mapped token stays out
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"dup@test.local","permissions":["'$MOD':visualizar","'$MOD':criar"]}'; check "mapping that carries console permissions (for the cookie test)" 201 $CODE "$(msg)"
+  DUP=$(./mint-token.sh dup dup@test.local)
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' $B/email-access-mappings -H "Authorization: Bearer $DUP" -H "Cookie: session_id=; session_id=bogus"); check "duplicate cookies, blank first: console denied" 403 $CODE
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' $B/email-access-mappings -H "Authorization: Bearer $DUP" -H "Cookie: session_id=bogus; session_id="); check "duplicate cookies, bogus first: console denied" 403 $CODE
+  LONG=$(python3 -c 'print("x"*2001)')
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"notes@test.local","permissions":["'$PERM'"],"notes":"'$LONG'"}'; check "notes over 2000 chars" 400 $CODE "($(msg))"
 }
-run_app http://localhost:18080 EMAIL_ACCESS_MAPPINGS /areas AREAS:visualizar sess-mgmt-viewer
-run_app http://localhost:18082 STUDIO_EMAIL_ACCESS_MAPPINGS /api/v1/projects STUDIO_PROJECTS:visualizar sess-studio-viewer
+PS=size run_app http://localhost:18080 EMAIL_ACCESS_MAPPINGS /areas AREAS:visualizar sess-mgmt-viewer
+PS=pageSize run_app http://localhost:18082 STUDIO_EMAIL_ACCESS_MAPPINGS /api/v1/projects STUDIO_PROJECTS:visualizar sess-studio-viewer
 echo "=== $pass passed, $fail failed"
 [ "$fail" = 0 ]

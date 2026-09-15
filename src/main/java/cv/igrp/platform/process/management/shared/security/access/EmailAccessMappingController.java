@@ -1,6 +1,7 @@
 package cv.igrp.platform.process.management.shared.security.access;
 
 import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingDTO;
+import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingListPageDTO;
 import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingRequestDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -21,12 +22,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -72,18 +73,25 @@ public class EmailAccessMappingController {
   }
 
   @Operation(
-    summary = "Listar mapeamentos",
-    description = "Todos os mapeamentos, revogados incluídos, com o trio de auditoria (criado, alterado, revogado por). "
-        + "Estado: active=false → revogado; expiresAt no passado → expirado. Exige EMAIL_ACCESS_MAPPINGS:visualizar.",
+    summary = "Listar mapeamentos (paginado)",
+    description = "Uma página, mais recentes primeiro, revogados incluídos, com o trio de auditoria. Filtros: email "
+        + "(contém, sem distinção de maiúsculas) e status (active = activo e não expirado, revoked, expired). "
+        + "Exige EMAIL_ACCESS_MAPPINGS:visualizar.",
     responses = {
-      @ApiResponse(responseCode = "200", description = "Lista de mapeamentos",
-          content = @Content(mediaType = "application/json", schema = @Schema(implementation = EmailAccessMappingDTO.class, type = "array"))),
+      @ApiResponse(responseCode = "200", description = "Página de mapeamentos",
+          content = @Content(mediaType = "application/json", schema = @Schema(implementation = EmailAccessMappingListPageDTO.class, type = "object"))),
+      @ApiResponse(responseCode = "400", description = "status fora de active|revoked|expired", content = @Content(mediaType = "application/json",
+          schema = @Schema(type = "object"), examples = @ExampleObject(value = "{\"error\": \"status must be one of active, revoked, expired\"}"))),
       @ApiResponse(responseCode = "403", description = "Sem a permissão, sem sessão IRN, token mapeado ou chave M2M", content = @Content)
     }
   )
   @GetMapping
-  public ResponseEntity<List<EmailAccessMappingDTO>> list() {
-    return ResponseEntity.ok(service.list());
+  public ResponseEntity<EmailAccessMappingListPageDTO> list(
+      @Parameter(description = "Contém, sem distinção de maiúsculas") @RequestParam(value = "email", required = false) String email,
+      @Parameter(description = "active | revoked | expired") @RequestParam(value = "status", required = false) String status,
+      @Parameter(description = "Página, a começar em 0") @RequestParam(value = "page", required = false) Integer page,
+      @Parameter(description = "Tamanho da página, default 20, máximo 100") @RequestParam(value = "size", required = false) Integer size) {
+    return ResponseEntity.ok(service.list(email, status, page, size));
   }
 
   @Operation(
