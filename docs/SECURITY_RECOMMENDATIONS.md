@@ -15,6 +15,8 @@ CVE remediation — see docs/CHANGELOG.md). DONE items reference the closing wor
 > its `email` claim. Controls: session first (with a cookie IRN decides, no fallback), format gate in
 > the framework (`ROLE_*`/`GROUP_*` rejected on write and on read), console routes catalogued but
 > honoured only with an IRN session so a mapped token can never manage mappings, no secret at rest.
+> Since 24.10 the gate asks the adapter (`hasSession`) instead of reading cookies, after a review found
+> that two `session_id` cookies with a blank first one made gate and adapter disagree.
 > Trust boundary is the Keycloak realm (duplicate/self-registered emails), documented in the devops
 > guide rather than mitigated in code; keying by `azp` is the recorded fallback.
 

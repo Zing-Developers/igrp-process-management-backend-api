@@ -38,7 +38,7 @@ public class M2mApiKeyEntity {
   private String keyHash;
 
   /** Comma-separated MODULE:action list — validated on write and on read, never ROLE_*. */
-  @Column(name = "permissions", nullable = false)
+  @Column(name = "permissions", nullable = false, columnDefinition = "TEXT")
   private String permissions;
 
   /** Contact/owner metadata only — never an identity, never logged. */

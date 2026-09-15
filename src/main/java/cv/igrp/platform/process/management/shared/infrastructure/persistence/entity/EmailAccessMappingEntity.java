@@ -31,15 +31,16 @@ public class EmailAccessMappingEntity {
   @Column(name = "email", nullable = false)
   private String email;
 
-  @Column(name = "description")
+  @Column(name = "description", columnDefinition = "TEXT")
   private String description;
 
   /** Free text for the operators: who asked for the grant, ticket, contact. Never part of any decision. */
-  @Column(name = "notes")
+  @Column(name = "notes", columnDefinition = "TEXT")
   private String notes;
 
   /** Comma-separated MODULE:action list — validated on write here, re-checked on read by the framework. */
-  @Column(name = "permissions", nullable = false)
+  // TEXT explicitly: a ddl-auto-created column would be varchar(255) and a full catalogue is longer than that
+  @Column(name = "permissions", nullable = false, columnDefinition = "TEXT")
   private String permissions;
 
   @Column(name = "active", nullable = false)

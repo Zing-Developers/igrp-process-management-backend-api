@@ -3,6 +3,7 @@ package cv.igrp.platform.process.management.shared.security.m2m;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.entity.M2mApiKeyEntity;
 import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
 import cv.igrp.platform.process.management.processruntime.mappers.UserProfileMapper;
+import cv.igrp.platform.process.management.shared.security.AuditPrincipals;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.M2mApiKeyEntityRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class M2mKeyServiceTest {
   void setUp() {
     repository = mock(M2mApiKeyEntityRepository.class);
     service = new M2mKeyService(repository, new M2mKeyCodec("test-pepper"),
-        mock(UserProfileRepository.class), new UserProfileMapper(), Duration.ofDays(7));
+        new AuditPrincipals(mock(UserProfileRepository.class), new UserProfileMapper()), Duration.ofDays(7));
   }
 
   @Test

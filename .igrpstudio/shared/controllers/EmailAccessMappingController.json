@@ -49,17 +49,41 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "EmailAccessMappingDTO",
+                "type": "EmailAccessMappingListPageDTO",
                 "objectType": "dto",
                 "name": "data",
-                "collectionType": "list",
+                "collectionType": "none",
                 "module": "shared"
               }
             }
           },
-          "description": "All mappings, revoked included"
+          "description": "Page of mappings, revoked included; filters email (contains) and status (active|revoked|expired)"
         }
-      }
+      },
+      "requestParams": [
+        {
+          "type": "string",
+          "name": "email",
+          "isRequired": false
+        },
+        {
+          "type": "string",
+          "name": "status",
+          "isRequired": false
+        },
+        {
+          "type": "string",
+          "name": "page",
+          "value": "0",
+          "isRequired": false
+        },
+        {
+          "type": "string",
+          "name": "size",
+          "value": "20",
+          "isRequired": false
+        }
+      ]
     },
     {
       "actionName": "updateMapping",

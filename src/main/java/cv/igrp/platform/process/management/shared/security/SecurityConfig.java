@@ -64,8 +64,6 @@ public class SecurityConfig {
 
   private static final String EMAIL_ACCESS_ROUTE = "/email-access-mappings";
 
-  /** Name of the IRN session cookie: its presence is what makes a catalogue permission trustworthy on the console routes. */
-  private final String sessionCookieName;
 
   private final IAuthorizationServiceAdapter authorizationService;
 
@@ -78,9 +76,7 @@ public class SecurityConfig {
   public SecurityConfig(IAuthorizationServiceAdapter authorizationService,
                         IRouteAuthorizationAdapter routeAuthorization,
                         @Value("${igrp.security.principal-claim-name}") String principalClaimName,
-                        @Value("${igrp.cors.allowed-origins:}") String corsAllowedOrigins,
-                        @Value("${irn.api.session-cookie-name:session_id}") String sessionCookieName) {
-    this.sessionCookieName = sessionCookieName;
+                        @Value("${igrp.cors.allowed-origins:}") String corsAllowedOrigins) {
     this.authorizationService = authorizationService;
     this.routeAuthorization = routeAuthorization;
     this.principalClaimName = principalClaimName;
@@ -219,11 +215,12 @@ public class SecurityConfig {
   }
 
   /**
-   * The console gate: a JWT that is the super admin, or a caller with an IRN session cookie holding one
-   * of the catalogue authorities. The cookie value is not checked here: a bogus one sends the adapter
-   * down the session path, where IRN denies it and the mapping is never consulted, so the caller ends
-   * up with no permissions at all. The decision always carries the accepted authorities, so a denial
-   * logs them (the session requirement itself is documented, not listed).
+   * The console gate: a JWT that is the super admin, or a caller the adapter recognises as having a
+   * session and who holds one of the catalogue authorities. Whether a request has a session is the
+   * adapter's call (IAuthorizationServiceAdapter.hasSession), the same rule its permission path uses,
+   * so gate and adapter can never disagree about a request; with a session the mapping is never
+   * consulted, which is what keeps mapped tokens out of here. The decision always carries the
+   * accepted authorities, so a denial logs them.
    */
   private AuthorizationManager<RequestAuthorizationContext> consoleGate(String[] permitted) {
       final var byAuthority = AuthorityAuthorizationManager.<RequestAuthorizationContext>hasAnyAuthority(permitted);
@@ -233,10 +230,7 @@ public class SecurityConfig {
           if (!(authentication instanceof JwtAuthenticationToken)) {
               return new AuthorityAuthorizationDecision(false, required);
           }
-          final var cookies = context.getRequest().getCookies();
-          final var hasSession = cookies != null && Arrays.stream(cookies)
-                  .anyMatch(c -> sessionCookieName.equals(c.getName()) && c.getValue() != null && !c.getValue().isBlank());
-          if (!isSuperAdmin(authentication) && !hasSession) {
+          if (!isSuperAdmin(authentication) && !authorizationService.hasSession(context.getRequest())) {
               return new AuthorityAuthorizationDecision(false, required);
           }
           // AuthorityAuthorizationManager answers with an AuthorityAuthorizationDecision (an AuthorizationDecision)
