@@ -6,11 +6,15 @@ import cv.igrp.platform.process.management.processruntime.domain.models.UserProf
 import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
 import cv.igrp.platform.process.management.processruntime.mappers.UserProfileMapper;
 import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingDTO;
+import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingListPageDTO;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.entity.EmailAccessMappingEntity;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.EmailAccessMappingEntityRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +44,9 @@ public class EmailAccessMappingService {
   private static final Logger LOGGER = LoggerFactory.getLogger(EmailAccessMappingService.class);
 
   private static final Pattern EMAIL_FORMAT = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+  static final int NOTES_MAX = 2000;
+  static final int PAGE_SIZE_DEFAULT = 20;
+  static final int PAGE_SIZE_MAX = 100;
 
   private final EmailAccessMappingEntityRepository repository;
   private final UserProfileRepository userProfileRepository;
@@ -65,7 +72,7 @@ public class EmailAccessMappingService {
     entity.setId(UUID.randomUUID());
     entity.setEmail(normalised);
     entity.setDescription(blankToNull(description));
-    entity.setNotes(blankToNull(notes));
+    entity.setNotes(notesOrNull(notes));
     entity.setPermissions(String.join(",", granted));
     entity.setActive(true);
     entity.setExpiresAt(expiresAt);
@@ -86,15 +93,48 @@ public class EmailAccessMappingService {
     return toDto(entity, profilesOf(Set.of(createdBy)));
   }
 
+  /**
+   * One page, newest first. {@code status}: active (not expired), revoked, expired, or null for all;
+   * {@code email}: contains, case-insensitive.
+   */
   @Transactional(readOnly = true)
-  public List<EmailAccessMappingDTO> list() {
-    final var entities = repository.findAll();
-    final var principals = entities.stream()
+  public EmailAccessMappingListPageDTO list(String email, String status, Integer page, Integer size) {
+    final var pageable = PageRequest.of(page == null || page < 0 ? 0 : page,
+        size == null || size < 1 ? PAGE_SIZE_DEFAULT : Math.min(size, PAGE_SIZE_MAX), Sort.by(Sort.Direction.DESC, "createdAt"));
+    final var result = repository.findAll(filter(email, status), pageable);
+    final var principals = result.getContent().stream()
         .flatMap(e -> Stream.of(e.getCreatedBy(), e.getRevokedBy(), e.getUpdatedBy()))
         .filter(Objects::nonNull)
         .collect(Collectors.toSet());
     final var profiles = profilesOf(principals);
-    return entities.stream().map(e -> toDto(e, profiles)).toList();
+    final var dto = new EmailAccessMappingListPageDTO();
+    dto.setContent(result.getContent().stream().map(e -> toDto(e, profiles)).toList());
+    dto.setPageNumber(result.getNumber());
+    dto.setPageSize(result.getSize());
+    dto.setTotalElements(result.getTotalElements());
+    dto.setTotalPages(result.getTotalPages());
+    dto.setFirst(result.isFirst());
+    dto.setLast(result.isLast());
+    return dto;
+  }
+
+  static Specification<EmailAccessMappingEntity> filter(String email, String status) {
+    final var now = Instant.now();
+    final var needle = email == null || email.isBlank() ? null : "%" + email.trim().toLowerCase(Locale.ROOT) + "%";
+    final var state = status == null || status.isBlank() ? null : status.trim().toLowerCase(Locale.ROOT);
+    if (state != null && !Set.of("active", "revoked", "expired").contains(state)) {
+      throw new IllegalArgumentException("status must be one of active, revoked, expired");
+    }
+    return (root, query, cb) -> {
+      final var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+      if (needle != null) predicates.add(cb.like(root.get("email"), needle));
+      if ("revoked".equals(state)) predicates.add(cb.isFalse(root.get("active")));
+      if ("active".equals(state)) predicates.add(cb.and(cb.isTrue(root.get("active")),
+          cb.or(cb.isNull(root.get("expiresAt")), cb.greaterThan(root.get("expiresAt"), now))));
+      if ("expired".equals(state)) predicates.add(cb.and(cb.isTrue(root.get("active")),
+          cb.lessThanOrEqualTo(root.get("expiresAt"), now)));
+      return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+    };
   }
 
   @Transactional
@@ -108,7 +148,7 @@ public class EmailAccessMappingService {
     final var granted = validated(permissions, entity.getEmail(), updatedBy);
     entity.setPermissions(String.join(",", granted));
     entity.setDescription(blankToNull(description));
-    entity.setNotes(blankToNull(notes));
+    entity.setNotes(notesOrNull(notes));
     entity.setExpiresAt(expiresAt);
     entity.setUpdatedAt(Instant.now());
     entity.setUpdatedBy(updatedBy);
@@ -232,6 +272,14 @@ public class EmailAccessMappingService {
             .addKeyValue("event", "email_access_human_email")
             .addKeyValue("access.email", email)
             .log("Email access mapping created for an email that belongs to a human profile [{}]", p.getUsername()));
+  }
+
+  private static String notesOrNull(String notes) {
+    final var value = blankToNull(notes);
+    if (value != null && value.length() > NOTES_MAX) {
+      throw new IllegalArgumentException("notes must be at most " + NOTES_MAX + " characters");
+    }
+    return value;
   }
 
   private static String blankToNull(String value) {

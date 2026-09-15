@@ -12,6 +12,7 @@ import cv.igrp.framework.process.runtime.auth.core.m2m.M2mKeyResolver;
 import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
 import cv.igrp.platform.process.management.processruntime.mappers.UserProfileMapper;
 import cv.igrp.platform.process.management.shared.security.access.EmailAccessMappingController;
+import cv.igrp.platform.process.management.shared.application.dto.EmailAccessMappingListPageDTO;
 import cv.igrp.platform.process.management.shared.security.access.EmailAccessMappingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -150,7 +151,7 @@ class SecurityConfigEmailAccessTest {
   @Test
   void superAdminWithoutASessionManagesMappings() throws Exception {
     when(resolver.resolve(any())).thenReturn(Set.of());
-    when(service.list()).thenReturn(List.of());
+    when(service.list(any(), any(), any(), any())).thenReturn(new EmailAccessMappingListPageDTO());
     mvc.perform(get("/email-access-mappings").header("Authorization", "Bearer admin")).andExpect(status().isOk());
     mvc.perform(get("/email-access-mappings").header("Authorization", "Bearer mapped")).andExpect(status().isForbidden());
   }
@@ -167,7 +168,7 @@ class SecurityConfigEmailAccessTest {
   @Test
   void managerWithIrnSessionAndPermissionUsesTheConsole() throws Exception {
     when(irn.getPermissions("s1")).thenReturn(Set.of("EMAIL_ACCESS_MAPPINGS:visualizar"));
-    when(service.list()).thenReturn(List.of());
+    when(service.list(any(), any(), any(), any())).thenReturn(new EmailAccessMappingListPageDTO());
     var session = new Cookie("session_id", "s1");
     mvc.perform(get("/email-access-mappings").header("Authorization", "Bearer manager").cookie(session)).andExpect(status().isOk());
     // no :criar / :eliminar in the profile

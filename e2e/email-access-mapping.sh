@@ -52,10 +52,17 @@ run_app() { # base module business-path business-perm viewer-session
   call GET $B$P "$OLD";                                   check "expired mapping grants nothing" 403 $CODE
   call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"old@test.local","permissions":["'$PERM'"]}'; check "re-create over the expired one" 201 $CODE "$(msg)"
   call GET $B$P "$OLD";                                   check "new mapping works" 200 $CODE
-  call GET $B/email-access-mappings "$ADMIN"
-  check "old one retired, new one active" "1 1" "$(python3 -c 'import json,sys; ms=[m for m in json.load(sys.stdin) if m["email"]=="old@test.local"]; print(sum(1 for m in ms if not m["active"]), sum(1 for m in ms if m["active"]))' <<<"$BODY")"
+  call GET $B/email-access-mappings?email=old "$ADMIN"
+  check "list is a page; old one retired, new one active" "1 1" "$(python3 -c 'import json,sys; ms=[m for m in json.load(sys.stdin)["content"] if m["email"]=="old@test.local"]; print(sum(1 for m in ms if not m["active"]), sum(1 for m in ms if m["active"]))' <<<"$BODY")"
+  call GET "$B/email-access-mappings?status=revoked&$PS=1" "$ADMIN"
+  check "status=revoked, one per page: all rows inactive, totalPages>1" "true true" "$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(all(not m["active"] for m in d["content"])).lower(), str(d["totalPages"]>1 and len(d["content"])==1).lower())' <<<"$BODY")"
+  call GET "$B/email-access-mappings?status=active" "$ADMIN"
+  check "status=active excludes revoked and expired" "true" "$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(all(m["active"] and not (m.get("expiresAt") or "2999") < "2026" for m in d["content"]) and d["totalElements"]>0).lower())' <<<"$BODY")"
+  call GET "$B/email-access-mappings?status=deleted" "$ADMIN";  check "bad status" 400 $CODE "($(msg))"
+  LONG=$(python3 -c 'print("x"*2001)')
+  call POST $B/email-access-mappings "$ADMIN" sess-admin '{"email":"notes@test.local","permissions":["'$PERM'"],"notes":"'$LONG'"}'; check "notes over 2000 chars" 400 $CODE "($(msg))"
 }
-run_app http://localhost:18080 EMAIL_ACCESS_MAPPINGS /areas AREAS:visualizar sess-mgmt-viewer
-run_app http://localhost:18082 STUDIO_EMAIL_ACCESS_MAPPINGS /api/v1/projects STUDIO_PROJECTS:visualizar sess-studio-viewer
+PS=size run_app http://localhost:18080 EMAIL_ACCESS_MAPPINGS /areas AREAS:visualizar sess-mgmt-viewer
+PS=pageSize run_app http://localhost:18082 STUDIO_EMAIL_ACCESS_MAPPINGS /api/v1/projects STUDIO_PROJECTS:visualizar sess-studio-viewer
 echo "=== $pass passed, $fail failed"
 [ "$fail" = 0 ]

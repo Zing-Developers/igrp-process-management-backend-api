@@ -8,6 +8,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
 import java.util.List;
@@ -146,6 +150,30 @@ class EmailAccessMappingServiceTest {
     e.setCreatedBy("admin");
     e.setCreatedAt(Instant.now());
     return e;
+  }
+
+  @Test
+  void notesAreCappedAtTwoThousandCharacters() {
+    assertThatThrownBy(() -> service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, "x".repeat(2001), null, "admin"))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("2000");
+    service.create("svc@x.cv", List.of("TASK_INSTANCES:visualizar"), null, "x".repeat(2000), null, "admin");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void listIsAPageNewestFirstWithBoundedSizeAndValidatedStatus() {
+    var row = active("svc@x.cv", "TASK_INSTANCES:visualizar");
+    var captor = ArgumentCaptor.forClass(Pageable.class);
+    when(repository.findAll(any(Specification.class), captor.capture())).thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+
+    var page = service.list(" SVC ", "active", null, 500);
+
+    assertThat(page.getContent()).hasSize(1);
+    assertThat(page.getTotalElements()).isEqualTo(1);
+    assertThat(page.isFirst()).isTrue();
+    assertThat(captor.getValue().getPageSize()).isEqualTo(EmailAccessMappingService.PAGE_SIZE_MAX);
+    assertThat(captor.getValue().getSort().getOrderFor("createdAt").getDirection().isDescending()).isTrue();
+    assertThatThrownBy(() -> service.list(null, "deleted", 0, 20)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("status");
   }
 
 }
