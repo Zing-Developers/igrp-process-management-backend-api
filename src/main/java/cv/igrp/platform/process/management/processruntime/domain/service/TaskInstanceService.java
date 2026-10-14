@@ -76,6 +76,22 @@ public class TaskInstanceService {
   }
 
 
+  /**
+   * Cancels the tasks still open in the app that the engine no longer has: an interrupting boundary
+   * event (an SLA timer) or a terminate end removed them, and completing one would fail in the engine.
+   */
+  public void cancelTasksGoneFromEngine(ProcessInstance processInstance, Code user) {
+    var live = getActiveRuntimeTasks(processInstance).stream()
+        .map(task -> task.getExternalId().getValue())
+        .collect(Collectors.toSet());
+    for (var task : taskInstanceRepository.findOpenByProcessInstanceId(processInstance.getId().getValue())) {
+      if (!live.contains(task.getExternalId().getValue())) {
+        task.cancel(user, "Removida pelo motor de processos");
+        save(task);
+      }
+    }
+  }
+
   public void createTaskInstancesByProcess(ProcessInstance processInstance) {
     this.createNextTaskInstances(processInstance, Code.create(processInstance.getStartedBy()));
   }

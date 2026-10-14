@@ -17,6 +17,9 @@ corre depois do pedido, e a tarefa seguinte ficava no engine sem nunca chegar à
 fechava. `EngineJobSyncListener` (registado no `RuntimeService`; o `TimerEventListener` nunca o foi)
 corre `syncFromEngine` depois do commit de cada job, numa transação nova. `createNextTaskInstances`
 passa a ignorar tarefas que a app já tem: não havia guarda contra duplicados.
+A mesma sincronização cancela na app as tarefas abertas que o engine já não tem (timer de fronteira
+que interrompe, terminate end): ficam `CANCELED`, com um evento `CANCEL` novo e o utilizador de
+sistema. Não corre com o processo suspenso no engine, que não lista tarefas activas.
 
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.

@@ -527,6 +527,14 @@ public class TaskInstanceRepositoryImpl implements TaskInstanceRepository {
   }
 
   @Override
+  public List<TaskInstance> findOpenByProcessInstanceId(UUID processInstanceId) {
+    return taskInstanceEntityRepository.findAllByProcessInstanceId_IdAndStatusIn(processInstanceId,
+            List.of(TaskInstanceStatus.CREATED, TaskInstanceStatus.ASSIGNED)).stream()
+        .map(taskMapper::toModel)
+        .toList();
+  }
+
+  @Override
   public Map<String, TaskInstance> findAllByExternalIds(Collection<String> externalIds) {
     if (externalIds == null || externalIds.isEmpty()) {
       return Map.of();

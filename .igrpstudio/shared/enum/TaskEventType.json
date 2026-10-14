@@ -37,6 +37,13 @@
         "COMPLETE",
         "Terminar"
       ]
+    },
+    {
+      "name": "CANCEL",
+      "attributes": [
+        "CANCEL",
+        "Cancelar"
+      ]
     }
   ],
   "attributes": [

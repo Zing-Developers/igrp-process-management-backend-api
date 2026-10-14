@@ -31,4 +31,7 @@ public interface TaskInstanceRepository {
   Optional<TaskInstance> findByExternalId(String id);
 
   Map<String, TaskInstance> findAllByExternalIds(Collection<String> externalIds);
+
+  /** Tasks still open in the app (created or assigned) for one process. */
+  List<TaskInstance> findOpenByProcessInstanceId(UUID processInstanceId);
 }

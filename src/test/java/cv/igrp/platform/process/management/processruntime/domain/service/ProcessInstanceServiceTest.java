@@ -377,9 +377,25 @@ class ProcessInstanceServiceTest {
 
     processInstanceService.syncFromEngine("eng-1");
 
+    verify(taskInstanceService).cancelTasksGoneFromEngine(app, Code.create("system@irn.mj.pt"));
     verify(taskInstanceService).createTaskInstancesByProcess(app);
     verify(app).complete(any(), eq("system@irn.mj.pt"));
     verify(processInstanceRepository).save(app);
+  }
+
+  @Test
+  void syncFromEngineCancelsNothingWhileTheEngineHasTheProcessSuspended() {
+    var app = mock(ProcessInstance.class);
+    when(app.getStatus()).thenReturn(ProcessInstanceStatus.RUNNING);
+    when(processInstanceRepository.findByEngineProcessNumber("eng-1")).thenReturn(Optional.of(app));
+    var engine = mock(ProcessInstance.class);
+    when(engine.getStatus()).thenReturn(ProcessInstanceStatus.SUSPENDED);
+    when(runtimeProcessEngineRepository.getProcessInstanceById("eng-1")).thenReturn(engine);
+
+    processInstanceService.syncFromEngine("eng-1");
+
+    verify(taskInstanceService, org.mockito.Mockito.never()).cancelTasksGoneFromEngine(any(), any());
+    verify(app).suspend();
   }
 
   @Test

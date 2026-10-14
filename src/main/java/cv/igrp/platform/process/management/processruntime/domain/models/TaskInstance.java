@@ -185,6 +185,14 @@ public class TaskInstance {
     createTaskInstanceEvent(TaskEventType.COMPLETE, data.getCurrentUser(), data.getNote());
   }
 
+  /** The engine dropped the task (an interrupting boundary event fired, the process ended). */
+  public void cancel(Code user, String note) {
+    this.endedBy = Objects.requireNonNull(user, "User cannot be null!");
+    this.endedAt = LocalDateTime.now();
+    this.status = TaskInstanceStatus.CANCELED;
+    createTaskInstanceEvent(TaskEventType.CANCEL, user, note);
+  }
+
   private void createTaskInstanceEvent(TaskEventType eventType, Code user, String note) {
     this.taskInstanceEvents.add(
         TaskInstanceEvent.builder()

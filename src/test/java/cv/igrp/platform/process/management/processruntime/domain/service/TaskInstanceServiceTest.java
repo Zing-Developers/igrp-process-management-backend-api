@@ -7,6 +7,7 @@ import cv.igrp.platform.process.management.shared.application.constants.TaskAssi
 import cv.igrp.platform.process.management.shared.application.constants.VaribalesOperator;
 import cv.igrp.platform.process.management.processruntime.domain.repository.*;
 import cv.igrp.platform.process.management.shared.application.constants.ProcessInstanceStatus;
+import cv.igrp.platform.process.management.shared.application.constants.TaskEventType;
 import cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus;
 import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
 import cv.igrp.platform.process.management.shared.domain.models.*;
@@ -738,6 +739,33 @@ class TaskInstanceServiceTest {
 
     verify(taskInstanceRepository, never()).create(any());
     verify(runtimeProcessEngineRepository, never()).setTaskPriority(any(), anyInt());
+  }
+
+
+  @Test
+  void cancelTasksGoneFromEngineCancelsOnlyTheOpenTasksTheEngineDropped() {
+    var processId = Identifier.create(UUID.randomUUID());
+    var engineProcessNumber = Code.create("ENG-PROC-123");
+    ProcessInstance processInstance = mock(ProcessInstance.class);
+    when(processInstance.getId()).thenReturn(processId);
+    when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
+    TaskInstance still = TaskInstance.builder()
+        .id(Identifier.generate()).taskKey(Code.create("escalarPedido")).externalId(Code.create("eng-task-2"))
+        .name(Name.create("Escalar")).status(TaskInstanceStatus.CREATED).build();
+    TaskInstance dropped = TaskInstance.builder()
+        .id(Identifier.generate()).taskKey(Code.create("validarPedido")).externalId(Code.create("eng-task-1"))
+        .name(Name.create("Validar")).status(TaskInstanceStatus.ASSIGNED).build();
+    when(runtimeProcessEngineRepository.getActiveTaskInstances(engineProcessNumber.getValue())).thenReturn(List.of(still));
+    when(taskInstanceRepository.findOpenByProcessInstanceId(processId.getValue())).thenReturn(List.of(still, dropped));
+
+    taskInstanceService.cancelTasksGoneFromEngine(processInstance, Code.create("system@irn.mj.pt"));
+
+    assertEquals(TaskInstanceStatus.CANCELED, dropped.getStatus());
+    assertEquals(Code.create("system@irn.mj.pt"), dropped.getEndedBy());
+    assertEquals(TaskInstanceStatus.CREATED, still.getStatus());
+    verify(taskInstanceRepository).update(dropped);
+    verify(taskInstanceRepository, never()).update(still);
+    verify(taskInstanceEventRepository).save(argThat(event -> event.getEventType() == TaskEventType.CANCEL));
   }
 
 }
