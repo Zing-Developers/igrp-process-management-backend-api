@@ -70,8 +70,8 @@ public class ActivityMapper {
     activityProgressDTO.setActivityInstanceId(processArtifactEvent.getArtifactInstanceId());
     activityProgressDTO.setTreeNumber(processArtifactEvent.getTreeNumber());
 
-    activityProgressDTO.setStartTime(DateUtil.toCapeVerdeTime(processArtifactEvent.getStartTime()));
-    activityProgressDTO.setEndTime(DateUtil.toCapeVerdeTime(processArtifactEvent.getEndTime()));
+    activityProgressDTO.setStartTime(DateUtil.toLocalDateTime(processArtifactEvent.getStartTime()));
+    activityProgressDTO.setEndTime(DateUtil.toLocalDateTime(processArtifactEvent.getEndTime()));
 
     activityProgressDTO.setVariables(toActivityVariableDTO(processArtifactEvent.getVariables(), VariableTag.VARIABLES));
     activityProgressDTO.setForms(toActivityVariableDTO(processArtifactEvent.getVariables(), VariableTag.FORMS));
@@ -83,8 +83,8 @@ public class ActivityMapper {
       activityProgressDTO.setJobId(failure.jobId());
       activityProgressDTO.setErrorMessage(failure.errorMessage());
       activityProgressDTO.setAttempts(failure.attempts());
-      activityProgressDTO.setFirstFailedAt(DateUtil.toCapeVerdeTime(failure.firstFailedAt()));
-      activityProgressDTO.setLastFailedAt(DateUtil.toCapeVerdeTime(failure.lastFailedAt()));
+      activityProgressDTO.setFirstFailedAt(DateUtil.toLocalDateTime(failure.firstFailedAt()));
+      activityProgressDTO.setLastFailedAt(DateUtil.toLocalDateTime(failure.lastFailedAt()));
     }
 
     return activityProgressDTO;

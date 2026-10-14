@@ -29,7 +29,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static cv.igrp.platform.process.management.shared.util.DateUtil.toCapeVerdeTime;
+import static cv.igrp.platform.process.management.shared.util.DateUtil.toLocalDateTime;
 
 /**
  * Dead-letter jobs: async jobs (webhooks and any other async service task) whose retries ran out.
@@ -203,8 +203,8 @@ public class FailedJobService {
         activityIdOf(job),
         job.getExceptionMessage(),
         failure.attempts(),
-        toCapeVerdeTime(failure.firstFailedAt()),
-        toCapeVerdeTime(failure.lastFailedAt()));
+        toLocalDateTime(failure.firstFailedAt()),
+        toLocalDateTime(failure.lastFailedAt()));
   }
 
 }

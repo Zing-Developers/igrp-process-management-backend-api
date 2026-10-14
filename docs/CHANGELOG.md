@@ -53,6 +53,11 @@ dá 409 em vez de 500. V16: índice em `t_process_instance.engine_process_number
 selecciona processos que a app conhece; o registo de falhas só apaga quando o job tinha falhado.
 `TimerEventListener`, que nunca foi registado, foi removido.
 
+Datas: o `/activities/progress` convertia `startTime`/`endTime` para Cabo Verde com a zona fixa no
+código, ao contrário do resto da app, que usa a zona do servidor. Passa a usar a zona do servidor,
+tal como `/failed-jobs`. Cada deploy define o fuso com `TZ` no contentor; um deploy em Cabo Verde
+sem `TZ` vê as horas do timeline em UTC até o definir.
+
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
 

@@ -55,8 +55,8 @@ class FailedJobServiceTest {
     var lastFailed = java.time.Instant.parse("2026-10-14T10:42:00Z");
     when(failures.findByExecutionIds(List.of("exec-1")))
         .thenReturn(java.util.Map.of("exec-1", new JobFailureRecorder.Failure(3, lastFailed.minusSeconds(120), lastFailed)));
-    // shown in Cape Verde time (UTC-1), like the rest of the timeline
-    var lastFailedAt = java.time.LocalDateTime.of(2026, 10, 14, 9, 42);
+    // shown in the server's zone, like the rest of the API
+    var lastFailedAt = java.time.LocalDateTime.ofInstant(lastFailed, java.time.ZoneId.systemDefault());
     when(processes.findAllByEngineProcessNumberIn(any())).thenReturn(List.of(process));
     var execution = mock(Execution.class);
     when(execution.getActivityId()).thenReturn("notifyIrn");
