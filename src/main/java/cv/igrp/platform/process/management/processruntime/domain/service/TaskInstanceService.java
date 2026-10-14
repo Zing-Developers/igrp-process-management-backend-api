@@ -17,6 +17,7 @@ import cv.igrp.platform.process.management.shared.security.util.UserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -92,6 +93,7 @@ public class TaskInstanceService {
     }
   }
 
+  @Transactional
   public void createTaskInstancesByProcess(ProcessInstance processInstance) {
     this.createNextTaskInstances(processInstance, Code.create(processInstance.getStartedBy()));
   }
@@ -408,7 +410,9 @@ public class TaskInstanceService {
 
   void createNextTaskInstances(ProcessInstance processInstance, Code user) {
 
-    // Skip tasks the app already holds: a later sync (background job, parallel branch) sees them too
+    // One sync per process at a time: a second one waits here, then sees the tasks the first wrote
+    // and skips them below (a background job, a parallel branch, a request at the same moment)
+    processInstanceRepository.lockForTaskSync(processInstance.getId().getValue());
     var runtimeTasks = getActiveRuntimeTasks(processInstance);
     var known = taskInstanceRepository.findAllByExternalIds(
         runtimeTasks.stream().map(task -> task.getExternalId().getValue()).toList());

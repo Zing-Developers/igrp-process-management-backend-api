@@ -26,6 +26,9 @@ public interface ProcessInstanceRepository {
 
   Optional<ProcessInstance> findByEngineProcessNumber(String engineProcessNumber);
 
+  /** Locks the process row until the current transaction ends. */
+  void lockForTaskSync(UUID id);
+
   List<ProcessInstance> findAllByProcessReleaseId(String processReleaseId);
 
 }

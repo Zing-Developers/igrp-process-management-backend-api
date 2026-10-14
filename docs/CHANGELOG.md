@@ -27,6 +27,12 @@ e a sincronização, sincronização que lança erro): de `IGRP_TASK_RECONCILE_I
 no engine que a app não tem, tarefas abertas na app que o engine já não tem e processos concluídos
 no engine que a app tem em curso, e sincroniza-os. Primeiro `@Scheduled` da app.
 
+Duplicação concorrente: duas sincronizações do mesmo processo ao mesmo tempo (dois jobs paralelos, um
+pedido e um job) podiam ambas criar a mesma tarefa, porque a guarda era ler e depois inserir.
+`createNextTaskInstances` passa a trancar a linha do processo (`FOR UPDATE`) antes de ler o engine,
+e a V14 põe um índice único em `t_task_instance.external_id` como salvaguarda. A V14 pára se já houver
+duplicados: correr antes a consulta do runbook.
+
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
 

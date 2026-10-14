@@ -85,6 +85,7 @@ class TaskInstanceServiceTest {
     Code procReleaseId = Code.create("PROC-RELEASE-123");
 
     ProcessInstance processInstance = mock(ProcessInstance.class);
+    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
     when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
     when(processInstance.getStartedBy()).thenReturn(startedBy);
     when(processInstance.getProcReleaseId()).thenReturn(procReleaseId);
@@ -552,6 +553,7 @@ class TaskInstanceServiceTest {
     when(task.getTaskInstanceEvents()).thenReturn(List.of(mock(TaskInstanceEvent.class)));
 
     ProcessInstance processInstance = mock(ProcessInstance.class);
+    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
     when(processInstance.getEngineProcessNumber()).thenReturn(Code.create("ENG-PROC-123"));
 
     ProcessInstance activityProcess = mock(ProcessInstance.class);
@@ -723,6 +725,7 @@ class TaskInstanceServiceTest {
   void createTaskInstancesByProcessSkipsTasksTheAppAlreadyHolds() {
     var engineProcessNumber = Code.create("ENG-PROC-123");
     ProcessInstance processInstance = mock(ProcessInstance.class);
+    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
     when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
     when(processInstance.getStartedBy()).thenReturn("igrp@nosi.cv");
     var externalId = UUID.randomUUID().toString();
@@ -747,6 +750,7 @@ class TaskInstanceServiceTest {
     var processId = Identifier.create(UUID.randomUUID());
     var engineProcessNumber = Code.create("ENG-PROC-123");
     ProcessInstance processInstance = mock(ProcessInstance.class);
+    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
     when(processInstance.getId()).thenReturn(processId);
     when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
     TaskInstance still = TaskInstance.builder()
@@ -766,6 +770,26 @@ class TaskInstanceServiceTest {
     verify(taskInstanceRepository).update(dropped);
     verify(taskInstanceRepository, never()).update(still);
     verify(taskInstanceEventRepository).save(argThat(event -> event.getEventType() == TaskEventType.CANCEL));
+  }
+
+
+  @Test
+  void createTaskInstancesByProcessLocksTheProcessBeforeReadingTheEngine() {
+    var processId = Identifier.create(UUID.randomUUID());
+    var engineProcessNumber = Code.create("ENG-PROC-123");
+    ProcessInstance processInstance = mock(ProcessInstance.class);
+    when(processInstance.getId()).thenReturn(processId);
+    when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
+    when(processInstance.getStartedBy()).thenReturn("igrp@nosi.cv");
+    when(runtimeProcessEngineRepository.getActiveTaskInstances(engineProcessNumber.getValue())).thenReturn(List.of());
+
+    taskInstanceService.createTaskInstancesByProcess(processInstance);
+
+    // a sync waiting on the lock must read the engine and the known tasks only once it holds it
+    var order = inOrder(processInstanceRepository, runtimeProcessEngineRepository, taskInstanceRepository);
+    order.verify(processInstanceRepository).lockForTaskSync(processId.getValue());
+    order.verify(runtimeProcessEngineRepository).getActiveTaskInstances(engineProcessNumber.getValue());
+    order.verify(taskInstanceRepository).findAllByExternalIds(any());
   }
 
 }
