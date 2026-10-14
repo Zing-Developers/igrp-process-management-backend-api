@@ -21,6 +21,12 @@ A mesma sincronização cancela na app as tarefas abertas que o engine já não 
 que interrompe, terminate end): ficam `CANCELED`, com um evento `CANCEL` novo e o utilizador de
 sistema. Não corre com o processo suspenso no engine, que não lista tarefas activas.
 
+`TaskReconciler` cobre o que a sincronização em memória perde (pod que morre entre o commit do job
+e a sincronização, sincronização que lança erro): de `IGRP_TASK_RECONCILE_INTERVAL` em
+`IGRP_TASK_RECONCILE_GRACE`, um pod de cada vez (advisory lock do Postgres) procura tarefas activas
+no engine que a app não tem, tarefas abertas na app que o engine já não tem e processos concluídos
+no engine que a app tem em curso, e sincroniza-os. Primeiro `@Scheduled` da app.
+
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
 

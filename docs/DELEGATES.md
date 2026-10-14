@@ -131,7 +131,7 @@ A synchronous task never fails the user action that triggered it. To get retries
 </serviceTask>
 ```
 
-An async task runs after the request that reached it has returned, so the request cannot pick up the user task that follows. `EngineJobSyncListener` does it instead: once any engine job commits (async task, timer, a reprocessed failed job), it copies the new user tasks into the app and closes the process if the engine ended it.
+An async task runs after the request that reached it has returned, so the request cannot pick up the user task that follows. `EngineJobSyncListener` does it instead: once any engine job commits (async task, timer, a reprocessed failed job), it copies the new user tasks into the app and closes the process if the engine ended it. `TaskReconciler` is the safety net: every `IGRP_TASK_RECONCILE_INTERVAL` (5m) one pod finds the processes where app and engine disagree for longer than `IGRP_TASK_RECONCILE_GRACE` (2m) and runs the same sync on them.
 
 Without `failedJobRetryTimeCycle` the defaults apply: `IGRP_ASYNC_JOB_RETRIES` (3) attempts, `IGRP_ASYNC_JOB_RETRY_WAIT` (60s) apart. These are engine-wide, so they cover every async service task, not only webhooks.
 
