@@ -136,4 +136,75 @@ class EngineJobSyncListenerEngineTest {
     assertThat(seenBySync).containsExactly(List.of("emitirCertidao"));
   }
 
+  /** A user task, then a wait on a timer, then the next user task. */
+  private static final String TIMER_CATCH = """
+      <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" targetNamespace="test">
+        <process id="prazo" isExecutable="true">
+          <startEvent id="start"/>
+          <sequenceFlow id="f1" sourceRef="start" targetRef="validarPedido"/>
+          <userTask id="validarPedido"/>
+          <sequenceFlow id="f2" sourceRef="validarPedido" targetRef="aguardarPrazo"/>
+          <intermediateCatchEvent id="aguardarPrazo">
+            <timerEventDefinition><timeDuration>PT1H</timeDuration></timerEventDefinition>
+          </intermediateCatchEvent>
+          <sequenceFlow id="f3" sourceRef="aguardarPrazo" targetRef="emitirCertidao"/>
+          <userTask id="emitirCertidao"/>
+          <sequenceFlow id="f4" sourceRef="emitirCertidao" targetRef="end"/>
+          <endEvent id="end"/>
+        </process>
+      </definitions>
+      """;
+
+  /** An interrupting deadline on a user task: when it fires the task is cancelled and escalated. */
+  private static final String TIMER_BOUNDARY = """
+      <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" targetNamespace="test">
+        <process id="sla" isExecutable="true">
+          <startEvent id="start"/>
+          <sequenceFlow id="f1" sourceRef="start" targetRef="validarPedido"/>
+          <userTask id="validarPedido"/>
+          <boundaryEvent id="slaExpirado" attachedToRef="validarPedido" cancelActivity="true">
+            <timerEventDefinition><timeDuration>P2D</timeDuration></timerEventDefinition>
+          </boundaryEvent>
+          <sequenceFlow id="f2" sourceRef="slaExpirado" targetRef="escalarPedido"/>
+          <userTask id="escalarPedido"/>
+          <sequenceFlow id="f3" sourceRef="escalarPedido" targetRef="end"/>
+          <sequenceFlow id="f4" sourceRef="validarPedido" targetRef="end"/>
+          <endEvent id="end"/>
+        </process>
+      </definitions>
+      """;
+
+  /** What the async executor does when a timer is due: move it to the executable queue and run it. */
+  private void fireTimer(String processInstanceId) {
+    var management = engine.getManagementService();
+    var timer = management.createTimerJobQuery().processInstanceId(processInstanceId).singleResult();
+    management.moveTimerToExecutableJob(timer.getId());
+    management.executeJob(management.createJobQuery().processInstanceId(processInstanceId).singleResult().getId());
+  }
+
+  @Test
+  void timerCatchEventIsSyncedWhenItFires() {
+    engine.getRepositoryService().createDeployment().addString("prazo.bpmn20.xml", TIMER_CATCH).deploy();
+    var pi = engine.getRuntimeService().startProcessInstanceByKey("prazo");
+
+    // the request ends on the timer: nothing to pull yet
+    assertThat(completeAndPull(pi.getId(), "validarPedido")).isEmpty();
+
+    fireTimer(pi.getId());
+
+    assertThat(seenBySync).containsExactly(List.of("emitirCertidao"));
+  }
+
+  @Test
+  void boundaryTimerIsSyncedWithTheEscalationTask() {
+    engine.getRepositoryService().createDeployment().addString("sla.bpmn20.xml", TIMER_BOUNDARY).deploy();
+    var pi = engine.getRuntimeService().startProcessInstanceByKey("sla");
+    assertThat(activeTaskKeys(pi.getId())).containsExactly("validarPedido");
+
+    fireTimer(pi.getId());
+
+    // the engine cancelled validarPedido and opened escalarPedido; the sync sees only the new one
+    assertThat(seenBySync).containsExactly(List.of("escalarPedido"));
+  }
+
 }
