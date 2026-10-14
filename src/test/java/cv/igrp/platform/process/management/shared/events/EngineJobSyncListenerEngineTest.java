@@ -86,7 +86,7 @@ class EngineJobSyncListenerEngineTest {
     conf.setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_CREATE_DROP);
     conf.setAsyncExecutorActivate(false);
     // what the app does: registered in the configuration, before the engine (and its job executor) starts
-    new AsyncJobRetryConfig().engineJobSyncConfigurer(listener).configure(conf);
+    new AsyncJobRetryConfig().engineJobSyncConfigurer(listener, mock(cv.igrp.platform.process.management.shared.jobs.JobFailureRecorder.class)).configure(conf);
     engine = conf.buildProcessEngine();
   }
 

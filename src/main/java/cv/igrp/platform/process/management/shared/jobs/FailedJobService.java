@@ -33,14 +33,17 @@ public class FailedJobService {
   private final ManagementService managementService;
   private final RuntimeService runtimeService;
   private final ProcessInstanceEntityRepository processInstanceRepository;
+  private final JobFailureRecorder failures;
   private final int defaultRetries;
 
   public FailedJobService(ManagementService managementService, RuntimeService runtimeService,
                           ProcessInstanceEntityRepository processInstanceRepository,
+                          JobFailureRecorder failures,
                           @Value("${igrp.async-job.retries:3}") int defaultRetries) {
     this.managementService = managementService;
     this.runtimeService = runtimeService;
     this.processInstanceRepository = processInstanceRepository;
+    this.failures = failures;
     this.defaultRetries = defaultRetries;
   }
 
@@ -63,9 +66,14 @@ public class FailedJobService {
         .stream()
         .collect(Collectors.toMap(ProcessInstanceEntity::getEngineProcessNumber, Function.identity(), (a, b) -> a));
 
+    final var recorded = failures.findByExecutionIds(
+        jobs.stream().map(Job::getExecutionId).filter(java.util.Objects::nonNull).toList());
+
     final var dto = new FailedJobListPageDTO();
     // ponytail: one execution lookup per row for the activity id; fine at <=100 rows per page
-    dto.setContent(jobs.stream().map(job -> toDto(job, processes.get(job.getProcessInstanceId()))).toList());
+    dto.setContent(jobs.stream()
+        .map(job -> toDto(job, processes.get(job.getProcessInstanceId()), recorded.get(job.getExecutionId())))
+        .toList());
     dto.setPageNumber(pageNumber);
     dto.setPageSize(pageSize);
     dto.setTotalElements(total);
@@ -97,17 +105,22 @@ public class FailedJobService {
     }
   }
 
-  private FailedJobDTO toDto(Job job, ProcessInstanceEntity process) {
+  private FailedJobDTO toDto(Job job, ProcessInstanceEntity process, JobFailureRecorder.Failure failure) {
     final Execution execution = job.getExecutionId() == null ? null
         : runtimeService.createExecutionQuery().executionId(job.getExecutionId()).singleResult();
     return new FailedJobDTO(
         job.getId(),
         process != null ? process.getId() : null,
         process != null ? process.getNumber() : null,
+        process != null ? process.getName() : null,
         job.getProcessInstanceId(),
         job.getProcessDefinitionId(),
+        job.getExecutionId(),
         execution != null ? execution.getActivityId() : null,
-        job.getExceptionMessage());
+        job.getExceptionMessage(),
+        failure != null ? failure.attempts() : null,
+        failure != null ? failure.firstFailedAt() : null,
+        failure != null ? failure.lastFailedAt() : null);
   }
 
 }

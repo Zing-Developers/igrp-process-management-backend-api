@@ -139,9 +139,11 @@ When the attempts run out the job becomes a dead-letter job and the process wait
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /failed-jobs?processInstanceId=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs with the app process id and number, the `activityId` and the error message |
+| `GET /failed-jobs?processInstanceId=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs: app process id, number and name, `executionId` (one per branch of a process), `activityId`, error message, `attempts`, `firstFailedAt`, `lastFailedAt` |
 | `GET /failed-jobs/{jobId}/stacktrace` | `FAILED_JOBS:diagnosticar` | Full stack trace of the last failure (text/plain) |
 | `POST /failed-jobs/{jobId}/retry` body `{"retries": 3}` (optional) | `FAILED_JOBS:reprocessar` | Puts the job back on the queue; it runs on the next job acquisition |
+
+Activiti keeps no failure time and gives a retried job a new id each attempt, so `JobFailureRecorder` keeps its own record per execution (`t_job_failure`, V15): it counts each failure, reprocessing included, and clears the row on success. Failures from before V15 have no record and come back with `attempts` and the dates as null.
 
 Extra IRN permissions per tier go in `IRN_FAILED_JOBS_ACCEPT_READ`, `_DIAGNOSE` and `_RETRY`.
 

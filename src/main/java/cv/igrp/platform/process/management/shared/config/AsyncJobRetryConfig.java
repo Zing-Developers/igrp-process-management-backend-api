@@ -1,6 +1,7 @@
 package cv.igrp.platform.process.management.shared.config;
 
 import cv.igrp.platform.process.management.shared.events.EngineJobSyncListener;
+import cv.igrp.platform.process.management.shared.jobs.JobFailureRecorder;
 import org.activiti.engine.delegate.event.ActivitiEventListener;
 import org.activiti.engine.delegate.event.ActivitiEventType;
 import org.activiti.spring.boot.ProcessEngineConfigurationConfigurer;
@@ -35,13 +36,16 @@ public class AsyncJobRetryConfig {
     };
   }
 
-  /** In the engine configuration, so the sync listener is there before the job executor starts. */
+  /** In the engine configuration, so these listeners are there before the job executor starts. */
   @Bean
-  public ProcessEngineConfigurationConfigurer engineJobSyncConfigurer(EngineJobSyncListener listener) {
+  public ProcessEngineConfigurationConfigurer engineJobSyncConfigurer(EngineJobSyncListener listener,
+                                                                     JobFailureRecorder failures) {
     return conf -> {
       final Map<String, List<ActivitiEventListener>> typed = conf.getTypedEventListeners() == null
           ? new HashMap<>() : new HashMap<>(conf.getTypedEventListeners());
       typed.computeIfAbsent(ActivitiEventType.JOB_EXECUTION_SUCCESS.name(), type -> new ArrayList<>()).add(listener);
+      typed.computeIfAbsent(ActivitiEventType.JOB_EXECUTION_SUCCESS.name(), type -> new ArrayList<>()).add(failures);
+      typed.computeIfAbsent(ActivitiEventType.JOB_EXECUTION_FAILURE.name(), type -> new ArrayList<>()).add(failures);
       conf.setTypedEventListeners(typed);
     };
   }

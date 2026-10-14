@@ -28,7 +28,8 @@ class FailedJobServiceTest {
   private final ManagementService management = mock(ManagementService.class);
   private final RuntimeService runtime = mock(RuntimeService.class, RETURNS_DEEP_STUBS);
   private final ProcessInstanceEntityRepository processes = mock(ProcessInstanceEntityRepository.class);
-  private final FailedJobService service = new FailedJobService(management, runtime, processes, 3);
+  private final JobFailureRecorder failures = mock(JobFailureRecorder.class);
+  private final FailedJobService service = new FailedJobService(management, runtime, processes, failures, 3);
 
   private DeadLetterJobQuery deadLetters(long count, List<Job> page) {
     var query = mock(DeadLetterJobQuery.class, RETURNS_SELF);
@@ -50,6 +51,10 @@ class FailedJobServiceTest {
     process.setId(UUID.randomUUID());
     process.setNumber("P-0007");
     process.setEngineProcessNumber("eng-1");
+    process.setName("Pedido de certidão");
+    var lastFailedAt = java.time.LocalDateTime.of(2026, 10, 14, 9, 42);
+    when(failures.findByExecutionIds(List.of("exec-1")))
+        .thenReturn(java.util.Map.of("exec-1", new JobFailureRecorder.Failure(3, lastFailedAt.minusMinutes(2), lastFailedAt)));
     when(processes.findAllByEngineProcessNumberIn(any())).thenReturn(List.of(process));
     var execution = mock(Execution.class);
     when(execution.getActivityId()).thenReturn("notifyIrn");
@@ -66,6 +71,10 @@ class FailedJobServiceTest {
     assertThat(row.getProcessNumber()).isEqualTo("P-0007");
     assertThat(row.getActivityId()).isEqualTo("notifyIrn");
     assertThat(row.getExceptionMessage()).isEqualTo("notify: HTTP 503");
+    assertThat(row.getProcessName()).isEqualTo("Pedido de certidão");
+    assertThat(row.getExecutionId()).isEqualTo("exec-1");
+    assertThat(row.getAttempts()).isEqualTo(3);
+    assertThat(row.getLastFailedAt()).isEqualTo(lastFailedAt);
   }
 
   @Test

@@ -2,6 +2,12 @@ package cv.igrp.platform.process.management.shared.delegates.webhook;
 
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.ProcessInstanceEntityRepository;
 import cv.igrp.platform.process.management.shared.jobs.FailedJobService;
+import cv.igrp.platform.process.management.shared.jobs.JobFailureRecorder;
+import org.activiti.engine.delegate.event.ActivitiEventListener;
+import org.activiti.engine.delegate.event.ActivitiEventType;
+import org.h2.jdbcx.JdbcDataSource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.activiti.engine.ProcessEngine;
 import org.activiti.engine.delegate.DelegateExecution;
 import org.activiti.engine.delegate.JavaDelegate;
@@ -54,11 +60,21 @@ class WebhookAsyncRetryEngineTest {
       """;
 
   private ProcessEngine engine;
+  private JdbcTemplate jdbc;
+  private JobFailureRecorder failures;
 
   @BeforeEach
   void setUp() {
+    var dataSource = new JdbcDataSource();
+    dataSource.setURL("jdbc:h2:mem:webhook-retry;DB_CLOSE_DELAY=1000");
+    dataSource.setUser("sa"); // what the standalone engine connects as
+    jdbc = new JdbcTemplate(dataSource);
+    failures = new JobFailureRecorder(jdbc, new DataSourceTransactionManager(dataSource));
     var conf = new StandaloneInMemProcessEngineConfiguration();
     conf.setJdbcUrl("jdbc:h2:mem:webhook-retry;DB_CLOSE_DELAY=1000");
+    conf.setTypedEventListeners(java.util.Map.<String, java.util.List<ActivitiEventListener>>of(
+        ActivitiEventType.JOB_EXECUTION_FAILURE.name(), java.util.List.of(failures),
+        ActivitiEventType.JOB_EXECUTION_SUCCESS.name(), java.util.List.of(failures)));
     conf.setAsyncExecutorActivate(false);
     // what AsyncJobRetryConfig sets from IGRP_ASYNC_JOB_*
     conf.setAsyncExecutorNumberOfRetries(2);
@@ -67,10 +83,16 @@ class WebhookAsyncRetryEngineTest {
     engine = conf.buildProcessEngine();
     engine.getRepositoryService().createDeployment().addString("notify.bpmn20.xml", BPMN).deploy();
     FlakyWebhook.CALLS.set(0);
+    try {
+      jdbc.execute(new String(getClass().getResourceAsStream("/db/migration/V15__create_job_failure.sql").readAllBytes()));
+    } catch (java.io.IOException e) {
+      throw new IllegalStateException(e);
+    }
   }
 
   @AfterEach
   void tearDown() {
+    jdbc.execute("DROP TABLE t_job_failure");
     engine.close();
   }
 
@@ -78,7 +100,7 @@ class WebhookAsyncRetryEngineTest {
   void exhaustedRetriesLandInTheDeadLetterAndAReprocessCompletesTheTask() {
     var management = engine.getManagementService();
     var runtime = engine.getRuntimeService();
-    var failedJobs = new FailedJobService(management, runtime, mock(ProcessInstanceEntityRepository.class), 1);
+    var failedJobs = new FailedJobService(management, runtime, mock(ProcessInstanceEntityRepository.class), failures, 1);
     FlakyWebhook.STATUS.set(503);
 
     var pi = runtime.startProcessInstanceByKey("notify");
@@ -92,6 +114,10 @@ class WebhookAsyncRetryEngineTest {
     assertThat(page.getTotalElements()).isEqualTo(1);
     assertThat(page.getContent().get(0).getActivityId()).isEqualTo("callIrn");
     assertThat(page.getContent().get(0).getExceptionMessage()).contains("HTTP 503");
+    // recorded by us: Activiti keeps no timestamp and a new job id per attempt
+    assertThat(page.getContent().get(0).getAttempts()).isEqualTo(2);
+    assertThat(page.getContent().get(0).getLastFailedAt()).isNotNull();
+    assertThat(page.getContent().get(0).getExecutionId()).isNotNull();
     assertThat(failedJobs.stacktrace(page.getContent().get(0).getJobId())).contains("WebhookCallException");
 
     FlakyWebhook.STATUS.set(200);
@@ -102,6 +128,8 @@ class WebhookAsyncRetryEngineTest {
     assertThat(engine.getTaskService().createTaskQuery().processInstanceId(pi.getId()).singleResult().getTaskDefinitionKey())
         .isEqualTo("wait");
     assertThat(runtime.getVariable(pi.getId(), "callIrnStatusCode")).isEqualTo(200);
+    // the success clears the record, so a later failure on this path starts again at 1
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM t_job_failure", Integer.class)).isZero();
   }
 
   @Test

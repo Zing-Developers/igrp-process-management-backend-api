@@ -33,6 +33,11 @@ pedido e um job) podiam ambas criar a mesma tarefa, porque a guarda era ler e de
 e a V14 põe um índice único em `t_task_instance.external_id` como salvaguarda. A V14 pára se já houver
 duplicados: correr antes a consulta do runbook.
 
+`FailedJobDTO` ganha `processName`, `executionId` (separa os caminhos de um processo), `attempts`,
+`firstFailedAt` e `lastFailedAt`. O Activiti não guarda nem a hora da falha nem o número de
+tentativas (o job muda de id a cada uma), por isso `JobFailureRecorder` regista-as em `t_job_failure`
+(V15) a partir do evento `JOB_EXECUTION_FAILURE` e limpa no sucesso.
+
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
 
