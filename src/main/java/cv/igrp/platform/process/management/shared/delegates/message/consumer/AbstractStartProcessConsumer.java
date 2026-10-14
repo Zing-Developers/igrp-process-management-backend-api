@@ -74,7 +74,7 @@ public abstract class AbstractStartProcessConsumer {
 
       SecurityContextHolder.getContext().setAuthentication(auth);
 
-      processInstanceService.createAndStartProcessInstance(toModel(dto), "system-bot@nosi.cv");
+      processInstanceService.createAndStartProcessInstance(toModel(dto), auth.getName());
       LOGGER.info("Started process instance for processDefinitionId: {}", dto.getProcessDefinitionId());
       LOGGER.debug("Full DTO content: {}", dto);
     } finally {
@@ -153,7 +153,7 @@ public abstract class AbstractStartProcessConsumer {
 
   protected Authentication systemAuthentication() {
     return new UsernamePasswordAuthenticationToken(
-        "system-bot",
+        processInstanceService.getSystemUserEmail(),
         null,
         List.of(new SimpleGrantedAuthority("ROLE_ACTIVITI_USER"), new SimpleGrantedAuthority("ROLE_ACTIVITI_ADMIN"))
     );
