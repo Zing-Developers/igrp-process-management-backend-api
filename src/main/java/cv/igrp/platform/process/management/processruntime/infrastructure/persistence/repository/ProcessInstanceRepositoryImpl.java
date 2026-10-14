@@ -170,6 +170,11 @@ public class ProcessInstanceRepositoryImpl implements ProcessInstanceRepository 
   }
 
   @Override
+  public Optional<ProcessInstance> findByEngineProcessNumber(String engineProcessNumber) {
+    return processInstanceEntityRepository.findByEngineProcessNumber(engineProcessNumber).map(mapper::toModel);
+  }
+
+  @Override
   public List<ProcessInstance> findAllByProcessReleaseId(String processReleaseId) {
     return processInstanceEntityRepository.findAllByProcReleaseId(processReleaseId)
         .stream()

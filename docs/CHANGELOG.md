@@ -12,6 +12,12 @@ as tentativas, o job fica em dead letter. Tasks síncronas continuam a não falh
 utilizador. Novo `/failed-jobs` (módulo `FAILED_JOBS`: `visualizar`, `diagnosticar`, `reprocessar`)
 para listar, ver a stack trace e voltar a pôr na fila. Detalhe em `DELEGATES.md`.
 
+A app só copiava as user tasks do engine dentro do pedido (start, signal, complete). Um task async
+corre depois do pedido, e a tarefa seguinte ficava no engine sem nunca chegar à app; o processo nunca
+fechava. `EngineJobSyncListener` (registado no `RuntimeService`; o `TimerEventListener` nunca o foi)
+corre `syncFromEngine` depois do commit de cada job, numa transação nova. `createNextTaskInstances`
+passa a ignorar tarefas que a app já tem: não havia guarda contra duplicados.
+
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
 

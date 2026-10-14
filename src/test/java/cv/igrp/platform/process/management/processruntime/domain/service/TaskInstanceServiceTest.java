@@ -717,4 +717,27 @@ class TaskInstanceServiceTest {
     assertTrue(filter.getEngineProcessNumbers().isEmpty());
   }
 
+
+  @Test
+  void createTaskInstancesByProcessSkipsTasksTheAppAlreadyHolds() {
+    var engineProcessNumber = Code.create("ENG-PROC-123");
+    ProcessInstance processInstance = mock(ProcessInstance.class);
+    when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
+    when(processInstance.getStartedBy()).thenReturn("igrp@nosi.cv");
+    var externalId = UUID.randomUUID().toString();
+    TaskInstance known = TaskInstance.builder()
+        .taskKey(Code.create("task-1"))
+        .externalId(Code.create(externalId))
+        .name(Name.create("Task-1"))
+        .startedAt(LocalDateTime.now())
+        .build();
+    when(runtimeProcessEngineRepository.getActiveTaskInstances(engineProcessNumber.getValue())).thenReturn(List.of(known));
+    when(taskInstanceRepository.findAllByExternalIds(List.of(externalId))).thenReturn(Map.of(externalId, known));
+
+    taskInstanceService.createTaskInstancesByProcess(processInstance);
+
+    verify(taskInstanceRepository, never()).create(any());
+    verify(runtimeProcessEngineRepository, never()).setTaskPriority(any(), anyInt());
+  }
+
 }

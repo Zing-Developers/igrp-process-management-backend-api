@@ -22,6 +22,8 @@ public interface ProcessInstanceEntityRepository extends
 
   Optional<ProcessInstanceEntity> findByBusinessKey(String businessKey);
 
+  Optional<ProcessInstanceEntity> findByEngineProcessNumber(String engineProcessNumber);
+
   List<ProcessInstanceEntity> findAllByProcReleaseId(String procReleaseId);
 
   List<ProcessInstanceEntity> findAllByEngineProcessNumberIn(Collection<String> engineProcessNumbers);

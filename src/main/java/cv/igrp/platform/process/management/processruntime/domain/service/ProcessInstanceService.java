@@ -326,6 +326,20 @@ public class ProcessInstanceService {
     processInstanceRepository.save(processInstance);
   }
 
+  /**
+   * Copies into the app what a background engine job (async service task, timer) moved forward
+   * outside any request: the new user tasks, and the completion when the process ended. Request
+   * paths do this inline after start/signal/complete; jobs have no request to do it.
+   */
+  public void syncFromEngine(String engineProcessInstanceId) {
+    processInstanceRepository.findByEngineProcessNumber(engineProcessInstanceId)
+        .filter(processInstance -> processInstance.getStatus() != ProcessInstanceStatus.COMPLETED)
+        .ifPresent(processInstance -> {
+          taskInstanceService.createTaskInstancesByProcess(processInstance);
+          updateProcessInstanceStatus(runtimeProcessEngineRepository.getProcessInstanceById(engineProcessInstanceId), processInstance);
+        });
+  }
+
   public String getSystemUserEmail() {
     return systemUserEmail;
   }

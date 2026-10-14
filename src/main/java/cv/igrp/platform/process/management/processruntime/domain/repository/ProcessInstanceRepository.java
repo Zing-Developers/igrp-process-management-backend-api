@@ -24,6 +24,8 @@ public interface ProcessInstanceRepository {
 
   Optional<ProcessInstance> findByBusinessKey(String businessKey);
 
+  Optional<ProcessInstance> findByEngineProcessNumber(String engineProcessNumber);
+
   List<ProcessInstance> findAllByProcessReleaseId(String processReleaseId);
 
 }

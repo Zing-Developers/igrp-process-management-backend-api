@@ -392,7 +392,13 @@ public class TaskInstanceService {
 
   void createNextTaskInstances(ProcessInstance processInstance, Code user) {
 
-    var activeTasks = getActiveRuntimeTasks(processInstance);
+    // Skip tasks the app already holds: a later sync (background job, parallel branch) sees them too
+    var runtimeTasks = getActiveRuntimeTasks(processInstance);
+    var known = taskInstanceRepository.findAllByExternalIds(
+        runtimeTasks.stream().map(task -> task.getExternalId().getValue()).toList());
+    var activeTasks = runtimeTasks.stream()
+        .filter(task -> !known.containsKey(task.getExternalId().getValue()))
+        .toList();
     if (activeTasks.isEmpty()) {
       LOGGER.debug(
           "No active runtime tasks found for processInstance [{}] while checking task assignment rules",
