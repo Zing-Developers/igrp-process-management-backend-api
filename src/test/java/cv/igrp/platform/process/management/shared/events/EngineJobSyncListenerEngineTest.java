@@ -1,6 +1,7 @@
 package cv.igrp.platform.process.management.shared.events;
 
 import cv.igrp.platform.process.management.processruntime.domain.service.ProcessInstanceService;
+import cv.igrp.platform.process.management.shared.config.AsyncJobRetryConfig;
 import org.activiti.engine.ProcessEngine;
 import org.activiti.engine.ProcessEngineConfiguration;
 import org.activiti.engine.delegate.DelegateExecution;
@@ -11,6 +12,7 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
 import java.util.ArrayList;
@@ -20,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * The app copies engine tasks only inside a request (start/signal/complete pull the active tasks).
@@ -55,20 +58,16 @@ class EngineJobSyncListenerEngineTest {
   }
 
   private ProcessEngine engine;
+  private EngineJobSyncListener listener;
   /** What the app's sync would find in the engine, captured at the moment it runs. */
   private final List<List<String>> seenBySync = new ArrayList<>();
 
   @BeforeEach
+  @SuppressWarnings("unchecked")
   void setUp() {
     var dataSource = new JdbcDataSource();
     dataSource.setURL("jdbc:h2:mem:job-sync;DB_CLOSE_DELAY=1000");
     var transactionManager = new DataSourceTransactionManager(dataSource);
-    var conf = new SpringProcessEngineConfiguration();
-    conf.setDataSource(dataSource);
-    conf.setTransactionManager(transactionManager);
-    conf.setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_CREATE_DROP);
-    conf.setAsyncExecutorActivate(false);
-    engine = conf.buildProcessEngine();
 
     var processInstances = mock(ProcessInstanceService.class);
     doAnswer(call -> {
@@ -77,7 +76,18 @@ class EngineJobSyncListenerEngineTest {
       seenBySync.add(committedTaskKeys(dataSource, call.getArgument(0)));
       return null;
     }).when(processInstances).syncFromEngine(anyString());
-    new EngineJobSyncListener(engine.getRuntimeService(), processInstances, transactionManager).register();
+    ObjectProvider<ProcessInstanceService> provider = mock(ObjectProvider.class);
+    when(provider.getObject()).thenReturn(processInstances);
+    listener = new EngineJobSyncListener(provider, transactionManager);
+
+    var conf = new SpringProcessEngineConfiguration();
+    conf.setDataSource(dataSource);
+    conf.setTransactionManager(transactionManager);
+    conf.setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_CREATE_DROP);
+    conf.setAsyncExecutorActivate(false);
+    // what the app does: registered in the configuration, before the engine (and its job executor) starts
+    new AsyncJobRetryConfig().engineJobSyncConfigurer(listener).configure(conf);
+    engine = conf.buildProcessEngine();
   }
 
   @AfterEach
@@ -113,6 +123,7 @@ class EngineJobSyncListenerEngineTest {
 
   @Test
   void synchronousTaskIsPulledByTheRequestAndNoJobRuns() {
+    listener.onApplicationReady();
     engine.getRepositoryService().createDeployment().addString("c.bpmn20.xml", bpmn(false)).deploy();
     var pi = engine.getRuntimeService().startProcessInstanceByKey("certidao");
 
@@ -122,6 +133,7 @@ class EngineJobSyncListenerEngineTest {
 
   @Test
   void asyncTaskIsSyncedAfterTheJobCommitsAndSeesTheNextUserTask() {
+    listener.onApplicationReady();
     engine.getRepositoryService().createDeployment().addString("c.bpmn20.xml", bpmn(true)).deploy();
     var pi = engine.getRuntimeService().startProcessInstanceByKey("certidao");
 
@@ -184,6 +196,7 @@ class EngineJobSyncListenerEngineTest {
 
   @Test
   void timerCatchEventIsSyncedWhenItFires() {
+    listener.onApplicationReady();
     engine.getRepositoryService().createDeployment().addString("prazo.bpmn20.xml", TIMER_CATCH).deploy();
     var pi = engine.getRuntimeService().startProcessInstanceByKey("prazo");
 
@@ -197,6 +210,7 @@ class EngineJobSyncListenerEngineTest {
 
   @Test
   void boundaryTimerIsSyncedWithTheEscalationTask() {
+    listener.onApplicationReady();
     engine.getRepositoryService().createDeployment().addString("sla.bpmn20.xml", TIMER_BOUNDARY).deploy();
     var pi = engine.getRuntimeService().startProcessInstanceByKey("sla");
     assertThat(activeTaskKeys(pi.getId())).containsExactly("validarPedido");
@@ -205,6 +219,25 @@ class EngineJobSyncListenerEngineTest {
 
     // the engine cancelled validarPedido and opened escalarPedido; the sync sees only the new one
     assertThat(seenBySync).containsExactly(List.of("escalarPedido"));
+  }
+
+
+  @Test
+  void aJobThatFinishesWhileTheAppIsStartingIsSyncedOnceTheAppIsReady() {
+    engine.getRepositoryService().createDeployment().addString("prazo.bpmn20.xml", TIMER_CATCH).deploy();
+    var pi = engine.getRuntimeService().startProcessInstanceByKey("prazo");
+    completeAndPull(pi.getId(), "validarPedido");
+
+    // e.g. a timer already due when the pod restarted, run before the context is up
+    fireTimer(pi.getId());
+    assertThat(seenBySync).isEmpty();
+
+    listener.onApplicationReady();
+    assertThat(seenBySync).containsExactly(List.of("emitirCertidao"));
+
+    // drained, not replayed
+    listener.onApplicationReady();
+    assertThat(seenBySync).hasSize(1);
   }
 
 }
