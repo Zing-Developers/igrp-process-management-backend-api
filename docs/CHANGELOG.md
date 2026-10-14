@@ -1,5 +1,21 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-10 · Webhooks: falhas visíveis, retries e reprocessamento
+
+Os dois delegates de webhook eram singletons com os campos BPMN injectados a cada execução: dois
+processos em simultâneo podiam trocar URL ou headers entre si. Passam a `prototype`. As falhas, que
+só iam para o log (o erro do `IgrpWebhookDelegate` numa variável transient que se perdia), ficam em
+`<taskId>StatusCode` e `<taskId>Error`. Num service task `activiti:async="true"`, uma falha
+repetível (sem resposta, 5xx, 408, 429) é relançada: o job executor repete-a
+(`failedJobRetryTimeCycle` da task ou `IGRP_ASYNC_JOB_RETRIES`/`IGRP_ASYNC_JOB_RETRY_WAIT`) e, esgotadas
+as tentativas, o job fica em dead letter. Tasks síncronas continuam a não falhar a acção do
+utilizador. Novo `/failed-jobs` (módulo `FAILED_JOBS`: `visualizar`, `diagnosticar`, `reprocessar`)
+para listar, ver a stack trace e voltar a pôr na fila. Detalhe em `DELEGATES.md`.
+
+Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
+`system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
+
+
 ## 2026-09 (b) · Revisão de código do acesso por email (framework 24.10)
 
 Revisão com oito ângulos e verificação; nove correcções aplicadas nas duas apps e no framework:

@@ -1,0 +1,119 @@
+{
+  "type": "controller",
+  "name": "FailedJob",
+  "module": "shared",
+  "description": "Dead-letter async jobs (e.g. webhooks with activiti:async) that ran out of retries: list, stack trace, reprocess. Permissions FAILED_JOBS:visualizar|diagnosticar|reprocessar via the route catalogue.",
+  "basePath": "failed-jobs",
+  "id": "fjctrl0001-CONTROLLER",
+  "actions": [
+    {
+      "actionName": "listFailedJobs",
+      "method": "GET",
+      "responses": {
+        "200": {
+          "name": "OK",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "FailedJobListPageDTO",
+                "name": "data",
+                "collectionType": "none",
+                "objectType": "dto",
+                "module": "shared"
+              }
+            }
+          },
+          "description": "Page of dead-letter jobs, oldest due first"
+        }
+      },
+      "requestParams": [
+        {
+          "type": "string",
+          "name": "processInstanceId",
+          "isRequired": false
+        },
+        {
+          "type": "string",
+          "name": "page",
+          "value": "0",
+          "isRequired": false
+        },
+        {
+          "type": "string",
+          "name": "size",
+          "value": "20",
+          "isRequired": false
+        }
+      ]
+    },
+    {
+      "actionName": "getFailedJobStacktrace",
+      "path": "{jobId}/stacktrace",
+      "method": "GET",
+      "responses": {
+        "200": {
+          "name": "OK",
+          "content": {
+            "text/plain": {
+              "schema": {
+                "type": "string",
+                "name": "data",
+                "collectionType": "none"
+              }
+            }
+          },
+          "description": "Full stack trace of the last failure"
+        }
+      },
+      "pathVariables": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "isRequired": true,
+          "description": "Job id"
+        }
+      ]
+    },
+    {
+      "actionName": "retryFailedJob",
+      "path": "{jobId}/retry",
+      "method": "POST",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "FailedJobRetryRequestDTO",
+              "name": "data",
+              "collectionType": "none",
+              "objectType": "dto",
+              "module": "shared"
+            }
+          }
+        }
+      },
+      "responses": {
+        "204": {
+          "name": "OK",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "name": "data",
+                "collectionType": "none"
+              }
+            }
+          },
+          "description": "Job back on the executable queue"
+        }
+      },
+      "pathVariables": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "isRequired": true,
+          "description": "Job id"
+        }
+      ]
+    }
+  ]
+}

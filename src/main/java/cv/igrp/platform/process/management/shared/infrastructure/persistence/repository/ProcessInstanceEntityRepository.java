@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,8 @@ public interface ProcessInstanceEntityRepository extends
   Optional<ProcessInstanceEntity> findByBusinessKey(String businessKey);
 
   List<ProcessInstanceEntity> findAllByProcReleaseId(String procReleaseId);
+
+  List<ProcessInstanceEntity> findAllByEngineProcessNumberIn(Collection<String> engineProcessNumbers);
 
   /**
    * Aggregates process counts grouped by status in a single query. Replaces the previous

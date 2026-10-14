@@ -107,6 +107,42 @@ If you don’t have a message broker available, an alternative is to use `${igrp
 
 ![Process Webhook Delegate Service Task Configuration](../assets/images/delegates/Imagem23.png)
 
+#### Webhook failures, retries and reprocessing
+
+Both webhook delegates record the outcome in process variables: `<task-id>StatusCode` and, on failure, `<task-id>Error` (`HTTP 503`, or the exception message when there was no response). Gateways can branch on them. A later success removes `<task-id>Error`.
+
+What happens on failure depends on the service task:
+
+| Service task | Retryable failure (no response, 5xx, 408, 429) | Other 4xx |
+|---|---|---|
+| synchronous (default) | variables recorded, process continues | variables recorded, process continues |
+| `activiti:async="true"` | job retried, then parked as a failed job | variables recorded, process continues |
+
+A synchronous task never fails the user action that triggered it. To get retries, mark the task async and, optionally, give it its own retry cycle:
+
+```xml
+<serviceTask id="notifyIrn" activiti:async="true" activiti:delegateExpression="${igrpWebhookDelegate}">
+  <extensionElements>
+    <!-- optional: 5 attempts, 10 minutes apart -->
+    <activiti:failedJobRetryTimeCycle>R5/PT10M</activiti:failedJobRetryTimeCycle>
+    <activiti:field name="webhookUrl"><activiti:string>https://...</activiti:string></activiti:field>
+    <activiti:field name="webhookMethod"><activiti:string>POST</activiti:string></activiti:field>
+  </extensionElements>
+</serviceTask>
+```
+
+Without `failedJobRetryTimeCycle` the defaults apply: `IGRP_ASYNC_JOB_RETRIES` (3) attempts, `IGRP_ASYNC_JOB_RETRY_WAIT` (60s) apart. These are engine-wide, so they cover every async service task, not only webhooks.
+
+When the attempts run out the job becomes a dead-letter job and the process waits on that task. The `/failed-jobs` endpoints show and reprocess it:
+
+| Endpoint | Permission | What it does |
+|---|---|---|
+| `GET /failed-jobs?processInstanceId=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs with the app process id and number, the `activityId` and the error message |
+| `GET /failed-jobs/{jobId}/stacktrace` | `FAILED_JOBS:diagnosticar` | Full stack trace of the last failure (text/plain) |
+| `POST /failed-jobs/{jobId}/retry` body `{"retries": 3}` (optional) | `FAILED_JOBS:reprocessar` | Puts the job back on the queue; it runs on the next job acquisition |
+
+Extra IRN permissions per tier go in `IRN_FAILED_JOBS_ACCEPT_READ`, `_DIAGNOSE` and `_RETRY`.
+
 7. To dynamically assign a user task based on an external API response, the delegate expression is `${igrpExternalUserAssignmentDelegate}`.
 
 This delegate is designed for scenarios where the assignee of a user task is determined by an external system. For example, a backoffice API may return which user should handle a specific request. The delegate calls that API, extracts the user identifier (e.g., email) from the JSON response using a JSONPath expression, and creates a `TaskAssignmentRule` so the target user task is automatically assigned to that user when it is activated.
