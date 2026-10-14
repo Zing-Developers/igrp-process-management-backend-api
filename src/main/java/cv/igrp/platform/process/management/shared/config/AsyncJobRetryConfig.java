@@ -43,8 +43,7 @@ public class AsyncJobRetryConfig {
     return conf -> {
       final Map<String, List<ActivitiEventListener>> typed = conf.getTypedEventListeners() == null
           ? new HashMap<>() : new HashMap<>(conf.getTypedEventListeners());
-      typed.computeIfAbsent(ActivitiEventType.JOB_EXECUTION_SUCCESS.name(), type -> new ArrayList<>()).add(listener);
-      typed.computeIfAbsent(ActivitiEventType.JOB_EXECUTION_SUCCESS.name(), type -> new ArrayList<>()).add(failures);
+      typed.computeIfAbsent(ActivitiEventType.JOB_EXECUTION_SUCCESS.name(), type -> new ArrayList<>()).addAll(List.of(listener, failures));
       typed.computeIfAbsent(ActivitiEventType.JOB_EXECUTION_FAILURE.name(), type -> new ArrayList<>()).add(failures);
       conf.setTypedEventListeners(typed);
     };

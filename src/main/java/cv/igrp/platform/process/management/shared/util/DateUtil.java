@@ -48,4 +48,11 @@ public class DateUtil { // todo class to be removed
   public static final BiFunction<LocalDateTime, DateTimeFormatter, String> biLocalDateTimeToString = (obj, formatter) -> ofNullable(obj).map(formatter::format).orElse("");
 
   public static final BiFunction<LocalDate, DateTimeFormatter, String> biLocalDateToString = (obj, formatter) -> ofNullable(obj).map(formatter::format).orElse("");
+  /** The zone the process timeline and the failed-jobs console show times in. */
+  public static final ZoneId CAPE_VERDE = ZoneId.of("Atlantic/Cape_Verde");
+
+  public static LocalDateTime toCapeVerdeTime(java.time.Instant instant) {
+    return instant == null ? null : LocalDateTime.ofInstant(instant, CAPE_VERDE);
+  }
+
 }

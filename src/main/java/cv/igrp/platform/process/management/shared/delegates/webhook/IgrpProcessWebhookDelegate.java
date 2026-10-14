@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -80,7 +79,6 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
     Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
     Integer statusCode = null;
-    String error = null;
     Exception failure = null;
 
     try {
@@ -98,17 +96,15 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
       statusCode = response.status();
       if (statusCode >= 400) {
         log.warn("[IgrpProcessWebhookDelegate] Webhook returned error {}", statusCode);
-        error = "HTTP " + statusCode;
       } else {
         log.info("[IgrpProcessWebhookDelegate] Process Data successfully sent to webhook");
       }
     } catch (Exception e) {
       log.error("[IgrpProcessWebhookDelegate] Error calling webhook {}", url, e);
-      error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
       failure = e;
     }
 
-    WebhookFailures.record(execution, taskId, statusCode, error, failure);
+    WebhookFailures.record(execution, taskId, statusCode, failure);
   }
 
 }

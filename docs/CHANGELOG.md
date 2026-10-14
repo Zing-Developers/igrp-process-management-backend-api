@@ -43,6 +43,16 @@ fora (a tentativa que falha é desfeita), por isso um ramo parado não aparecia.
 lista com status `FAILED` (tentativas esgotadas) ou `RETRYING`, e com `jobId`, `errorMessage`,
 `attempts`, `firstFailedAt` e `lastFailedAt`; em processos com vários ramos, uma linha por falha.
 
+Limpeza e consistência com a interface: o cancelamento de tarefas que o engine retirou passa para
+dentro de `createNextTaskInstances` (sob o mesmo lock, para todos os caminhos: pedidos, sinais,
+mensagens e jobs) e compara com as tarefas que o engine ainda tem, suspensas incluídas, em vez das
+activas; deixa de ser preciso tratar o processo suspenso à parte. As actividades paradas entram no
+timeline na infraestrutura e substituem a linha PENDING que o framework listava para elas (aparecia
+duas vezes). `activityKey` vinha sempre a null. Concluir ou guardar uma tarefa CANCELED ou COMPLETED
+dá 409 em vez de 500. V16: índice em `t_process_instance.engine_process_number`. O reconciliador só
+selecciona processos que a app conhece; o registo de falhas só apaga quando o job tinha falhado.
+`TimerEventListener`, que nunca foi registado, foi removido.
+
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
 

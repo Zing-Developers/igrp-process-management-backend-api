@@ -41,6 +41,7 @@ public class TaskReconciler {
 
   static final String DIVERGENT = """
       SELECT t.PROC_INST_ID_ FROM ACT_RU_TASK t
+        JOIN t_process_instance p ON p.engine_process_number = t.PROC_INST_ID_ AND p.status <> 'COMPLETED'
         LEFT JOIN t_task_instance a ON a.external_id = t.ID_
        WHERE a.id IS NULL AND t.SUSPENSION_STATE_ = 1 AND t.CREATE_TIME_ < ?
       UNION

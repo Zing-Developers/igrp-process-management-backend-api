@@ -27,7 +27,7 @@ public class FailedJobDTO {
 
   private String processDefinitionId;
 
-  /** Engine execution of the failed task: tells apart the branches of one process. */
+  /** Engine execution of the failed task; one per failure, but not a branch id (the engine reuses executions). */
   private String executionId;
 
   private String activityId;

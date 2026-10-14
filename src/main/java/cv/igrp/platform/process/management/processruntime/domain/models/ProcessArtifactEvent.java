@@ -48,7 +48,8 @@ public class ProcessArtifactEvent {
                               Map<String, Object> variables,
                               String assignee,
                               String treeNumber,
-                              UserProfile userProfileAssignee
+                              UserProfile userProfileAssignee,
+                              JobFailure failure
   ) {
     this.processInstanceId = Objects.requireNonNull(processInstanceId, "Process instance id cannot be null");
     this.artifactInstanceId = artifactInstanceId;
@@ -65,11 +66,7 @@ public class ProcessArtifactEvent {
     this.assignee = assignee;
     this.treeNumber = treeNumber;
     this.userProfileAssignee = userProfileAssignee;
-  }
-
-  public ProcessArtifactEvent withFailure(JobFailure failure) {
     this.failure = failure;
-    return this;
   }
 
   public void addVariables(Map<String, Object> variables) {

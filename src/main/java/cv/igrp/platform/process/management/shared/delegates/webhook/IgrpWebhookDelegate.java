@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -94,7 +93,6 @@ public class IgrpWebhookDelegate implements JavaDelegate {
 
     Object responseBody = null;
     Integer statusCode = null;
-    String error = null;
     Exception failure = null;
 
     try {
@@ -143,18 +141,16 @@ public class IgrpWebhookDelegate implements JavaDelegate {
 
       if (statusCode >= 400) {
         log.warn("[IgrpWebhookDelegate] Webhook returned error {} for task {}", statusCode, taskId);
-        error = "HTTP " + statusCode;
       } else {
         log.info("[IgrpWebhookDelegate] Webhook responded {} for task {}", statusCode, taskId);
       }
 
     } catch (Exception e) {
       log.error("[IgrpWebhookDelegate] Error calling webhook {}", url, e);
-      error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
       failure = e;
     }
 
-    WebhookFailures.record(execution, taskId, statusCode, error, failure);
+    WebhookFailures.record(execution, taskId, statusCode, failure);
 
     if (statusCode != null) {
       JsonElement responseBodyElement = ObjectUtil.parseJsonObject(responseBody);

@@ -36,31 +36,31 @@ class WebhookFailuresTest {
   void asyncTaskRethrowsRetryableFailuresSoTheJobExecutorRetries() {
     task.setAsynchronous(true);
     assertThrows(WebhookFailures.WebhookCallException.class,
-        () -> WebhookFailures.record(execution, "notify", null, "timeout", new IOException("timeout")));
+        () -> WebhookFailures.record(execution, "notify", null, new IOException("timeout")));
     assertThrows(WebhookFailures.WebhookCallException.class,
-        () -> WebhookFailures.record(execution, "notify", 503, "HTTP 503", null));
+        () -> WebhookFailures.record(execution, "notify", 503, null));
     assertThrows(WebhookFailures.WebhookCallException.class,
-        () -> WebhookFailures.record(execution, "notify", 429, "HTTP 429", null));
+        () -> WebhookFailures.record(execution, "notify", 429, null));
     verify(runtime, never()).setVariable(anyString(), anyString(), any());
   }
 
   @Test
   void asyncTaskRecordsAndContinuesOnADefinitive4xx() {
     task.setAsynchronous(true);
-    WebhookFailures.record(execution, "notify", 404, "HTTP 404", null);
+    WebhookFailures.record(execution, "notify", 404, null);
     verify(runtime).setVariable("pi-1", "notifyStatusCode", 404);
     verify(runtime).setVariable("pi-1", "notifyError", "HTTP 404");
   }
 
   @Test
   void syncTaskNeverThrowsAndKeepsTheErrorAsAPersistentVariable() {
-    WebhookFailures.record(execution, "notify", null, "connection refused", new IOException());
+    WebhookFailures.record(execution, "notify", null, new IOException("connection refused"));
     verify(runtime).setVariable("pi-1", "notifyError", "connection refused");
   }
 
   @Test
   void successClearsAStaleError() {
-    WebhookFailures.record(execution, "notify", 200, null, null);
+    WebhookFailures.record(execution, "notify", 200, null);
     verify(runtime).setVariable("pi-1", "notifyStatusCode", 200);
     verify(runtime).removeVariable("pi-1", "notifyError");
   }

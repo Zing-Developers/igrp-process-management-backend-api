@@ -14,8 +14,10 @@ import cv.igrp.platform.process.management.shared.domain.models.Identifier;
 import cv.igrp.platform.process.management.shared.domain.models.PageableLista;
 import cv.igrp.platform.process.management.shared.security.util.IgrpAuthorizationConstants;
 import cv.igrp.platform.process.management.shared.security.util.UserContext;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +26,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-
 
 @Service
 public class TaskInstanceService {
@@ -46,6 +47,10 @@ public class TaskInstanceService {
    * granted under whichever IRN module code the deployment created for it — several codes may all
    * mean "see all tasks". Defaults to our own {@code TASK_INSTANCES:pesquisar_todos}.
    */
+  /** Who the app records as cancelling a task the engine dropped. */
+  @Value("${igrp.process.system-user-email:system@irn.mj.pt}")
+  private String systemUserEmail = "system@irn.mj.pt";
+
   private final List<String> taskSearchAllPermissions;
 
   public TaskInstanceService(TaskInstanceRepository taskInstanceRepository,
@@ -56,7 +61,7 @@ public class TaskInstanceService {
                              ProcessDefinitionRepository processDefinitionRepository,
                              UserProfileRepository userProfileRepository,
                              UserContext userContext,
-                             @org.springframework.beans.factory.annotation.Value(
+                             @Value(
                                  "${igrp.authorization.task-search-all-permissions:"
                                      + IgrpAuthorizationConstants.TASK_INSTANCES_SEARCH_ALL + "}")
                              List<String> taskSearchAllPermissions
@@ -76,22 +81,6 @@ public class TaskInstanceService {
         : taskSearchAllPermissions;
   }
 
-
-  /**
-   * Cancels the tasks still open in the app that the engine no longer has: an interrupting boundary
-   * event (an SLA timer) or a terminate end removed them, and completing one would fail in the engine.
-   */
-  public void cancelTasksGoneFromEngine(ProcessInstance processInstance, Code user) {
-    var live = getActiveRuntimeTasks(processInstance).stream()
-        .map(task -> task.getExternalId().getValue())
-        .collect(Collectors.toSet());
-    for (var task : taskInstanceRepository.findOpenByProcessInstanceId(processInstance.getId().getValue())) {
-      if (!live.contains(task.getExternalId().getValue())) {
-        task.cancel(user, "Removida pelo motor de processos");
-        save(task);
-      }
-    }
-  }
 
   @Transactional
   public void createTaskInstancesByProcess(ProcessInstance processInstance) {
@@ -214,6 +203,7 @@ public class TaskInstanceService {
 
   public TaskInstance saveTask(TaskOperationData data) {
     var taskInstance = getByIdWihEvents(data.getId());
+    taskInstance.requireOpen("Save");
     // Validate
     data.validateVariablesAndForms();
     // Save
@@ -408,11 +398,27 @@ public class TaskInstanceService {
     );
   }
 
+  /**
+   * Cancels the tasks still open in the app that the engine no longer has: an interrupting boundary
+   * event (an SLA timer) or a terminate end removed them, and completing one would fail in the engine.
+   * "No longer has", not "not active": a suspended process keeps its tasks.
+   */
+  void cancelTasksGoneFromEngine(ProcessInstance processInstance, Set<String> engineTaskIds) {
+    for (var task : taskInstanceRepository.findOpenByProcessInstanceId(processInstance.getId().getValue())) {
+      if (!engineTaskIds.contains(task.getExternalId().getValue())) {
+        task.cancel(Code.create(systemUserEmail), "Removida pelo motor de processos");
+        save(task);
+      }
+    }
+  }
+
   void createNextTaskInstances(ProcessInstance processInstance, Code user) {
 
     // One sync per process at a time: a second one waits here, then sees the tasks the first wrote
     // and skips them below (a background job, a parallel branch, a request at the same moment)
     processInstanceRepository.lockForTaskSync(processInstance.getId().getValue());
+    cancelTasksGoneFromEngine(processInstance,
+        runtimeProcessEngineRepository.getTaskIds(processInstance.getEngineProcessNumber().getValue()));
     var runtimeTasks = getActiveRuntimeTasks(processInstance);
     var known = taskInstanceRepository.findAllByExternalIds(
         runtimeTasks.stream().map(task -> task.getExternalId().getValue()).toList());

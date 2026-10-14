@@ -12,7 +12,6 @@ import cv.igrp.platform.process.management.processruntime.domain.repository.Proc
 import cv.igrp.platform.process.management.processruntime.domain.repository.RuntimeProcessEngineRepository;
 import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
 import cv.igrp.platform.process.management.shared.application.constants.ProcessInstanceStatus;
-import cv.igrp.platform.process.management.shared.domain.models.Code;
 import cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus;
 import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
 import cv.igrp.platform.process.management.shared.domain.models.PageableLista;
@@ -336,13 +335,8 @@ public class ProcessInstanceService {
     processInstanceRepository.findByEngineProcessNumber(engineProcessInstanceId)
         .filter(processInstance -> processInstance.getStatus() != ProcessInstanceStatus.COMPLETED)
         .ifPresent(processInstance -> {
-          var engineProcess = runtimeProcessEngineRepository.getProcessInstanceById(engineProcessInstanceId);
-          // a suspended process lists no active tasks: that is not the engine dropping them
-          if (engineProcess.getStatus() != ProcessInstanceStatus.SUSPENDED) {
-            taskInstanceService.cancelTasksGoneFromEngine(processInstance, Code.create(systemUserEmail));
-          }
           taskInstanceService.createTaskInstancesByProcess(processInstance);
-          updateProcessInstanceStatus(engineProcess, processInstance);
+          updateProcessInstanceStatus(runtimeProcessEngineRepository.getProcessInstanceById(engineProcessInstanceId), processInstance);
         });
   }
 

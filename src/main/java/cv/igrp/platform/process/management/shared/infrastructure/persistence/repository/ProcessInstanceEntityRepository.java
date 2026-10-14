@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -26,7 +27,7 @@ public interface ProcessInstanceEntityRepository extends
 
   /** Row lock held until the transaction ends: serializes the task syncs of one process. */
   @Query(value = "SELECT id FROM t_process_instance WHERE id = :id FOR UPDATE", nativeQuery = true)
-  Optional<UUID> lockById(@org.springframework.data.repository.query.Param("id") UUID id);
+  Optional<UUID> lockById(@Param("id") UUID id);
 
   List<ProcessInstanceEntity> findAllByProcReleaseId(String procReleaseId);
 

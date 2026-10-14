@@ -54,7 +54,8 @@ public class JobFailureRecorder implements ActivitiEventListener {
       if (event.getType() == ActivitiEventType.JOB_EXECUTION_FAILURE) {
         final Throwable cause = event instanceof ActivitiExceptionEvent failure ? failure.getCause() : null;
         recordFailure(job.getExecutionId(), job.getProcessInstanceId(), messageOf(cause));
-      } else if (event.getType() == ActivitiEventType.JOB_EXECUTION_SUCCESS) {
+      } else if (event.getType() == ActivitiEventType.JOB_EXECUTION_SUCCESS && job.getExceptionMessage() != null) {
+        // only a job that failed before carries an exception message, so only it can have a row
         newTransaction.executeWithoutResult(s -> jdbc.update("DELETE FROM t_job_failure WHERE execution_id = ?", job.getExecutionId()));
       }
     } catch (RuntimeException e) {

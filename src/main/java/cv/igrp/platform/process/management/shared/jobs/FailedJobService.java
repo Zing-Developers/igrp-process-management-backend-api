@@ -1,10 +1,14 @@
 package cv.igrp.platform.process.management.shared.jobs;
 
+import cv.igrp.platform.process.management.processruntime.domain.models.ProcessArtifactEvent;
+import cv.igrp.platform.process.management.processruntime.domain.models.ProcessArtifactEvent.ArtifactStatus;
+import cv.igrp.platform.process.management.processruntime.domain.models.ProcessArtifactEvent.ArtifactType;
+import cv.igrp.platform.process.management.processruntime.domain.models.ProcessArtifactEvent.JobFailure;
 import cv.igrp.platform.process.management.shared.application.dto.FailedJobDTO;
 import cv.igrp.platform.process.management.shared.application.dto.FailedJobListPageDTO;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.entity.ProcessInstanceEntity;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.ProcessInstanceEntityRepository;
-import cv.igrp.platform.process.management.processruntime.domain.models.ProcessArtifactEvent;
+import org.activiti.bpmn.model.*;
 import org.activiti.engine.ManagementService;
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
@@ -13,21 +17,24 @@ import org.activiti.engine.runtime.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static cv.igrp.platform.process.management.shared.util.DateUtil.toCapeVerdeTime;
 
 /**
  * Dead-letter jobs: async jobs (webhooks and any other async service task) whose retries ran out.
- * Lists them with the app's process ids and moves them back to the executable queue on demand.
+ * Lists them with the app's process ids, moves them back to the executable queue on demand, and
+ * gives the activity list the activities whose job failed (the engine's history leaves them out).
  */
 @Service
 public class FailedJobService {
@@ -36,7 +43,6 @@ public class FailedJobService {
 
   private static final int PAGE_SIZE_DEFAULT = 20;
   private static final int PAGE_SIZE_MAX = 100;
-  private static final ZoneId CV_ZONE = ZoneId.of("Atlantic/Cape_Verde");
 
   private final ManagementService managementService;
   private final RuntimeService runtimeService;
@@ -60,8 +66,8 @@ public class FailedJobService {
 
   /** One page, oldest due first; {@code processInstanceId} (the app's UUID) narrows to one process. */
   public FailedJobListPageDTO list(UUID processInstanceId, Integer page, Integer size) {
-    final int pageNumber = page == null || page < 0 ? 0 : page;
-    final int pageSize = size == null || size < 1 ? PAGE_SIZE_DEFAULT : Math.min(size, PAGE_SIZE_MAX);
+    final var pageable = PageRequest.of(page == null || page < 0 ? 0 : page,
+        size == null || size < 1 ? PAGE_SIZE_DEFAULT : Math.min(size, PAGE_SIZE_MAX));
 
     final var query = managementService.createDeadLetterJobQuery();
     if (processInstanceId != null) {
@@ -70,27 +76,27 @@ public class FailedJobService {
       query.processInstanceId(process.getEngineProcessNumber());
     }
     final long total = query.count();
-    final var jobs = query.orderByJobDuedate().asc().listPage(pageNumber * pageSize, pageSize);
+    final List<Job> jobs = query.orderByJobDuedate().asc().listPage((int) pageable.getOffset(), pageable.getPageSize());
 
     final Map<String, ProcessInstanceEntity> processes = processInstanceRepository
         .findAllByEngineProcessNumberIn(jobs.stream().map(Job::getProcessInstanceId).collect(Collectors.toSet()))
         .stream()
         .collect(Collectors.toMap(ProcessInstanceEntity::getEngineProcessNumber, Function.identity(), (a, b) -> a));
+    final var recorded = failures.findByExecutionIds(executionIds(jobs.stream()));
 
-    final var recorded = failures.findByExecutionIds(
-        jobs.stream().map(Job::getExecutionId).filter(java.util.Objects::nonNull).toList());
+    // ponytail: one execution lookup per row for the activity id; fine at <=100 rows per page
+    final var result = new PageImpl<>(jobs.stream()
+        .map(job -> toDto(job, processes.get(job.getProcessInstanceId()), failureOf(job, recorded)))
+        .toList(), pageable, total);
 
     final var dto = new FailedJobListPageDTO();
-    // ponytail: one execution lookup per row for the activity id; fine at <=100 rows per page
-    dto.setContent(jobs.stream()
-        .map(job -> toDto(job, processes.get(job.getProcessInstanceId()), recorded.get(job.getExecutionId())))
-        .toList());
-    dto.setPageNumber(pageNumber);
-    dto.setPageSize(pageSize);
-    dto.setTotalElements(total);
-    dto.setTotalPages((int) ((total + pageSize - 1) / pageSize));
-    dto.setFirst(pageNumber == 0);
-    dto.setLast((long) (pageNumber + 1) * pageSize >= total);
+    dto.setContent(result.getContent());
+    dto.setPageNumber(result.getNumber());
+    dto.setPageSize(result.getSize());
+    dto.setTotalElements(result.getTotalElements());
+    dto.setTotalPages(result.getTotalPages());
+    dto.setFirst(result.isFirst());
+    dto.setLast(result.isLast());
     return dto;
   }
 
@@ -116,55 +122,67 @@ public class FailedJobService {
    * the activity list adds them from here, each with its error and what to reprocess.
    */
   public List<ProcessArtifactEvent> stuckActivities(String engineProcessInstanceId) {
-    final List<Job> deadLetters = new ArrayList<>(managementService.createDeadLetterJobQuery()
-        .processInstanceId(engineProcessInstanceId).list());
-    final List<Job> retrying = managementService.createTimerJobQuery()
-        .processInstanceId(engineProcessInstanceId).withException().list();
-    final var recorded = failures.findByExecutionIds(
-        java.util.stream.Stream.concat(deadLetters.stream(), retrying.stream())
-            .map(Job::getExecutionId).filter(java.util.Objects::nonNull).toList());
-
-    final List<ProcessArtifactEvent> stuck = new ArrayList<>();
-    deadLetters.forEach(job -> stuck.add(stuckActivity(job, ProcessArtifactEvent.ArtifactStatus.FAILED, recorded.get(job.getExecutionId()))));
-    retrying.forEach(job -> stuck.add(stuckActivity(job, ProcessArtifactEvent.ArtifactStatus.RETRYING, recorded.get(job.getExecutionId()))));
-    return stuck;
+    final List<Job> deadLetters = managementService.createDeadLetterJobQuery().processInstanceId(engineProcessInstanceId).list();
+    final List<Job> retrying = managementService.createTimerJobQuery().processInstanceId(engineProcessInstanceId).withException().list();
+    final var recorded = failures.findByExecutionIds(executionIds(Stream.concat(deadLetters.stream(), retrying.stream())));
+    return Stream.concat(
+            deadLetters.stream().map(job -> stuckActivity(job, ArtifactStatus.FAILED, failureOf(job, recorded))),
+            retrying.stream().map(job -> stuckActivity(job, ArtifactStatus.RETRYING, failureOf(job, recorded))))
+        .toList();
   }
 
-  private ProcessArtifactEvent stuckActivity(Job job, ProcessArtifactEvent.ArtifactStatus status, JobFailureRecorder.Failure failure) {
-    final Execution execution = job.getExecutionId() == null ? null
-        : runtimeService.createExecutionQuery().executionId(job.getExecutionId()).singleResult();
-    final String activityId = execution != null ? execution.getActivityId() : null;
-    final var element = activityId == null ? null
+  private ProcessArtifactEvent stuckActivity(Job job, ArtifactStatus status, JobFailure failure) {
+    final String activityId = activityIdOf(job);
+    final FlowElement element = activityId == null ? null
         : repositoryService.getBpmnModel(job.getProcessDefinitionId()).getFlowElement(activityId);
-    final Instant firstFailedAt = failure != null ? failure.firstFailedAt() : null;
     return ProcessArtifactEvent.builder()
         .processInstanceId(job.getProcessInstanceId())
         .artifactId(activityId)
-        .artifactName(element != null ? element.getName() : activityId)
+        .artifactName(element != null && element.getName() != null ? element.getName() : activityId)
         .type(artifactType(element))
         .executionId(job.getExecutionId())
         .status(status)
-        .startTime(firstFailedAt)
-        .build()
-        .withFailure(new ProcessArtifactEvent.JobFailure(job.getId(), job.getExceptionMessage(),
-            failure != null ? failure.attempts() : null, firstFailedAt, failure != null ? failure.lastFailedAt() : null));
+        .startTime(failure.firstFailedAt())
+        .failure(failure)
+        .build();
   }
 
-  /** ServiceTask → SERVICE_TASK and so on; anything the enum lacks counts as a service task. */
-  private static ProcessArtifactEvent.ArtifactType artifactType(Object element) {
-    if (element == null) {
-      return ProcessArtifactEvent.ArtifactType.SERVICE_TASK;
-    }
-    final String name = element.getClass().getSimpleName().replaceAll("([a-z])([A-Z])", "$1_$2").toUpperCase();
-    try {
-      return ProcessArtifactEvent.ArtifactType.valueOf(name);
-    } catch (IllegalArgumentException e) {
-      return ProcessArtifactEvent.ArtifactType.SERVICE_TASK;
-    }
+  /** The same mapping as the framework's timeline, so a failed activity shows the type its history row would. */
+  private static ArtifactType artifactType(FlowElement element) {
+    if (element instanceof UserTask) return ArtifactType.USER_TASK;
+    if (element instanceof ServiceTask) return ArtifactType.SERVICE_TASK;
+    if (element instanceof ScriptTask) return ArtifactType.SCRIPT_TASK;
+    if (element instanceof ManualTask) return ArtifactType.MANUAL_TASK;
+    if (element instanceof ReceiveTask) return ArtifactType.RECEIVE_TASK;
+    if (element instanceof SendTask) return ArtifactType.SEND_TASK;
+    if (element instanceof BusinessRuleTask) return ArtifactType.BUSINESS_RULE_TASK;
+    if (element instanceof ExclusiveGateway) return ArtifactType.EXCLUSIVE_GATEWAY;
+    if (element instanceof ParallelGateway) return ArtifactType.PARALLEL_GATEWAY;
+    if (element instanceof InclusiveGateway) return ArtifactType.INCLUSIVE_GATEWAY;
+    if (element instanceof IntermediateCatchEvent) return ArtifactType.MESSAGE_INTERMEDIATE_EVENT_CATCH;
+    if (element instanceof CallActivity) return ArtifactType.CALL_ACTIVITY;
+    if (element instanceof SubProcess) return ArtifactType.SUB_PROCESS;
+    return ArtifactType.OTHER;
   }
 
-  private static LocalDateTime toCvTime(Instant instant) {
-    return instant == null ? null : LocalDateTime.ofInstant(instant, CV_ZONE);
+  private JobFailure failureOf(Job job, Map<String, JobFailureRecorder.Failure> recorded) {
+    final var failure = recorded.get(job.getExecutionId());
+    return new JobFailure(job.getId(), job.getExceptionMessage(),
+        failure != null ? failure.attempts() : null,
+        failure != null ? failure.firstFailedAt() : null,
+        failure != null ? failure.lastFailedAt() : null);
+  }
+
+  private static List<String> executionIds(Stream<Job> jobs) {
+    return jobs.map(Job::getExecutionId).filter(Objects::nonNull).toList();
+  }
+
+  private String activityIdOf(Job job) {
+    if (job.getExecutionId() == null) {
+      return null;
+    }
+    final Execution execution = runtimeService.createExecutionQuery().executionId(job.getExecutionId()).singleResult();
+    return execution != null ? execution.getActivityId() : null;
   }
 
   private void requireDeadLetter(String jobId) {
@@ -173,9 +191,7 @@ public class FailedJobService {
     }
   }
 
-  private FailedJobDTO toDto(Job job, ProcessInstanceEntity process, JobFailureRecorder.Failure failure) {
-    final Execution execution = job.getExecutionId() == null ? null
-        : runtimeService.createExecutionQuery().executionId(job.getExecutionId()).singleResult();
+  private FailedJobDTO toDto(Job job, ProcessInstanceEntity process, JobFailure failure) {
     return new FailedJobDTO(
         job.getId(),
         process != null ? process.getId() : null,
@@ -184,11 +200,11 @@ public class FailedJobService {
         job.getProcessInstanceId(),
         job.getProcessDefinitionId(),
         job.getExecutionId(),
-        execution != null ? execution.getActivityId() : null,
+        activityIdOf(job),
         job.getExceptionMessage(),
-        failure != null ? failure.attempts() : null,
-        failure != null ? toCvTime(failure.firstFailedAt()) : null,
-        failure != null ? toCvTime(failure.lastFailedAt()) : null);
+        failure.attempts(),
+        toCapeVerdeTime(failure.firstFailedAt()),
+        toCapeVerdeTime(failure.lastFailedAt()));
   }
 
 }

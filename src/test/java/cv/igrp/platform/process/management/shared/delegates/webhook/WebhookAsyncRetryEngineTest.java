@@ -39,7 +39,7 @@ class WebhookAsyncRetryEngineTest {
     public void execute(DelegateExecution execution) {
       CALLS.incrementAndGet();
       int status = STATUS.get();
-      WebhookFailures.record(execution, execution.getCurrentActivityId(), status, status >= 400 ? "HTTP " + status : null, null);
+      WebhookFailures.record(execution, execution.getCurrentActivityId(), status, null);
     }
   }
 

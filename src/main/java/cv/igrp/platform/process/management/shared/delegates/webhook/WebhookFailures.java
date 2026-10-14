@@ -27,8 +27,14 @@ final class WebhookFailures {
     return execution.getCurrentFlowElement() instanceof FlowNode node && node.isAsynchronous();
   }
 
-  /** Records the outcome; throws when the job executor should retry it. */
-  static void record(DelegateExecution execution, String taskId, Integer status, String error, Throwable cause) {
+  /**
+   * Records the outcome of a call: {@code status} when the endpoint answered, {@code cause} when it did
+   * not. Throws when the job executor should retry it.
+   */
+  static void record(DelegateExecution execution, String taskId, Integer status, Exception cause) {
+    final String error = cause != null
+        ? (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName())
+        : (status != null && status >= 400 ? "HTTP " + status : null);
     if (error != null && isAsync(execution) && (status == null || isRetryable(status))) {
       // Rolled back with the job; the message lands on the (dead-letter) job instead
       throw new WebhookCallException(taskId + ": " + error, cause);

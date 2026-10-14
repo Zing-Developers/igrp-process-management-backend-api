@@ -748,21 +748,18 @@ class TaskInstanceServiceTest {
   @Test
   void cancelTasksGoneFromEngineCancelsOnlyTheOpenTasksTheEngineDropped() {
     var processId = Identifier.create(UUID.randomUUID());
-    var engineProcessNumber = Code.create("ENG-PROC-123");
     ProcessInstance processInstance = mock(ProcessInstance.class);
-    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
     when(processInstance.getId()).thenReturn(processId);
-    when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
     TaskInstance still = TaskInstance.builder()
         .id(Identifier.generate()).taskKey(Code.create("escalarPedido")).externalId(Code.create("eng-task-2"))
         .name(Name.create("Escalar")).status(TaskInstanceStatus.CREATED).build();
     TaskInstance dropped = TaskInstance.builder()
         .id(Identifier.generate()).taskKey(Code.create("validarPedido")).externalId(Code.create("eng-task-1"))
         .name(Name.create("Validar")).status(TaskInstanceStatus.ASSIGNED).build();
-    when(runtimeProcessEngineRepository.getActiveTaskInstances(engineProcessNumber.getValue())).thenReturn(List.of(still));
     when(taskInstanceRepository.findOpenByProcessInstanceId(processId.getValue())).thenReturn(List.of(still, dropped));
 
-    taskInstanceService.cancelTasksGoneFromEngine(processInstance, Code.create("system@irn.mj.pt"));
+    // the engine still has eng-task-2 (active or suspended alike); eng-task-1 is gone
+    taskInstanceService.cancelTasksGoneFromEngine(processInstance, Set.of("eng-task-2"));
 
     assertEquals(TaskInstanceStatus.CANCELED, dropped.getStatus());
     assertEquals(Code.create("system@irn.mj.pt"), dropped.getEndedBy());
@@ -788,6 +785,8 @@ class TaskInstanceServiceTest {
     // a sync waiting on the lock must read the engine and the known tasks only once it holds it
     var order = inOrder(processInstanceRepository, runtimeProcessEngineRepository, taskInstanceRepository);
     order.verify(processInstanceRepository).lockForTaskSync(processId.getValue());
+    order.verify(runtimeProcessEngineRepository).getTaskIds(engineProcessNumber.getValue());
+    order.verify(taskInstanceRepository).findOpenByProcessInstanceId(processId.getValue());
     order.verify(runtimeProcessEngineRepository).getActiveTaskInstances(engineProcessNumber.getValue());
     order.verify(taskInstanceRepository).findAllByExternalIds(any());
   }
