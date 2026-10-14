@@ -4,7 +4,9 @@ import cv.igrp.platform.process.management.shared.application.dto.FailedJobDTO;
 import cv.igrp.platform.process.management.shared.application.dto.FailedJobListPageDTO;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.entity.ProcessInstanceEntity;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.ProcessInstanceEntityRepository;
+import cv.igrp.platform.process.management.processruntime.domain.models.ProcessArtifactEvent;
 import org.activiti.engine.ManagementService;
+import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.runtime.Execution;
 import org.activiti.engine.runtime.Job;
@@ -13,6 +15,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -29,19 +36,23 @@ public class FailedJobService {
 
   private static final int PAGE_SIZE_DEFAULT = 20;
   private static final int PAGE_SIZE_MAX = 100;
+  private static final ZoneId CV_ZONE = ZoneId.of("Atlantic/Cape_Verde");
 
   private final ManagementService managementService;
   private final RuntimeService runtimeService;
+  private final RepositoryService repositoryService;
   private final ProcessInstanceEntityRepository processInstanceRepository;
   private final JobFailureRecorder failures;
   private final int defaultRetries;
 
   public FailedJobService(ManagementService managementService, RuntimeService runtimeService,
+                          RepositoryService repositoryService,
                           ProcessInstanceEntityRepository processInstanceRepository,
                           JobFailureRecorder failures,
                           @Value("${igrp.async-job.retries:3}") int defaultRetries) {
     this.managementService = managementService;
     this.runtimeService = runtimeService;
+    this.repositoryService = repositoryService;
     this.processInstanceRepository = processInstanceRepository;
     this.failures = failures;
     this.defaultRetries = defaultRetries;
@@ -99,6 +110,63 @@ public class FailedJobService {
     LOGGER.info("Dead-letter job {} moved back to the executable queue with {} retries by {}", jobId, attempts, requestedBy);
   }
 
+  /**
+   * The activities of one engine process whose job failed: out of retries (FAILED) or waiting for the
+   * next attempt (RETRYING). The engine's history leaves them out, since a failed job rolls back, so
+   * the activity list adds them from here, each with its error and what to reprocess.
+   */
+  public List<ProcessArtifactEvent> stuckActivities(String engineProcessInstanceId) {
+    final List<Job> deadLetters = new ArrayList<>(managementService.createDeadLetterJobQuery()
+        .processInstanceId(engineProcessInstanceId).list());
+    final List<Job> retrying = managementService.createTimerJobQuery()
+        .processInstanceId(engineProcessInstanceId).withException().list();
+    final var recorded = failures.findByExecutionIds(
+        java.util.stream.Stream.concat(deadLetters.stream(), retrying.stream())
+            .map(Job::getExecutionId).filter(java.util.Objects::nonNull).toList());
+
+    final List<ProcessArtifactEvent> stuck = new ArrayList<>();
+    deadLetters.forEach(job -> stuck.add(stuckActivity(job, ProcessArtifactEvent.ArtifactStatus.FAILED, recorded.get(job.getExecutionId()))));
+    retrying.forEach(job -> stuck.add(stuckActivity(job, ProcessArtifactEvent.ArtifactStatus.RETRYING, recorded.get(job.getExecutionId()))));
+    return stuck;
+  }
+
+  private ProcessArtifactEvent stuckActivity(Job job, ProcessArtifactEvent.ArtifactStatus status, JobFailureRecorder.Failure failure) {
+    final Execution execution = job.getExecutionId() == null ? null
+        : runtimeService.createExecutionQuery().executionId(job.getExecutionId()).singleResult();
+    final String activityId = execution != null ? execution.getActivityId() : null;
+    final var element = activityId == null ? null
+        : repositoryService.getBpmnModel(job.getProcessDefinitionId()).getFlowElement(activityId);
+    final Instant firstFailedAt = failure != null ? failure.firstFailedAt() : null;
+    return ProcessArtifactEvent.builder()
+        .processInstanceId(job.getProcessInstanceId())
+        .artifactId(activityId)
+        .artifactName(element != null ? element.getName() : activityId)
+        .type(artifactType(element))
+        .executionId(job.getExecutionId())
+        .status(status)
+        .startTime(firstFailedAt)
+        .build()
+        .withFailure(new ProcessArtifactEvent.JobFailure(job.getId(), job.getExceptionMessage(),
+            failure != null ? failure.attempts() : null, firstFailedAt, failure != null ? failure.lastFailedAt() : null));
+  }
+
+  /** ServiceTask → SERVICE_TASK and so on; anything the enum lacks counts as a service task. */
+  private static ProcessArtifactEvent.ArtifactType artifactType(Object element) {
+    if (element == null) {
+      return ProcessArtifactEvent.ArtifactType.SERVICE_TASK;
+    }
+    final String name = element.getClass().getSimpleName().replaceAll("([a-z])([A-Z])", "$1_$2").toUpperCase();
+    try {
+      return ProcessArtifactEvent.ArtifactType.valueOf(name);
+    } catch (IllegalArgumentException e) {
+      return ProcessArtifactEvent.ArtifactType.SERVICE_TASK;
+    }
+  }
+
+  private static LocalDateTime toCvTime(Instant instant) {
+    return instant == null ? null : LocalDateTime.ofInstant(instant, CV_ZONE);
+  }
+
   private void requireDeadLetter(String jobId) {
     if (managementService.createDeadLetterJobQuery().jobId(jobId).count() == 0) {
       throw new IllegalArgumentException("failed job not found: " + jobId);
@@ -119,8 +187,8 @@ public class FailedJobService {
         execution != null ? execution.getActivityId() : null,
         job.getExceptionMessage(),
         failure != null ? failure.attempts() : null,
-        failure != null ? failure.firstFailedAt() : null,
-        failure != null ? failure.lastFailedAt() : null);
+        failure != null ? toCvTime(failure.firstFailedAt()) : null,
+        failure != null ? toCvTime(failure.lastFailedAt()) : null);
   }
 
 }

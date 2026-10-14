@@ -81,4 +81,19 @@ public class ActivityProgressDTO  {
   @Valid
   private UserProfileDTO userProfileAssignee ;
 
+
+  private String jobId ;
+
+
+  private String errorMessage ;
+
+
+  private Integer attempts ;
+
+
+  private LocalDateTime firstFailedAt ;
+
+
+  private LocalDateTime lastFailedAt ;
+
 }

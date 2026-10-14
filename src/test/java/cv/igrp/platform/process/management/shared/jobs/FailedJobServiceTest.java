@@ -29,7 +29,7 @@ class FailedJobServiceTest {
   private final RuntimeService runtime = mock(RuntimeService.class, RETURNS_DEEP_STUBS);
   private final ProcessInstanceEntityRepository processes = mock(ProcessInstanceEntityRepository.class);
   private final JobFailureRecorder failures = mock(JobFailureRecorder.class);
-  private final FailedJobService service = new FailedJobService(management, runtime, processes, failures, 3);
+  private final FailedJobService service = new FailedJobService(management, runtime, mock(org.activiti.engine.RepositoryService.class), processes, failures, 3);
 
   private DeadLetterJobQuery deadLetters(long count, List<Job> page) {
     var query = mock(DeadLetterJobQuery.class, RETURNS_SELF);
@@ -52,9 +52,11 @@ class FailedJobServiceTest {
     process.setNumber("P-0007");
     process.setEngineProcessNumber("eng-1");
     process.setName("Pedido de certidão");
-    var lastFailedAt = java.time.LocalDateTime.of(2026, 10, 14, 9, 42);
+    var lastFailed = java.time.Instant.parse("2026-10-14T10:42:00Z");
     when(failures.findByExecutionIds(List.of("exec-1")))
-        .thenReturn(java.util.Map.of("exec-1", new JobFailureRecorder.Failure(3, lastFailedAt.minusMinutes(2), lastFailedAt)));
+        .thenReturn(java.util.Map.of("exec-1", new JobFailureRecorder.Failure(3, lastFailed.minusSeconds(120), lastFailed)));
+    // shown in Cape Verde time (UTC-1), like the rest of the timeline
+    var lastFailedAt = java.time.LocalDateTime.of(2026, 10, 14, 9, 42);
     when(processes.findAllByEngineProcessNumberIn(any())).thenReturn(List.of(process));
     var execution = mock(Execution.class);
     when(execution.getActivityId()).thenReturn("notifyIrn");

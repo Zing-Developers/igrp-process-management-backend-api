@@ -82,6 +82,15 @@ public class ActivityMapper {
 
     activityProgressDTO.setUserProfileAssignee(userProfileMapper.toDTO(processArtifactEvent.getUserProfileAssignee()));
 
+    var failure = processArtifactEvent.getFailure();
+    if (failure != null) {
+      activityProgressDTO.setJobId(failure.jobId());
+      activityProgressDTO.setErrorMessage(failure.errorMessage());
+      activityProgressDTO.setAttempts(failure.attempts());
+      activityProgressDTO.setFirstFailedAt(failure.firstFailedAt() != null ? LocalDateTime.ofInstant(failure.firstFailedAt(), cvZone) : null);
+      activityProgressDTO.setLastFailedAt(failure.lastFailedAt() != null ? LocalDateTime.ofInstant(failure.lastFailedAt(), cvZone) : null);
+    }
+
     return activityProgressDTO;
 
   }

@@ -145,6 +145,8 @@ When the attempts run out the job becomes a dead-letter job and the process wait
 
 Activiti keeps no failure time and gives a retried job a new id each attempt, so `JobFailureRecorder` keeps its own record per execution (`t_job_failure`, V15): it counts each failure, reprocessing included, and clears the row on success. Failures from before V15 have no record and come back with `attempts` and the dates as null.
 
+The process's activity list (`GET /activities/progress`) also shows these activities. The engine's history leaves them out, since a failed attempt rolls back, so they are added at the end of the list with status `FAILED` (out of retries) or `RETRYING`, each with `jobId`, `errorMessage`, `attempts` and the failure times. With parallel branches each failure is its own row.
+
 Extra IRN permissions per tier go in `IRN_FAILED_JOBS_ACCEPT_READ`, `_DIAGNOSE` and `_RETRY`.
 
 7. To dynamically assign a user task based on an external API response, the delegate expression is `${igrpExternalUserAssignmentDelegate}`.

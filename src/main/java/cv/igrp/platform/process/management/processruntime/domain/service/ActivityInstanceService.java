@@ -7,6 +7,7 @@ import cv.igrp.platform.process.management.processruntime.domain.repository.Task
 import cv.igrp.platform.process.management.processruntime.domain.repository.UserProfileRepository;
 import cv.igrp.platform.process.management.shared.application.constants.VariableTag;
 import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
+import cv.igrp.platform.process.management.shared.jobs.FailedJobService;
 
 import org.springframework.stereotype.Service;
 
@@ -20,15 +21,18 @@ public class ActivityInstanceService {
   private final ProcessInstanceRepository processInstanceRepository;
   private final TaskInstanceRepository taskInstanceRepository;
   private final UserProfileRepository userProfileRepository;
+  private final FailedJobService failedJobService;
 
   public ActivityInstanceService(RuntimeProcessEngineRepository runtimeProcessEngineRepository,
                                  ProcessInstanceRepository processInstanceRepository,
                                  TaskInstanceRepository taskInstanceRepository,
-                                 UserProfileRepository userProfileRepository) {
+                                 UserProfileRepository userProfileRepository,
+                                 FailedJobService failedJobService) {
     this.runtimeProcessEngineRepository = runtimeProcessEngineRepository;
     this.processInstanceRepository = processInstanceRepository;
     this.taskInstanceRepository = taskInstanceRepository;
     this.userProfileRepository = userProfileRepository;
+    this.failedJobService = failedJobService;
   }
 
   public ActivityData getById(String id) {
@@ -77,10 +81,12 @@ public class ActivityInstanceService {
 
   private List<ProcessArtifactEvent> getProcessTimelineEvents(ProcessInstance processInstance, ProcessArtifactEvent.ArtifactType type) {
 
-    List<ProcessArtifactEvent> timelineEvents = runtimeProcessEngineRepository.getProcessTimelineEvents(
+    List<ProcessArtifactEvent> timelineEvents = new ArrayList<>(runtimeProcessEngineRepository.getProcessTimelineEvents(
         processInstance.getEngineProcessNumber().getValue(),
         type
-    );
+    ));
+    // the engine's history leaves out an activity whose job failed (the attempt rolled back): add it
+    timelineEvents.addAll(failedJobService.stuckActivities(processInstance.getEngineProcessNumber().getValue()));
 
     // Enrich the timeline events with task variables — single batch query
     Set<String> taskIds = timelineEvents.stream()

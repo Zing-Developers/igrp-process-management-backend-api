@@ -16,7 +16,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,7 +41,7 @@ public class JobFailureRecorder implements ActivitiEventListener {
     this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
 
-  public record Failure(int attempts, LocalDateTime firstFailedAt, LocalDateTime lastFailedAt) {
+  public record Failure(int attempts, Instant firstFailedAt, Instant lastFailedAt) {
   }
 
   @Override
@@ -87,7 +86,7 @@ public class JobFailureRecorder implements ActivitiEventListener {
     jdbc.query("SELECT execution_id, attempts, first_failed_at, last_failed_at FROM t_job_failure WHERE execution_id IN (" + marks + ")",
         rs -> {
           found.put(rs.getString(1), new Failure(rs.getInt(2),
-              rs.getTimestamp(3).toLocalDateTime(), rs.getTimestamp(4).toLocalDateTime()));
+              rs.getTimestamp(3).toInstant(), rs.getTimestamp(4).toInstant()));
         },
         executionIds.toArray());
     return found;

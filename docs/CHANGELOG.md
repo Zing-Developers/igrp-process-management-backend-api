@@ -38,6 +38,11 @@ duplicados: correr antes a consulta do runbook.
 tentativas (o job muda de id a cada uma), por isso `JobFailureRecorder` regista-as em `t_job_failure`
 (V15) a partir do evento `JOB_EXECUTION_FAILURE` e limpa no sucesso.
 
+`/activities/progress` passa a incluir as actividades paradas. O histórico do engine deixava-as de
+fora (a tentativa que falha é desfeita), por isso um ramo parado não aparecia. Agora vêm no fim da
+lista com status `FAILED` (tentativas esgotadas) ou `RETRYING`, e com `jobId`, `errorMessage`,
+`attempts`, `firstFailedAt` e `lastFailedAt`; em processos com vários ramos, uma linha por falha.
+
 Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
 `system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
 

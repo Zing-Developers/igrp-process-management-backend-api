@@ -100,7 +100,7 @@ class WebhookAsyncRetryEngineTest {
   void exhaustedRetriesLandInTheDeadLetterAndAReprocessCompletesTheTask() {
     var management = engine.getManagementService();
     var runtime = engine.getRuntimeService();
-    var failedJobs = new FailedJobService(management, runtime, mock(ProcessInstanceEntityRepository.class), failures, 1);
+    var failedJobs = new FailedJobService(management, runtime, engine.getRepositoryService(), mock(ProcessInstanceEntityRepository.class), failures, 1);
     FlakyWebhook.STATUS.set(503);
 
     var pi = runtime.startProcessInstanceByKey("notify");
@@ -118,6 +118,16 @@ class WebhookAsyncRetryEngineTest {
     assertThat(page.getContent().get(0).getAttempts()).isEqualTo(2);
     assertThat(page.getContent().get(0).getLastFailedAt()).isNotNull();
     assertThat(page.getContent().get(0).getExecutionId()).isNotNull();
+
+    // the activity list (history) lacks callIrn, since the failed attempts rolled back; this fills it in
+    var stuck = failedJobs.stuckActivities(pi.getId());
+    assertThat(stuck).singleElement().satisfies(activity -> {
+      assertThat(activity.getArtifactId()).isEqualTo("callIrn");
+      assertThat(activity.getStatus()).isEqualTo(cv.igrp.platform.process.management.processruntime.domain.models.ProcessArtifactEvent.ArtifactStatus.FAILED);
+      assertThat(activity.getFailure().errorMessage()).contains("HTTP 503");
+      assertThat(activity.getFailure().attempts()).isEqualTo(2);
+      assertThat(activity.getFailure().jobId()).isEqualTo(page.getContent().get(0).getJobId());
+    });
     assertThat(failedJobs.stacktrace(page.getContent().get(0).getJobId())).contains("WebhookCallException");
 
     FlakyWebhook.STATUS.set(200);
@@ -128,6 +138,7 @@ class WebhookAsyncRetryEngineTest {
     assertThat(engine.getTaskService().createTaskQuery().processInstanceId(pi.getId()).singleResult().getTaskDefinitionKey())
         .isEqualTo("wait");
     assertThat(runtime.getVariable(pi.getId(), "callIrnStatusCode")).isEqualTo(200);
+    assertThat(failedJobs.stuckActivities(pi.getId())).isEmpty();
     // the success clears the record, so a later failure on this path starts again at 1
     assertThat(jdbc.queryForObject("SELECT count(*) FROM t_job_failure", Integer.class)).isZero();
   }
@@ -158,6 +169,65 @@ class WebhookAsyncRetryEngineTest {
     } else {
       management.executeJob(id);
     }
+  }
+
+
+  /** Three parallel paths: two async tasks fail, the third waits on a user task. */
+  private static final String PARALLEL = """
+      <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                   xmlns:activiti="http://activiti.org/bpmn" targetNamespace="test">
+        <process id="paths" isExecutable="true">
+          <startEvent id="start"/>
+          <sequenceFlow id="s1" sourceRef="start" targetRef="fork"/>
+          <parallelGateway id="fork"/>
+          <sequenceFlow id="a1" sourceRef="fork" targetRef="notifyIrn"/>
+          <serviceTask id="notifyIrn" name="Notificar IRN" activiti:async="true"
+                       activiti:class="cv.igrp.platform.process.management.shared.delegates.webhook.WebhookAsyncRetryEngineTest$FlakyWebhook"/>
+          <sequenceFlow id="a2" sourceRef="notifyIrn" targetRef="join"/>
+          <sequenceFlow id="b1" sourceRef="fork" targetRef="syncCadastro"/>
+          <serviceTask id="syncCadastro" name="Sincronizar cadastro" activiti:async="true"
+                       activiti:class="cv.igrp.platform.process.management.shared.delegates.webhook.WebhookAsyncRetryEngineTest$FlakyWebhook"/>
+          <sequenceFlow id="b2" sourceRef="syncCadastro" targetRef="join"/>
+          <sequenceFlow id="c1" sourceRef="fork" targetRef="confirmar"/>
+          <userTask id="confirmar" name="Confirmar pagamento"/>
+          <sequenceFlow id="c2" sourceRef="confirmar" targetRef="join"/>
+          <parallelGateway id="join"/>
+          <sequenceFlow id="j1" sourceRef="join" targetRef="end"/>
+          <endEvent id="end"/>
+        </process>
+      </definitions>
+      """;
+
+  @Test
+  void eachFailedPathShowsUpInTheActivityListWithItsOwnError() {
+    engine.getRepositoryService().createDeployment().addString("paths.bpmn20.xml", PARALLEL).deploy();
+    var management = engine.getManagementService();
+    var failedJobs = new FailedJobService(management, engine.getRuntimeService(), engine.getRepositoryService(),
+        mock(ProcessInstanceEntityRepository.class), failures, 1);
+    FlakyWebhook.STATUS.set(503);
+    var pi = engine.getRuntimeService().startProcessInstanceByKey("paths");
+
+    // first attempt of each async path: both fail, one retry left (the setup allows 2)
+    for (var job : management.createJobQuery().processInstanceId(pi.getId()).list()) {
+      runJob(job);
+    }
+    assertThat(failedJobs.stuckActivities(pi.getId()))
+        .extracting(a -> a.getArtifactId() + ":" + a.getStatus())
+        .containsExactlyInAnyOrder("notifyIrn:RETRYING", "syncCadastro:RETRYING");
+
+    // second attempt: both out of retries
+    for (var timer : management.createTimerJobQuery().processInstanceId(pi.getId()).list()) {
+      runJob(timer);
+    }
+    var stuck = failedJobs.stuckActivities(pi.getId());
+    assertThat(stuck).extracting(a -> a.getArtifactName() + ":" + a.getStatus())
+        .containsExactlyInAnyOrder("Notificar IRN:FAILED", "Sincronizar cadastro:FAILED");
+    // one entry per path: different executions, each with its own error and attempt count
+    assertThat(stuck).extracting(a -> a.getExecutionId()).doesNotHaveDuplicates();
+    assertThat(stuck).allSatisfy(a -> {
+      assertThat(a.getFailure().errorMessage()).isEqualTo(a.getArtifactId() + ": HTTP 503");
+      assertThat(a.getFailure().attempts()).isEqualTo(2);
+    });
   }
 
 }
