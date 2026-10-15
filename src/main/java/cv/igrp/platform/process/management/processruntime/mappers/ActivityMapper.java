@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.processruntime.mappers;
 
+import cv.igrp.platform.process.management.shared.util.DateUtil;
+
 import cv.igrp.platform.process.management.processruntime.application.dto.ActivityDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.ActivityProgressDTO;
 import cv.igrp.platform.process.management.processruntime.application.dto.TaskVariableDTO;
@@ -8,8 +10,6 @@ import cv.igrp.platform.process.management.processruntime.domain.models.ProcessA
 import cv.igrp.platform.process.management.shared.application.constants.VariableTag;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -57,6 +57,7 @@ public class ActivityMapper {
     var activityProgressDTO = new ActivityProgressDTO();
 
     activityProgressDTO.setActivityId(processArtifactEvent.getArtifactId());
+    activityProgressDTO.setActivityKey(processArtifactEvent.getArtifactId());
     activityProgressDTO.setActivityName(processArtifactEvent.getArtifactName());
     activityProgressDTO.setType(processArtifactEvent.getType().name());
     activityProgressDTO.setStatus(processArtifactEvent.getStatus().name());
@@ -69,18 +70,22 @@ public class ActivityMapper {
     activityProgressDTO.setActivityInstanceId(processArtifactEvent.getArtifactInstanceId());
     activityProgressDTO.setTreeNumber(processArtifactEvent.getTreeNumber());
 
-    ZoneId cvZone = ZoneId.of("Atlantic/Cape_Verde");
-    activityProgressDTO.setStartTime(
-        processArtifactEvent.getStartTime() != null ? LocalDateTime.ofInstant(processArtifactEvent.getStartTime(), cvZone) : null
-    );
-    activityProgressDTO.setEndTime(
-        processArtifactEvent.getEndTime() != null ? LocalDateTime.ofInstant(processArtifactEvent.getEndTime(), cvZone) : null
-    );
+    activityProgressDTO.setStartTime(DateUtil.toLocalDateTime(processArtifactEvent.getStartTime()));
+    activityProgressDTO.setEndTime(DateUtil.toLocalDateTime(processArtifactEvent.getEndTime()));
 
     activityProgressDTO.setVariables(toActivityVariableDTO(processArtifactEvent.getVariables(), VariableTag.VARIABLES));
     activityProgressDTO.setForms(toActivityVariableDTO(processArtifactEvent.getVariables(), VariableTag.FORMS));
 
     activityProgressDTO.setUserProfileAssignee(userProfileMapper.toDTO(processArtifactEvent.getUserProfileAssignee()));
+
+    var failure = processArtifactEvent.getFailure();
+    if (failure != null) {
+      activityProgressDTO.setJobId(failure.jobId());
+      activityProgressDTO.setErrorMessage(failure.errorMessage());
+      activityProgressDTO.setAttempts(failure.attempts());
+      activityProgressDTO.setFirstFailedAt(DateUtil.toLocalDateTime(failure.firstFailedAt()));
+      activityProgressDTO.setLastFailedAt(DateUtil.toLocalDateTime(failure.lastFailedAt()));
+    }
 
     return activityProgressDTO;
 

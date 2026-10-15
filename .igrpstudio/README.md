@@ -27,6 +27,8 @@ Verificação: `python3 scripts/check_igrpstudio_drift.py` (falha com exit 1 se 
 | `shared/models/EmailAccessMappingEntity.json` | `shared/infrastructure/persistence/entity/EmailAccessMappingEntity` | Sem `AuditEntity`/Envers **por design**. O índice único parcial (`email WHERE active`) vive no V10; o gerador não o exprime. |
 | `shared/controllers/EmailAccessMappingController.json` | `shared/security/access/EmailAccessMappingController` | Gate super-admin JWT-only no `SecurityConfig` (partilhado com `/m2m-keys`). |
 | `shared/dto/EmailAccessMapping*DTO.json` | `shared/application/dto/EmailAccessMapping*DTO` | Payloads das rotas `/email-access-mappings`. |
+| `shared/controllers/FailedJobController.json` | `shared/jobs/FailedJobController` | Lê o `ManagementService` do Activiti (dead-letter jobs), sem entidade própria. |
+| `shared/dto/FailedJob*DTO.json` | `shared/application/dto/FailedJob*DTO` | Payloads das rotas `/failed-jobs`. |
 
 Fora do gerador, sem modelo (infra de segurança): `SecurityConfig`, `IAMUserProfileSyncFilter`,
 `AuditUserResponseAdvice`, `AuditedResponse`/`AuditedPage`, `AuditMapping`, `ApplicationAuditorAware`.

@@ -15,6 +15,7 @@ import cv.igrp.platform.process.management.shared.application.constants.ProcessI
 import cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus;
 import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
 import cv.igrp.platform.process.management.shared.domain.models.PageableLista;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -31,6 +32,10 @@ public class ProcessInstanceService {
   private final ProcessSequenceService processSequenceService;
   private final TaskInstanceService taskInstanceService;
   private final ProcessDeploymentService processDeploymentService;
+
+  // Identity recorded when the system acts with no user (message-started processes, engine without endedBy).
+  @Value("${igrp.process.system-user-email:system@irn.mj.pt}")
+  private String systemUserEmail = "system@irn.mj.pt";
 
   public ProcessInstanceService(ProcessInstanceRepository processInstanceRepository,
                                 RuntimeProcessEngineRepository runtimeProcessEngineRepository,
@@ -312,13 +317,31 @@ public class ProcessInstanceService {
     if (engineProcess.getStatus() == ProcessInstanceStatus.COMPLETED) {
       processInstance.complete(
           engineProcess.getEndedAt(),
-          engineProcess.getEndedBy() != null ? engineProcess.getEndedBy() : "demo@nosi.cv"
+          engineProcess.getEndedBy() != null ? engineProcess.getEndedBy() : systemUserEmail
       );
     } else if (engineProcess.getStatus() == ProcessInstanceStatus.SUSPENDED) {
       processInstance.suspend();
     }
     // Persist
     processInstanceRepository.save(processInstance);
+  }
+
+  /**
+   * Copies into the app what a background engine job (async service task, timer) moved forward
+   * outside any request: the new user tasks, and the completion when the process ended. Request
+   * paths do this inline after start/signal/complete; jobs have no request to do it.
+   */
+  public void syncFromEngine(String engineProcessInstanceId) {
+    processInstanceRepository.findByEngineProcessNumber(engineProcessInstanceId)
+        .filter(processInstance -> processInstance.getStatus() != ProcessInstanceStatus.COMPLETED)
+        .ifPresent(processInstance -> {
+          taskInstanceService.createTaskInstancesByProcess(processInstance);
+          updateProcessInstanceStatus(runtimeProcessEngineRepository.getProcessInstanceById(engineProcessInstanceId), processInstance);
+        });
+  }
+
+  public String getSystemUserEmail() {
+    return systemUserEmail;
   }
 
   public ProcessInstance createProcessInstance(ProcessInstance processInstance, String user) {

@@ -143,7 +143,7 @@ public abstract class AbstractProcessEventConsumer {
 
   protected Authentication systemAuthentication() {
     return new UsernamePasswordAuthenticationToken(
-        "system-bot",
+        processInstanceService.getSystemUserEmail(),
         null,
         List.of(new SimpleGrantedAuthority("ROLE_ACTIVITI_USER"), new SimpleGrantedAuthority("ROLE_ACTIVITI_ADMIN"))
     );

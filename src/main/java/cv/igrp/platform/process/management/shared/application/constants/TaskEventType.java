@@ -17,7 +17,8 @@ public enum TaskEventType implements IgrpEnum<String> {
     CLAIM("CLAIM", "Assumir"),
     ASSIGN("ASSIGN", "Atribuir"),
     UNCLAIM("UNCLAIM", "Libertar"),
-    COMPLETE("COMPLETE", "Terminar")
+    COMPLETE("COMPLETE", "Terminar"),
+    CANCEL("CANCEL", "Cancelar")
   ;
 
   private final String code;

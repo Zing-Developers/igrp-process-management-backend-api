@@ -321,4 +321,20 @@ class TaskInstanceTest {
     assertEquals(original.getCandidateGroups(), result.getCandidateGroups());
   }
 
+
+  @org.junit.jupiter.api.Test
+  void aCancelledTaskCannotBeCompletedOrSaved() {
+    var task = TaskInstance.builder()
+        .id(cv.igrp.platform.process.management.shared.domain.models.Identifier.generate())
+        .taskKey(cv.igrp.platform.process.management.shared.domain.models.Code.create("validarPedido"))
+        .externalId(cv.igrp.platform.process.management.shared.domain.models.Code.create("eng-task-1"))
+        .name(cv.igrp.platform.process.management.shared.domain.models.Name.create("Validar"))
+        .status(cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus.CANCELED)
+        .build();
+    var error = org.junit.jupiter.api.Assertions.assertThrows(
+        cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException.class,
+        () -> task.requireOpen("Complete"));
+    org.junit.jupiter.api.Assertions.assertTrue(error.getMessage().contains("CANCELED"));
+  }
+
 }

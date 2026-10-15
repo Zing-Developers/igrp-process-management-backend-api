@@ -1,5 +1,67 @@
 # Changelog — Plataforma de Process Management IRN
 
+## 2026-10 · Webhooks: falhas visíveis, retries e reprocessamento
+
+Os dois delegates de webhook eram singletons com os campos BPMN injectados a cada execução: dois
+processos em simultâneo podiam trocar URL ou headers entre si. Passam a `prototype`. As falhas, que
+só iam para o log (o erro do `IgrpWebhookDelegate` numa variável transient que se perdia), ficam em
+`<taskId>StatusCode` e `<taskId>Error`. Num service task `activiti:async="true"`, uma falha
+repetível (sem resposta, 5xx, 408, 429) é relançada: o job executor repete-a
+(`failedJobRetryTimeCycle` da task ou `IGRP_ASYNC_JOB_RETRIES`/`IGRP_ASYNC_JOB_RETRY_WAIT`) e, esgotadas
+as tentativas, o job fica em dead letter. Tasks síncronas continuam a não falhar a acção do
+utilizador. Novo `/failed-jobs` (módulo `FAILED_JOBS`: `visualizar`, `diagnosticar`, `reprocessar`)
+para listar, ver a stack trace e voltar a pôr na fila. Detalhe em `DELEGATES.md`.
+
+A app só copiava as user tasks do engine dentro do pedido (start, signal, complete). Um task async
+corre depois do pedido, e a tarefa seguinte ficava no engine sem nunca chegar à app; o processo nunca
+fechava. `EngineJobSyncListener` (registado no `RuntimeService`; o `TimerEventListener` nunca o foi)
+corre `syncFromEngine` depois do commit de cada job, numa transação nova. `createNextTaskInstances`
+passa a ignorar tarefas que a app já tem: não havia guarda contra duplicados.
+A mesma sincronização cancela na app as tarefas abertas que o engine já não tem (timer de fronteira
+que interrompe, terminate end): ficam `CANCELED`, com um evento `CANCEL` novo e o utilizador de
+sistema. Não corre com o processo suspenso no engine, que não lista tarefas activas.
+
+`TaskReconciler` cobre o que a sincronização em memória perde (pod que morre entre o commit do job
+e a sincronização, sincronização que lança erro): de `IGRP_TASK_RECONCILE_INTERVAL` em
+`IGRP_TASK_RECONCILE_GRACE`, um pod de cada vez (advisory lock do Postgres) procura tarefas activas
+no engine que a app não tem, tarefas abertas na app que o engine já não tem e processos concluídos
+no engine que a app tem em curso, e sincroniza-os. Primeiro `@Scheduled` da app.
+
+Duplicação concorrente: duas sincronizações do mesmo processo ao mesmo tempo (dois jobs paralelos, um
+pedido e um job) podiam ambas criar a mesma tarefa, porque a guarda era ler e depois inserir.
+`createNextTaskInstances` passa a trancar a linha do processo (`FOR UPDATE`) antes de ler o engine,
+e a V14 põe um índice único em `t_task_instance.external_id` como salvaguarda. A V14 pára se já houver
+duplicados: correr antes a consulta do runbook.
+
+`FailedJobDTO` ganha `processName`, `executionId` (separa os caminhos de um processo), `attempts`,
+`firstFailedAt` e `lastFailedAt`. O Activiti não guarda nem a hora da falha nem o número de
+tentativas (o job muda de id a cada uma), por isso `JobFailureRecorder` regista-as em `t_job_failure`
+(V15) a partir do evento `JOB_EXECUTION_FAILURE` e limpa no sucesso.
+
+`/activities/progress` passa a incluir as actividades paradas. O histórico do engine deixava-as de
+fora (a tentativa que falha é desfeita), por isso um ramo parado não aparecia. Agora vêm no fim da
+lista com status `FAILED` (tentativas esgotadas) ou `RETRYING`, e com `jobId`, `errorMessage`,
+`attempts`, `firstFailedAt` e `lastFailedAt`; em processos com vários ramos, uma linha por falha.
+
+Limpeza e consistência com a interface: o cancelamento de tarefas que o engine retirou passa para
+dentro de `createNextTaskInstances` (sob o mesmo lock, para todos os caminhos: pedidos, sinais,
+mensagens e jobs) e compara com as tarefas que o engine ainda tem, suspensas incluídas, em vez das
+activas; deixa de ser preciso tratar o processo suspenso à parte. As actividades paradas entram no
+timeline na infraestrutura e substituem a linha PENDING que o framework listava para elas (aparecia
+duas vezes). `activityKey` vinha sempre a null. Concluir ou guardar uma tarefa CANCELED ou COMPLETED
+dá 409 em vez de 500. V16: índice em `t_process_instance.engine_process_number`. O reconciliador só
+selecciona processos que a app conhece; o registo de falhas só apaga quando o job tinha falhado.
+`TimerEventListener`, que nunca foi registado, foi removido.
+
+Datas: o `/activities/progress` convertia `startTime`/`endTime` para Cabo Verde com a zona fixa no
+código, ao contrário do resto da app, que usa a zona do servidor. Passa a usar a zona do servidor,
+tal como `/failed-jobs`. Cada deploy define o fuso com `TZ` no contentor; um deploy em Cabo Verde
+sem `TZ` vê as horas do timeline em UTC até o definir.
+
+Na mesma ronda: utilizador de sistema configurável (`IGRP_PROCESS_SYSTEM_USER_EMAIL`) no lugar de
+`system-bot@nosi.cv`/`demo@nosi.cv`, com a V13 a reescrever as linhas antigas.
+
+
 ## 2026-09 (b) · Revisão de código do acesso por email (framework 24.10)
 
 Revisão com oito ângulos e verificação; nove correcções aplicadas nas duas apps e no framework:
