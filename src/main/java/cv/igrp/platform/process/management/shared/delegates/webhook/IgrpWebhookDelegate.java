@@ -11,8 +11,9 @@ import org.activiti.engine.delegate.JavaDelegate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -22,7 +23,10 @@ import java.util.Objects;
 
 import static java.util.Optional.ofNullable;
 
+// Prototype: Activiti injects the BPMN fields below into the bean on every execution; a singleton
+// would share them between concurrent processes (one call going out with another's URL/headers).
 @Component("igrpWebhookDelegate")
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class IgrpWebhookDelegate implements JavaDelegate {
 
   private static final Logger log = LoggerFactory.getLogger(IgrpWebhookDelegate.class);
@@ -87,8 +91,9 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
     Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
-    Object responseBody;
-    int statusCode;
+    Object responseBody = null;
+    Integer statusCode = null;
+    Exception failure = null;
 
     try {
       HttpHeaders headers = guard.buildHeaders(headersMap, globalAuthToken);
@@ -142,19 +147,16 @@ public class IgrpWebhookDelegate implements JavaDelegate {
 
     } catch (Exception e) {
       log.error("[IgrpWebhookDelegate] Error calling webhook {}", url, e);
-      execution.setTransientVariable(taskId + "Error", e.getMessage());
-      return;
+      failure = e;
     }
 
-    JsonElement responseBodyElement = ObjectUtil.parseJsonObject(responseBody);
-    Object responseBodyParsed = ObjectUtil.toJavaObject(responseBodyElement);
+    WebhookFailures.record(execution, taskId, statusCode, failure);
 
-    execution.getEngineServices().getRuntimeService().setVariable(
-        processInstanceId,
-        taskId + "Data", responseBodyParsed);
-
-    execution.getEngineServices().getRuntimeService().setVariable(
-        processInstanceId,taskId + "StatusCode", statusCode);
+    if (statusCode != null) {
+      JsonElement responseBodyElement = ObjectUtil.parseJsonObject(responseBody);
+      execution.getEngineServices().getRuntimeService().setVariable(
+          processInstanceId, taskId + "Data", ObjectUtil.toJavaObject(responseBodyElement));
+    }
 
   }
 

@@ -1,6 +1,5 @@
 package cv.igrp.platform.process.management.processruntime.domain.repository;
 
-
 import cv.igrp.framework.process.runtime.core.engine.process.ProcessDefinitionRepresentation;
 import cv.igrp.platform.process.management.processruntime.domain.exception.RuntimeProcessEngineException;
 import cv.igrp.platform.process.management.processruntime.domain.models.*;
@@ -9,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Repository interface defining runtime operations for process engine execution.
@@ -107,6 +107,9 @@ public interface RuntimeProcessEngineRepository {
    * @return a list of active {@link TaskInstance} objects
    * @throws RuntimeProcessEngineException if the process instance cannot be found or accessed
    */
+  /** Ids of every task the engine still has for the process, suspended ones included. */
+  Set<String> getTaskIds(String processInstanceId);
+
   List<TaskInstance> getActiveTaskInstances(String processInstanceId)
       throws RuntimeProcessEngineException;
 

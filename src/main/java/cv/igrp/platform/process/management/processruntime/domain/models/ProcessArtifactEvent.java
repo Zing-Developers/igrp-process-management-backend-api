@@ -26,6 +26,12 @@ public class ProcessArtifactEvent {
   private String assignee;
   private String treeNumber;
   private UserProfile userProfileAssignee;
+  /** Set when the activity's job failed: it then sits in the engine's jobs, not in its history. */
+  private JobFailure failure;
+
+  /** A failed job, as the activity list shows it: the error, how often, when, and what to reprocess. */
+  public record JobFailure(String jobId, String errorMessage, Integer attempts, Instant firstFailedAt, Instant lastFailedAt) {
+  }
 
   @Builder
   public ProcessArtifactEvent(String processInstanceId,
@@ -42,7 +48,8 @@ public class ProcessArtifactEvent {
                               Map<String, Object> variables,
                               String assignee,
                               String treeNumber,
-                              UserProfile userProfileAssignee
+                              UserProfile userProfileAssignee,
+                              JobFailure failure
   ) {
     this.processInstanceId = Objects.requireNonNull(processInstanceId, "Process instance id cannot be null");
     this.artifactInstanceId = artifactInstanceId;
@@ -59,6 +66,7 @@ public class ProcessArtifactEvent {
     this.assignee = assignee;
     this.treeNumber = treeNumber;
     this.userProfileAssignee = userProfileAssignee;
+    this.failure = failure;
   }
 
   public void addVariables(Map<String, Object> variables) {
@@ -98,7 +106,11 @@ public class ProcessArtifactEvent {
     CANCELLED,
     DELETED,
     PENDING,
-    CURRENT;
+    CURRENT,
+    /** The job ran out of retries (dead letter): reprocess it from /failed-jobs. */
+    FAILED,
+    /** The job failed and the engine will try again. */
+    RETRYING;
   }
 
 }

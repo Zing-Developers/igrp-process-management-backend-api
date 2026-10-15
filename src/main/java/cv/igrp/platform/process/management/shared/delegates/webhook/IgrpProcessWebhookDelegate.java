@@ -11,8 +11,9 @@ import org.activiti.engine.delegate.JavaDelegate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -23,7 +24,10 @@ import java.util.Objects;
 
 import static java.util.Optional.ofNullable;
 
+// Prototype: Activiti injects the BPMN fields below into the bean on every execution; a singleton
+// would share them between concurrent processes (one call going out with another's URL/headers).
 @Component("igrpProcessWebhookDelegate")
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class IgrpProcessWebhookDelegate implements JavaDelegate {
 
   private final MessageUtil messageUtil;
@@ -74,6 +78,9 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
     // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
     Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
+    Integer statusCode = null;
+    Exception failure = null;
+
     try {
       HttpHeaders headers = guard.buildHeaders(headersMap, globalAuthToken);
 
@@ -86,14 +93,18 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
           .body(payload)
           .exchange((request, clientResponse) -> guard.readBounded(clientResponse));
 
-      if (response.status() >= 400) {
-        log.warn("[IgrpProcessWebhookDelegate] Webhook returned error {}", response.status());
+      statusCode = response.status();
+      if (statusCode >= 400) {
+        log.warn("[IgrpProcessWebhookDelegate] Webhook returned error {}", statusCode);
       } else {
         log.info("[IgrpProcessWebhookDelegate] Process Data successfully sent to webhook");
       }
     } catch (Exception e) {
       log.error("[IgrpProcessWebhookDelegate] Error calling webhook {}", url, e);
+      failure = e;
     }
+
+    WebhookFailures.record(execution, taskId, statusCode, failure);
   }
 
 }

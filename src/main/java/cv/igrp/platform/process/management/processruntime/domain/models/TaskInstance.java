@@ -177,12 +177,28 @@ public class TaskInstance {
   }
 
 
+  /** A task already completed, or cancelled because the engine dropped it, no longer exists in the engine. */
+  public void requireOpen(String action) {
+    if (this.status == TaskInstanceStatus.COMPLETED || this.status == TaskInstanceStatus.CANCELED) {
+      throw IgrpResponseStatusException.of(HttpStatus.CONFLICT, String.format("Cannot %s a Task in Status[%s]", action, this.status));
+    }
+  }
+
   public void complete(TaskOperationData data) {
+    requireOpen("Complete");
     this.endedBy = Objects.requireNonNull(data.getCurrentUser(), "Current User cannot be null!");
     this.endedAt = LocalDateTime.now();
     this.status = TaskInstanceStatus.COMPLETED;
     this.addVariablesAndForms(data);
     createTaskInstanceEvent(TaskEventType.COMPLETE, data.getCurrentUser(), data.getNote());
+  }
+
+  /** The engine dropped the task (an interrupting boundary event fired, the process ended). */
+  public void cancel(Code user, String note) {
+    this.endedBy = Objects.requireNonNull(user, "User cannot be null!");
+    this.endedAt = LocalDateTime.now();
+    this.status = TaskInstanceStatus.CANCELED;
+    createTaskInstanceEvent(TaskEventType.CANCEL, user, note);
   }
 
   private void createTaskInstanceEvent(TaskEventType eventType, Code user, String note) {

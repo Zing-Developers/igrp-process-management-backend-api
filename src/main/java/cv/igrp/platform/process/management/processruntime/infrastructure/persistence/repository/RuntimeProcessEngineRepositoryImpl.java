@@ -1,6 +1,5 @@
 package cv.igrp.platform.process.management.processruntime.infrastructure.persistence.repository;
 
-
 import cv.igrp.framework.process.runtime.core.engine.activity.ActivityQueryService;
 import cv.igrp.framework.process.runtime.core.engine.activity.model.ActivityInfo;
 import cv.igrp.framework.process.runtime.core.engine.activity.model.IGRPActivityType;
@@ -24,7 +23,10 @@ import cv.igrp.platform.process.management.processruntime.mappers.ProcessInstanc
 import cv.igrp.platform.process.management.processruntime.mappers.TaskInstanceMapper;
 import cv.igrp.platform.process.management.shared.domain.models.Code;
 import cv.igrp.platform.process.management.shared.domain.models.Name;
+import cv.igrp.platform.process.management.shared.jobs.FailedJobService;
+
 import org.activiti.engine.TaskService;
+import org.activiti.engine.task.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -33,8 +35,9 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.Set;
 import java.util.stream.Collectors;
-
+import java.util.stream.Stream;
 
 /**
  * Implementation of {@link RuntimeProcessEngineRepository} that delegates
@@ -54,6 +57,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   private final TaskQueryService taskQueryService;
   private final ActivityQueryService activityQueryService;
   private final TaskService taskService;
+  private final FailedJobService failedJobService;
 
   public RuntimeProcessEngineRepositoryImpl(
       ProcessDefinitionAdapter processDefinitionAdapter,
@@ -64,7 +68,8 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
       ProcessInstanceTaskStatusMapper processInstanceTaskStatusMapper,
       TaskQueryService taskQueryService,
       ActivityQueryService activityQueryService,
-      TaskService taskService
+      TaskService taskService,
+      FailedJobService failedJobService
   ) {
     this.processDefinitionAdapter = processDefinitionAdapter;
     this.processManagerAdapter = processManagerAdapter;
@@ -75,6 +80,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
     this.taskQueryService = taskQueryService;
     this.activityQueryService = activityQueryService;
     this.taskService = taskService;
+    this.failedJobService = failedJobService;
   }
 
   @Override
@@ -172,6 +178,13 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
       LOGGER.error("Failed to retrieve task list for process instance ID: {}", processInstanceId, e);
       throw new RuntimeProcessEngineException("Failed to retrieve task list", e);
     }
+  }
+
+  @Override
+  public Set<String> getTaskIds(String processInstanceId) {
+    return taskService.createTaskQuery().processInstanceId(processInstanceId).list().stream()
+        .map(Task::getId)
+        .collect(Collectors.toSet());
   }
 
   @Override
@@ -359,9 +372,15 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
   @Override
   public List<ProcessArtifactEvent> getProcessTimelineEvents(String processInstanceId, ProcessArtifactEvent.ArtifactType type) {
     List<ProcessTimelineEvent> timelineEvents = activityQueryService.getActivityTimelineEvents(processInstanceId);
+    // the engine's history leaves out an activity whose job failed (the attempt rolled back), so the
+    // framework lists it as PENDING; replace that row with the stuck one, added last with its error
+    final var stuck = failedJobService.stuckActivities(processInstanceId);
     if (timelineEvents == null)
-      return List.of();
-    return timelineEvents.stream().map(processTimelineEvent
+      return stuck;
+    final Set<String> stuckIds = stuck.stream().map(ProcessArtifactEvent::getArtifactId).collect(Collectors.toSet());
+    return Stream.concat(timelineEvents.stream()
+        .filter(event -> !("PENDING".equals(event.getStatus().name()) && stuckIds.contains(event.getActivityId())))
+        .map(processTimelineEvent
         -> ProcessArtifactEvent.builder()
         .artifactId(processTimelineEvent.getActivityId())
         .artifactName(processTimelineEvent.getActivityName())
@@ -378,7 +397,7 @@ public class RuntimeProcessEngineRepositoryImpl implements RuntimeProcessEngineR
         .treeNumber(processTimelineEvent.getTreeNumber())
         .variables(processTimelineEvent.getVariables())
         .build()
-    ).toList();
+    ), stuck.stream()).toList();
   }
 
   @Override

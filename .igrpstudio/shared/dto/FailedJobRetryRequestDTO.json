@@ -1,0 +1,22 @@
+{
+  "type": "dto",
+  "module": "shared",
+  "name": "FailedJobRetryRequestDTO",
+  "template": "classic",
+  "enableCustonValidation": false,
+  "attributes": [
+    {
+      "name": "retries",
+      "objectType": "java",
+      "type": "integer",
+      "required": false,
+      "before": false,
+      "after": false,
+      "positive": false,
+      "isEmail": false,
+      "isUrl": false,
+      "primaryKey": false
+    }
+  ],
+  "id": "fjretry001"
+}

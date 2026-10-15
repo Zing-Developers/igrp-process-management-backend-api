@@ -365,4 +365,47 @@ class ProcessInstanceServiceTest {
     assertEquals(100L, result.getTotalProcessInstances());
     verify(processInstanceRepository).getProcessInstanceStatistics();
   }
+
+  @Test
+  void syncFromEngineCopiesTheNewTasksAndClosesAProcessTheEngineEnded() {
+    var app = mock(ProcessInstance.class);
+    when(app.getStatus()).thenReturn(ProcessInstanceStatus.RUNNING);
+    when(processInstanceRepository.findByEngineProcessNumber("eng-1")).thenReturn(Optional.of(app));
+    var engine = mock(ProcessInstance.class);
+    when(engine.getStatus()).thenReturn(ProcessInstanceStatus.COMPLETED);
+    when(runtimeProcessEngineRepository.getProcessInstanceById("eng-1")).thenReturn(engine);
+
+    processInstanceService.syncFromEngine("eng-1");
+
+    verify(taskInstanceService).createTaskInstancesByProcess(app);
+    verify(app).complete(any(), eq("system@irn.mj.pt"));
+    verify(processInstanceRepository).save(app);
+  }
+
+  @Test
+  void syncFromEngineMirrorsAnEngineSuspension() {
+    var app = mock(ProcessInstance.class);
+    when(app.getStatus()).thenReturn(ProcessInstanceStatus.RUNNING);
+    when(processInstanceRepository.findByEngineProcessNumber("eng-1")).thenReturn(Optional.of(app));
+    var engine = mock(ProcessInstance.class);
+    when(engine.getStatus()).thenReturn(ProcessInstanceStatus.SUSPENDED);
+    when(runtimeProcessEngineRepository.getProcessInstanceById("eng-1")).thenReturn(engine);
+
+    processInstanceService.syncFromEngine("eng-1");
+
+    verify(taskInstanceService).createTaskInstancesByProcess(app);
+    verify(app).suspend();
+  }
+
+  @Test
+  void syncFromEngineLeavesAnAlreadyCompletedProcessAlone() {
+    var app = mock(ProcessInstance.class);
+    when(app.getStatus()).thenReturn(ProcessInstanceStatus.COMPLETED);
+    when(processInstanceRepository.findByEngineProcessNumber("eng-1")).thenReturn(Optional.of(app));
+
+    processInstanceService.syncFromEngine("eng-1");
+
+    org.mockito.Mockito.verifyNoInteractions(taskInstanceService, runtimeProcessEngineRepository);
+  }
+
 }

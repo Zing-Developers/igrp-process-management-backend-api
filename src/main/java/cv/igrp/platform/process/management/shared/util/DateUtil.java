@@ -48,4 +48,12 @@ public class DateUtil { // todo class to be removed
   public static final BiFunction<LocalDateTime, DateTimeFormatter, String> biLocalDateTimeToString = (obj, formatter) -> ofNullable(obj).map(formatter::format).orElse("");
 
   public static final BiFunction<LocalDate, DateTimeFormatter, String> biLocalDateToString = (obj, formatter) -> ofNullable(obj).map(formatter::format).orElse("");
+  /**
+   * An engine instant as the API returns it: local time in the server's zone, like the rest of the
+   * app. Each deployment sets its zone with TZ on the container (Atlantic/Cape_Verde, Europe/Lisbon...).
+   */
+  public static LocalDateTime toLocalDateTime(java.time.Instant instant) {
+    return instant == null ? null : LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+  }
+
 }

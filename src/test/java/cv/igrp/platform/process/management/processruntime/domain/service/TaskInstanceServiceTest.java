@@ -7,6 +7,7 @@ import cv.igrp.platform.process.management.shared.application.constants.TaskAssi
 import cv.igrp.platform.process.management.shared.application.constants.VaribalesOperator;
 import cv.igrp.platform.process.management.processruntime.domain.repository.*;
 import cv.igrp.platform.process.management.shared.application.constants.ProcessInstanceStatus;
+import cv.igrp.platform.process.management.shared.application.constants.TaskEventType;
 import cv.igrp.platform.process.management.shared.application.constants.TaskInstanceStatus;
 import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
 import cv.igrp.platform.process.management.shared.domain.models.*;
@@ -84,6 +85,7 @@ class TaskInstanceServiceTest {
     Code procReleaseId = Code.create("PROC-RELEASE-123");
 
     ProcessInstance processInstance = mock(ProcessInstance.class);
+    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
     when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
     when(processInstance.getStartedBy()).thenReturn(startedBy);
     when(processInstance.getProcReleaseId()).thenReturn(procReleaseId);
@@ -551,6 +553,7 @@ class TaskInstanceServiceTest {
     when(task.getTaskInstanceEvents()).thenReturn(List.of(mock(TaskInstanceEvent.class)));
 
     ProcessInstance processInstance = mock(ProcessInstance.class);
+    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
     when(processInstance.getEngineProcessNumber()).thenReturn(Code.create("ENG-PROC-123"));
 
     ProcessInstance activityProcess = mock(ProcessInstance.class);
@@ -715,6 +718,77 @@ class TaskInstanceServiceTest {
     // No process-variable matches: the repository falls back to the task-local (JSONB) predicate only.
     verify(runtimeProcessEngineRepository).getAllProcessInstancesByVariables(filter.getVariablesExpressions());
     assertTrue(filter.getEngineProcessNumbers().isEmpty());
+  }
+
+
+  @Test
+  void createTaskInstancesByProcessSkipsTasksTheAppAlreadyHolds() {
+    var engineProcessNumber = Code.create("ENG-PROC-123");
+    ProcessInstance processInstance = mock(ProcessInstance.class);
+    lenient().when(processInstance.getId()).thenReturn(Identifier.create(UUID.randomUUID()));
+    when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
+    when(processInstance.getStartedBy()).thenReturn("igrp@nosi.cv");
+    var externalId = UUID.randomUUID().toString();
+    TaskInstance known = TaskInstance.builder()
+        .taskKey(Code.create("task-1"))
+        .externalId(Code.create(externalId))
+        .name(Name.create("Task-1"))
+        .startedAt(LocalDateTime.now())
+        .build();
+    when(runtimeProcessEngineRepository.getActiveTaskInstances(engineProcessNumber.getValue())).thenReturn(List.of(known));
+    when(taskInstanceRepository.findAllByExternalIds(List.of(externalId))).thenReturn(Map.of(externalId, known));
+
+    taskInstanceService.createTaskInstancesByProcess(processInstance);
+
+    verify(taskInstanceRepository, never()).create(any());
+    verify(runtimeProcessEngineRepository, never()).setTaskPriority(any(), anyInt());
+  }
+
+
+  @Test
+  void cancelTasksGoneFromEngineCancelsOnlyTheOpenTasksTheEngineDropped() {
+    var processId = Identifier.create(UUID.randomUUID());
+    ProcessInstance processInstance = mock(ProcessInstance.class);
+    when(processInstance.getId()).thenReturn(processId);
+    TaskInstance still = TaskInstance.builder()
+        .id(Identifier.generate()).taskKey(Code.create("escalarPedido")).externalId(Code.create("eng-task-2"))
+        .name(Name.create("Escalar")).status(TaskInstanceStatus.CREATED).build();
+    TaskInstance dropped = TaskInstance.builder()
+        .id(Identifier.generate()).taskKey(Code.create("validarPedido")).externalId(Code.create("eng-task-1"))
+        .name(Name.create("Validar")).status(TaskInstanceStatus.ASSIGNED).build();
+    when(taskInstanceRepository.findOpenByProcessInstanceId(processId.getValue())).thenReturn(List.of(still, dropped));
+
+    // the engine still has eng-task-2 (active or suspended alike); eng-task-1 is gone
+    taskInstanceService.cancelTasksGoneFromEngine(processInstance, Set.of("eng-task-2"));
+
+    assertEquals(TaskInstanceStatus.CANCELED, dropped.getStatus());
+    assertEquals(Code.create("system@irn.mj.pt"), dropped.getEndedBy());
+    assertEquals(TaskInstanceStatus.CREATED, still.getStatus());
+    verify(taskInstanceRepository).update(dropped);
+    verify(taskInstanceRepository, never()).update(still);
+    verify(taskInstanceEventRepository).save(argThat(event -> event.getEventType() == TaskEventType.CANCEL));
+  }
+
+
+  @Test
+  void createTaskInstancesByProcessLocksTheProcessBeforeReadingTheEngine() {
+    var processId = Identifier.create(UUID.randomUUID());
+    var engineProcessNumber = Code.create("ENG-PROC-123");
+    ProcessInstance processInstance = mock(ProcessInstance.class);
+    when(processInstance.getId()).thenReturn(processId);
+    when(processInstance.getEngineProcessNumber()).thenReturn(engineProcessNumber);
+    when(processInstance.getStartedBy()).thenReturn("igrp@nosi.cv");
+    when(runtimeProcessEngineRepository.getActiveTaskInstances(engineProcessNumber.getValue())).thenReturn(List.of());
+
+    taskInstanceService.createTaskInstancesByProcess(processInstance);
+
+    // a sync waiting on the lock must read the engine and the known tasks only once it holds it
+    var order = inOrder(processInstanceRepository, runtimeProcessEngineRepository, taskInstanceRepository);
+    order.verify(processInstanceRepository).lockForTaskSync(processId.getValue());
+    order.verify(runtimeProcessEngineRepository).getTaskIds(engineProcessNumber.getValue());
+    order.verify(taskInstanceRepository).findOpenByProcessInstanceId(processId.getValue());
+    order.verify(runtimeProcessEngineRepository).getActiveTaskInstances(engineProcessNumber.getValue());
+    order.verify(taskInstanceRepository).findAllByExternalIds(any());
   }
 
 }

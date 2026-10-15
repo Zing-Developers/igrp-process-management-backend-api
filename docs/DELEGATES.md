@@ -107,6 +107,48 @@ If you don’t have a message broker available, an alternative is to use `${igrp
 
 ![Process Webhook Delegate Service Task Configuration](../assets/images/delegates/Imagem23.png)
 
+#### Webhook failures, retries and reprocessing
+
+Both webhook delegates record the outcome in process variables: `<task-id>StatusCode` and, on failure, `<task-id>Error` (`HTTP 503`, or the exception message when there was no response). Gateways can branch on them. A later success removes `<task-id>Error`.
+
+What happens on failure depends on the service task:
+
+| Service task | Retryable failure (no response, 5xx, 408, 429) | Other 4xx |
+|---|---|---|
+| synchronous (default) | variables recorded, process continues | variables recorded, process continues |
+| `activiti:async="true"` | job retried, then parked as a failed job | variables recorded, process continues |
+
+A synchronous task never fails the user action that triggered it. To get retries, mark the task async and, optionally, give it its own retry cycle:
+
+```xml
+<serviceTask id="notifyIrn" activiti:async="true" activiti:delegateExpression="${igrpWebhookDelegate}">
+  <extensionElements>
+    <!-- optional: 5 attempts, 10 minutes apart -->
+    <activiti:failedJobRetryTimeCycle>R5/PT10M</activiti:failedJobRetryTimeCycle>
+    <activiti:field name="webhookUrl"><activiti:string>https://...</activiti:string></activiti:field>
+    <activiti:field name="webhookMethod"><activiti:string>POST</activiti:string></activiti:field>
+  </extensionElements>
+</serviceTask>
+```
+
+An async task runs after the request that reached it has returned, so the request cannot pick up the user task that follows. `EngineJobSyncListener` does it instead: once any engine job commits (async task, timer, a reprocessed failed job), it copies the new user tasks into the app and closes the process if the engine ended it. `TaskReconciler` is the safety net: every `IGRP_TASK_RECONCILE_INTERVAL` (5m) one pod finds the processes where app and engine disagree for longer than `IGRP_TASK_RECONCILE_GRACE` (2m) and runs the same sync on them.
+
+Without `failedJobRetryTimeCycle` the defaults apply: `IGRP_ASYNC_JOB_RETRIES` (3) attempts, `IGRP_ASYNC_JOB_RETRY_WAIT` (60s) apart. These are engine-wide, so they cover every async service task, not only webhooks.
+
+When the attempts run out the job becomes a dead-letter job and the process waits on that task. The `/failed-jobs` endpoints show and reprocess it:
+
+| Endpoint | Permission | What it does |
+|---|---|---|
+| `GET /failed-jobs?processInstanceId=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs: app process id, number and name, `executionId` (one per branch of a process), `activityId`, error message, `attempts`, `firstFailedAt`, `lastFailedAt` |
+| `GET /failed-jobs/{jobId}/stacktrace` | `FAILED_JOBS:diagnosticar` | Full stack trace of the last failure (text/plain) |
+| `POST /failed-jobs/{jobId}/retry` body `{"retries": 3}` (optional) | `FAILED_JOBS:reprocessar` | Puts the job back on the queue; it runs on the next job acquisition |
+
+Activiti keeps no failure time and gives a retried job a new id each attempt, so `JobFailureRecorder` keeps its own record per execution (`t_job_failure`, V15): it counts each failure, reprocessing included, and clears the row on success. Failures from before V15 have no record and come back with `attempts` and the dates as null.
+
+The process's activity list (`GET /activities/progress`) also shows these activities. The engine's history leaves them out, since a failed attempt rolls back, so they are added at the end of the list with status `FAILED` (out of retries) or `RETRYING`, each with `jobId`, `errorMessage`, `attempts` and the failure times. With parallel branches each failure is its own row.
+
+Extra IRN permissions per tier go in `IRN_FAILED_JOBS_ACCEPT_READ`, `_DIAGNOSE` and `_RETRY`.
+
 7. To dynamically assign a user task based on an external API response, the delegate expression is `${igrpExternalUserAssignmentDelegate}`.
 
 This delegate is designed for scenarios where the assignee of a user task is determined by an external system. For example, a backoffice API may return which user should handle a specific request. The delegate calls that API, extracts the user identifier (e.g., email) from the JSON response using a JSONPath expression, and creates a `TaskAssignmentRule` so the target user task is automatically assigned to that user when it is activated.
