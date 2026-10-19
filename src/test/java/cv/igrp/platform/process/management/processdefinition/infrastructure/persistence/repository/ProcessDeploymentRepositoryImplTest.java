@@ -115,6 +115,22 @@ class ProcessDeploymentRepositoryImplTest {
   }
 
   @Test
+  void deploy_shouldAnswerBadRequestWithEngineMessageWhenBpmnIsInvalid() {
+    var engineError = new org.activiti.engine.ActivitiException(
+        "Errors while parsing:\n[Validation set: 'activiti-executable-process'] : All process definition are set to be non-executable");
+    when(processDefinitionAdapter.deploy(any(ProcessDefinitionRepresentation.class)))
+        .thenThrow(new RuntimeException("wrapped by the adapter", engineError));
+
+    var exception = assertThrows(
+        cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException.class,
+        () -> repository.deploy(deployment)
+    );
+
+    assertEquals(400, exception.getStatusCode().value());
+    assertTrue(exception.getBody().getTitle().contains("non-executable"));
+  }
+
+  @Test
   void findAll_shouldMapDefinitionsAndForwardFilterValues() {
     ProcessDeploymentFilter filter = ProcessDeploymentFilter.builder()
         .processName("Invoice")
