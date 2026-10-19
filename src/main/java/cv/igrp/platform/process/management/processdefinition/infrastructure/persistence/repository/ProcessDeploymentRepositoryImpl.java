@@ -13,6 +13,9 @@ import cv.igrp.platform.process.management.processdefinition.domain.models.Proce
 import cv.igrp.platform.process.management.processdefinition.domain.repository.ProcessDeploymentRepository;
 import cv.igrp.platform.process.management.processdefinition.mappers.ProcessDeploymentMapper;
 import cv.igrp.platform.process.management.shared.domain.models.*;
+import cv.igrp.platform.process.management.shared.domain.exceptions.IgrpResponseStatusException;
+import org.activiti.bpmn.exceptions.XMLException;
+import org.activiti.engine.ActivitiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
@@ -52,6 +55,14 @@ public class ProcessDeploymentRepositoryImpl implements ProcessDeploymentReposit
       var deployedRepresentation = (IgrpProcessDefinitionRepresentation) processDefinitionAdapter.deploy(processDefinitionRepresentation);
       return processDeploymentMapper.toModel(deployedRepresentation);
     }catch (Exception e) {
+        // A BPMN the engine can't parse or validate is the caller's fault: answer 400 with the engine's own message
+        for (Throwable t = e; t != null; t = t.getCause()) {
+          boolean invalidBpmn = t instanceof XMLException
+              || (t instanceof ActivitiException && String.valueOf(t.getMessage()).startsWith("Errors while parsing"));
+          if (invalidBpmn) {
+            throw IgrpResponseStatusException.badRequest(String.valueOf(t.getMessage()).strip());
+          }
+        }
         LOGGER.error("Failed to deploy process deployment: {}", processDeployment.getKey().getValue(), e);
         throw new ProcessDeploymentException("Failed to deploy process deployment: " + processDeployment.getKey().getValue(), e);
       }
