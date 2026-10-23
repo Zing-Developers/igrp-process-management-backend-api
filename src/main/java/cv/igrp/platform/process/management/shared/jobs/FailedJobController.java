@@ -46,15 +46,16 @@ public class FailedJobController {
     responses = {
       @ApiResponse(responseCode = "200", description = "Página de jobs falhados",
           content = @Content(mediaType = "application/json", schema = @Schema(implementation = FailedJobListPageDTO.class, type = "object"))),
-      @ApiResponse(responseCode = "400", description = "processInstanceId inexistente", content = @Content)
+      @ApiResponse(responseCode = "400", description = "processInstanceId ou businessKey inexistente, ou os dois de processos diferentes", content = @Content)
     }
   )
   @GetMapping
   public ResponseEntity<FailedJobListPageDTO> list(
       @Parameter(description = "Id (UUID) da instância de processo na app; omitido = todas") @RequestParam(value = "processInstanceId", required = false) UUID processInstanceId,
+      @Parameter(description = "Business key da instância de processo; omitido = todas") @RequestParam(value = "businessKey", required = false) String businessKey,
       @Parameter(description = "Página, a começar em 0") @RequestParam(value = "page", required = false) Integer page,
       @Parameter(description = "Tamanho da página, default 20, máximo 100") @RequestParam(value = "size", required = false) Integer size) {
-    return ResponseEntity.ok(service.list(processInstanceId, page, size));
+    return ResponseEntity.ok(service.list(processInstanceId, businessKey, page, size));
   }
 
   @Operation(

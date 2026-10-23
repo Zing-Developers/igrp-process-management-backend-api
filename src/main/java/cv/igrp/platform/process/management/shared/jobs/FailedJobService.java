@@ -64,15 +64,17 @@ public class FailedJobService {
     this.defaultRetries = defaultRetries;
   }
 
-  /** One page, oldest due first; {@code processInstanceId} (the app's UUID) narrows to one process. */
-  public FailedJobListPageDTO list(UUID processInstanceId, Integer page, Integer size) {
+  /**
+   * One page, oldest due first; {@code processInstanceId} (the app's UUID) or {@code businessKey}
+   * narrows to one process.
+   */
+  public FailedJobListPageDTO list(UUID processInstanceId, String businessKey, Integer page, Integer size) {
     final var pageable = PageRequest.of(page == null || page < 0 ? 0 : page,
         size == null || size < 1 ? PAGE_SIZE_DEFAULT : Math.min(size, PAGE_SIZE_MAX));
 
     final var query = managementService.createDeadLetterJobQuery();
-    if (processInstanceId != null) {
-      final var process = processInstanceRepository.findById(processInstanceId)
-          .orElseThrow(() -> new IllegalArgumentException("process instance not found: " + processInstanceId));
+    final var process = processFilter(processInstanceId, businessKey);
+    if (process != null) {
       query.processInstanceId(process.getEngineProcessNumber());
     }
     final long total = query.count();
@@ -98,6 +100,18 @@ public class FailedJobService {
     dto.setFirst(result.isFirst());
     dto.setLast(result.isLast());
     return dto;
+  }
+
+  /** The process both filters point at, or null with neither; giving both for different processes is an error. */
+  private ProcessInstanceEntity processFilter(UUID processInstanceId, String businessKey) {
+    final var byId = processInstanceId == null ? null : processInstanceRepository.findById(processInstanceId)
+        .orElseThrow(() -> new IllegalArgumentException("process instance not found: " + processInstanceId));
+    final var byKey = businessKey == null || businessKey.isBlank() ? null : processInstanceRepository.findByBusinessKey(businessKey)
+        .orElseThrow(() -> new IllegalArgumentException("process instance not found for businessKey: " + businessKey));
+    if (byId != null && byKey != null && !byId.getId().equals(byKey.getId())) {
+      throw new IllegalArgumentException("processInstanceId and businessKey refer to different processes");
+    }
+    return byId != null ? byId : byKey;
   }
 
   public String stacktrace(String jobId) {

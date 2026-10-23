@@ -139,7 +139,7 @@ When the attempts run out the job becomes a dead-letter job and the process wait
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /failed-jobs?processInstanceId=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs: app process id, number and name, `executionId` (one per branch of a process), `activityId`, error message, `attempts`, `firstFailedAt`, `lastFailedAt` |
+| `GET /failed-jobs?processInstanceId=&businessKey=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs, optionally for one process (by app id or business key): app process id, number and name, `executionId` (one per branch of a process), `activityId`, error message, `attempts`, `firstFailedAt`, `lastFailedAt` |
 | `GET /failed-jobs/{jobId}/stacktrace` | `FAILED_JOBS:diagnosticar` | Full stack trace of the last failure (text/plain) |
 | `POST /failed-jobs/{jobId}/retry` body `{"retries": 3}` (optional) | `FAILED_JOBS:reprocessar` | Puts the job back on the queue; it runs on the next job acquisition |
 
