@@ -110,7 +110,7 @@ class WebhookAsyncRetryEngineTest {
     runJob(management.createTimerJobQuery().processInstanceId(pi.getId()).singleResult());
 
     assertThat(FlakyWebhook.CALLS).hasValue(2);
-    var page = failedJobs.list(null, 0, 20);
+    var page = failedJobs.list(null, null, 0, 20);
     assertThat(page.getTotalElements()).isEqualTo(1);
     assertThat(page.getContent().get(0).getActivityId()).isEqualTo("callIrn");
     assertThat(page.getContent().get(0).getExceptionMessage()).contains("HTTP 503");
@@ -134,7 +134,7 @@ class WebhookAsyncRetryEngineTest {
     failedJobs.retry(page.getContent().get(0).getJobId(), null, "ops@irn.mj.pt");
     management.executeJob(management.createJobQuery().processInstanceId(pi.getId()).singleResult().getId());
 
-    assertThat(failedJobs.list(null, 0, 20).getTotalElements()).isZero();
+    assertThat(failedJobs.list(null, null, 0, 20).getTotalElements()).isZero();
     assertThat(engine.getTaskService().createTaskQuery().processInstanceId(pi.getId()).singleResult().getTaskDefinitionKey())
         .isEqualTo("wait");
     assertThat(runtime.getVariable(pi.getId(), "callIrnStatusCode")).isEqualTo(200);

@@ -62,7 +62,7 @@ class FailedJobServiceTest {
     when(execution.getActivityId()).thenReturn("notifyIrn");
     when(runtime.createExecutionQuery().executionId("exec-1").singleResult()).thenReturn(execution);
 
-    var page = service.list(null, 2, 20);
+    var page = service.list(null, null, 2, 20);
 
     assertThat(page.getTotalElements()).isEqualTo(41);
     assertThat(page.getTotalPages()).isEqualTo(3);
@@ -77,6 +77,29 @@ class FailedJobServiceTest {
     assertThat(row.getExecutionId()).isEqualTo("exec-1");
     assertThat(row.getAttempts()).isEqualTo(3);
     assertThat(row.getLastFailedAt()).isEqualTo(lastFailedAt);
+  }
+
+  @Test
+  void listFiltersByBusinessKeyThroughTheEngineProcessId() {
+    var query = deadLetters(0, List.of());
+    var process = new ProcessInstanceEntity();
+    process.setId(UUID.randomUUID());
+    process.setEngineProcessNumber("eng-7");
+    when(processes.findByBusinessKey("REQ-2026-0042")).thenReturn(java.util.Optional.of(process));
+    when(processes.findById(process.getId())).thenReturn(java.util.Optional.of(process));
+
+    service.list(null, "REQ-2026-0042", 0, 20);
+    service.list(process.getId(), "REQ-2026-0042", 0, 20);
+    verify(query, org.mockito.Mockito.times(2)).processInstanceId("eng-7");
+
+    assertThatThrownBy(() -> service.list(null, "NOPE", 0, 20))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("businessKey");
+
+    var other = new ProcessInstanceEntity();
+    other.setId(UUID.randomUUID());
+    when(processes.findById(other.getId())).thenReturn(java.util.Optional.of(other));
+    assertThatThrownBy(() -> service.list(other.getId(), "REQ-2026-0042", 0, 20))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("different processes");
   }
 
   @Test
