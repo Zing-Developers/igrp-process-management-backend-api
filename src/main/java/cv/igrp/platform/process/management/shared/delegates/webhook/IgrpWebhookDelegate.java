@@ -57,7 +57,10 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     String processInstanceId = execution.getProcessInstanceId();
     log.debug("[IgrpWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
     String baseUrlVariable = (String) execution.getVariable("webhookUrl");
-    String baseUrl = Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution).toString() : null;
+    String baseUrl = ofNullable(Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution) : null)
+        .map(Object::toString)
+        .filter(s -> !s.isBlank())
+        .orElseThrow(() -> new IllegalArgumentException("webhookUrl argument is required and was not provided"));
     baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
     String pathVariable = (String)  execution.getVariable("webhookUrlPath");
     String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
