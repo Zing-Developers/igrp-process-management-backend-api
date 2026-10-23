@@ -41,4 +41,12 @@ public class FailedJobDTO {
 
   private LocalDateTime lastFailedAt;
 
+  /** How many times it was put back on the queue from here; 0 if never. */
+  private Integer reprocessCount;
+
+  private LocalDateTime lastReprocessedAt;
+
+  /** Who reprocessed it last (the principal claim, e.g. email). Only here, behind FAILED_JOBS:visualizar. */
+  private String lastReprocessedBy;
+
 }

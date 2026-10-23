@@ -41,7 +41,14 @@ public class JobFailureRecorder implements ActivitiEventListener {
     this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
 
-  public record Failure(int attempts, Instant firstFailedAt, Instant lastFailedAt) {
+  /** attempts counts every failed run; reprocessCount how many of the retry cycles were started by hand. */
+  public record Failure(int attempts, Instant firstFailedAt, Instant lastFailedAt,
+                        int reprocessCount, Instant lastReprocessedAt, String lastReprocessedBy) {
+
+    /** Reprocessed and not yet failed since: the job is queued or running again. */
+    public boolean reprocessPending() {
+      return lastReprocessedAt != null && lastReprocessedAt.isAfter(lastFailedAt);
+    }
   }
 
   @Override
@@ -78,16 +85,30 @@ public class JobFailureRecorder implements ActivitiEventListener {
     });
   }
 
+  /**
+   * A dead-letter job of this execution was put back on the queue by {@code by}. A failure that
+   * predates the recorder has no row, so there is nothing to count on.
+   */
+  public void recordReprocess(String executionId, String by) {
+    newTransaction.executeWithoutResult(s -> jdbc.update(
+        "UPDATE t_job_failure SET reprocess_count = reprocess_count + 1, last_reprocessed_at = ?, last_reprocessed_by = ?"
+            + " WHERE execution_id = ?",
+        Timestamp.from(Instant.now()), by, executionId));
+  }
+
   public Map<String, Failure> findByExecutionIds(Collection<String> executionIds) {
     final Map<String, Failure> found = new HashMap<>();
     if (executionIds.isEmpty()) {
       return found;
     }
     final String marks = String.join(",", executionIds.stream().map(id -> "?").toList());
-    jdbc.query("SELECT execution_id, attempts, first_failed_at, last_failed_at FROM t_job_failure WHERE execution_id IN (" + marks + ")",
+    jdbc.query("SELECT execution_id, attempts, first_failed_at, last_failed_at, reprocess_count, last_reprocessed_at,"
+            + " last_reprocessed_by FROM t_job_failure WHERE execution_id IN (" + marks + ")",
         rs -> {
+          final Timestamp reprocessedAt = rs.getTimestamp(6);
           found.put(rs.getString(1), new Failure(rs.getInt(2),
-              rs.getTimestamp(3).toInstant(), rs.getTimestamp(4).toInstant()));
+              rs.getTimestamp(3).toInstant(), rs.getTimestamp(4).toInstant(),
+              rs.getInt(5), reprocessedAt != null ? reprocessedAt.toInstant() : null, rs.getString(7)));
         },
         executionIds.toArray());
     return found;

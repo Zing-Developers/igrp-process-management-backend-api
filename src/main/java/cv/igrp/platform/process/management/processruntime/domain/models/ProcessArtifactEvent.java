@@ -29,8 +29,12 @@ public class ProcessArtifactEvent {
   /** Set when the activity's job failed: it then sits in the engine's jobs, not in its history. */
   private JobFailure failure;
 
-  /** A failed job, as the activity list shows it: the error, how often, when, and what to reprocess. */
-  public record JobFailure(String jobId, String errorMessage, Integer attempts, Instant firstFailedAt, Instant lastFailedAt) {
+  /**
+   * A failed job, as the activity list shows it: the error, how often, when, and what to reprocess.
+   * attempts counts every failed run, reprocesses included; reprocessCount how many were started by hand.
+   */
+  public record JobFailure(String jobId, String errorMessage, Integer attempts, Instant firstFailedAt, Instant lastFailedAt,
+                           Integer reprocessCount, Instant lastReprocessedAt) {
   }
 
   @Builder
@@ -110,7 +114,9 @@ public class ProcessArtifactEvent {
     /** The job ran out of retries (dead letter): reprocess it from /failed-jobs. */
     FAILED,
     /** The job failed and the engine will try again. */
-    RETRYING;
+    RETRYING,
+    /** Put back on the queue from /failed-jobs; waiting for, or in, its next run. */
+    REPROCESSING;
   }
 
 }
