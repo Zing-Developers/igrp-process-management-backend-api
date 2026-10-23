@@ -88,7 +88,8 @@ public class FailedJobService {
 
     // ponytail: one execution lookup per row for the activity id; fine at <=100 rows per page
     final var result = new PageImpl<>(jobs.stream()
-        .map(job -> toDto(job, processes.get(job.getProcessInstanceId()), failureOf(job, recorded)))
+        .map(job -> toDto(job, processes.get(job.getProcessInstanceId()), failureOf(job, recorded),
+            recorded.containsKey(job.getExecutionId()) ? recorded.get(job.getExecutionId()).lastReprocessedBy() : null))
         .toList(), pageable, total);
 
     final var dto = new FailedJobListPageDTO();
@@ -119,29 +120,44 @@ public class FailedJobService {
     return managementService.getDeadLetterJobExceptionStacktrace(jobId);
   }
 
-  /** Back to the executable queue with {@code retries} attempts (default IGRP_ASYNC_JOB_RETRIES); runs on the next acquisition. */
+  /**
+   * Back to the executable queue with {@code retries} attempts (default IGRP_ASYNC_JOB_RETRIES); runs on
+   * the next acquisition. Counted as a reprocess; the attempts it uses add to the job's total.
+   */
   public void retry(String jobId, Integer retries, String requestedBy) {
-    requireDeadLetter(jobId);
+    final Job job = requireDeadLetter(jobId);
     final int attempts = retries == null ? defaultRetries : retries;
     if (attempts < 1 || attempts > 100) {
       throw new IllegalArgumentException("retries must be between 1 and 100");
     }
     managementService.moveDeadLetterJobToExecutableJob(jobId, attempts);
+    if (job.getExecutionId() != null) {
+      failures.recordReprocess(job.getExecutionId(), requestedBy);
+    }
     LOGGER.info("Dead-letter job {} moved back to the executable queue with {} retries by {}", jobId, attempts, requestedBy);
   }
 
   /**
-   * The activities of one engine process whose job failed: out of retries (FAILED) or waiting for the
-   * next attempt (RETRYING). The engine's history leaves them out, since a failed job rolls back, so
-   * the activity list adds them from here, each with its error and what to reprocess.
+   * The activities of one engine process whose job failed: out of retries (FAILED), waiting for the
+   * next attempt (RETRYING) or put back on the queue by hand (REPROCESSING). The engine's history
+   * leaves them out, since a failed job rolls back, so the activity list adds them from here, each
+   * with its error and what to reprocess.
    */
   public List<ProcessArtifactEvent> stuckActivities(String engineProcessInstanceId) {
     final List<Job> deadLetters = managementService.createDeadLetterJobQuery().processInstanceId(engineProcessInstanceId).list();
     final List<Job> retrying = managementService.createTimerJobQuery().processInstanceId(engineProcessInstanceId).withException().list();
-    final var recorded = failures.findByExecutionIds(executionIds(Stream.concat(deadLetters.stream(), retrying.stream())));
-    return Stream.concat(
+    // an executable job that carries an exception has failed before: reprocessed, or a retry whose wait is over
+    final List<Job> queued = managementService.createJobQuery().processInstanceId(engineProcessInstanceId).withException().list();
+    final var recorded = failures.findByExecutionIds(executionIds(Stream.of(deadLetters, retrying, queued).flatMap(List::stream)));
+    return Stream.of(
             deadLetters.stream().map(job -> stuckActivity(job, ArtifactStatus.FAILED, failureOf(job, recorded))),
-            retrying.stream().map(job -> stuckActivity(job, ArtifactStatus.RETRYING, failureOf(job, recorded))))
+            retrying.stream().map(job -> stuckActivity(job, ArtifactStatus.RETRYING, failureOf(job, recorded))),
+            queued.stream().map(job -> {
+              final var failure = recorded.get(job.getExecutionId());
+              final var status = failure != null && failure.reprocessPending() ? ArtifactStatus.REPROCESSING : ArtifactStatus.RETRYING;
+              return stuckActivity(job, status, failureOf(job, recorded));
+            }))
+        .flatMap(Function.identity())
         .toList();
   }
 
@@ -184,7 +200,9 @@ public class FailedJobService {
     return new JobFailure(job.getId(), job.getExceptionMessage(),
         failure != null ? failure.attempts() : null,
         failure != null ? failure.firstFailedAt() : null,
-        failure != null ? failure.lastFailedAt() : null);
+        failure != null ? failure.lastFailedAt() : null,
+        failure != null ? failure.reprocessCount() : null,
+        failure != null ? failure.lastReprocessedAt() : null);
   }
 
   private static List<String> executionIds(Stream<Job> jobs) {
@@ -199,13 +217,15 @@ public class FailedJobService {
     return execution != null ? execution.getActivityId() : null;
   }
 
-  private void requireDeadLetter(String jobId) {
-    if (managementService.createDeadLetterJobQuery().jobId(jobId).count() == 0) {
+  private Job requireDeadLetter(String jobId) {
+    final Job job = managementService.createDeadLetterJobQuery().jobId(jobId).singleResult();
+    if (job == null) {
       throw new IllegalArgumentException("failed job not found: " + jobId);
     }
+    return job;
   }
 
-  private FailedJobDTO toDto(Job job, ProcessInstanceEntity process, JobFailure failure) {
+  private FailedJobDTO toDto(Job job, ProcessInstanceEntity process, JobFailure failure, String lastReprocessedBy) {
     return new FailedJobDTO(
         job.getId(),
         process != null ? process.getId() : null,
@@ -218,7 +238,10 @@ public class FailedJobService {
         job.getExceptionMessage(),
         failure.attempts(),
         toLocalDateTime(failure.firstFailedAt()),
-        toLocalDateTime(failure.lastFailedAt()));
+        toLocalDateTime(failure.lastFailedAt()),
+        failure.reprocessCount(),
+        toLocalDateTime(failure.lastReprocessedAt()),
+        lastReprocessedBy);
   }
 
 }

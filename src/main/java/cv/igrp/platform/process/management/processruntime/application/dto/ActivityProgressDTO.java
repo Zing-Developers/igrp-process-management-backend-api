@@ -96,4 +96,10 @@ public class ActivityProgressDTO  {
 
   private LocalDateTime lastFailedAt ;
 
+
+  private Integer reprocessCount ;
+
+
+  private LocalDateTime lastReprocessedAt ;
+
 }

@@ -85,6 +85,7 @@ class WebhookAsyncRetryEngineTest {
     FlakyWebhook.CALLS.set(0);
     try {
       jdbc.execute(new String(getClass().getResourceAsStream("/db/migration/V15__create_job_failure.sql").readAllBytes()));
+      jdbc.execute(new String(getClass().getResourceAsStream("/db/migration/V17__job_failure_reprocess.sql").readAllBytes()));
     } catch (java.io.IOException e) {
       throw new IllegalStateException(e);
     }
@@ -141,6 +142,46 @@ class WebhookAsyncRetryEngineTest {
     assertThat(failedJobs.stuckActivities(pi.getId())).isEmpty();
     // the success clears the record, so a later failure on this path starts again at 1
     assertThat(jdbc.queryForObject("SELECT count(*) FROM t_job_failure", Integer.class)).isZero();
+  }
+
+  @Test
+  void aReprocessThatFailsAgainIsBackWithTheNewErrorTheTotalAttemptsAndWhoReprocessedIt() {
+    var management = engine.getManagementService();
+    var runtime = engine.getRuntimeService();
+    var failedJobs = new FailedJobService(management, runtime, engine.getRepositoryService(), mock(ProcessInstanceEntityRepository.class), failures, 1);
+    FlakyWebhook.STATUS.set(503);
+    var pi = runtime.startProcessInstanceByKey("notify");
+
+    runJob(management.createJobQuery().processInstanceId(pi.getId()).singleResult());
+    // the retry wait is over and the job is queued again: still the engine's own retry, not a reprocess
+    management.moveTimerToExecutableJob(management.createTimerJobQuery().processInstanceId(pi.getId()).singleResult().getId());
+    assertThat(failedJobs.stuckActivities(pi.getId())).extracting(a -> a.getStatus().name()).containsExactly("RETRYING");
+    runJob(management.createJobQuery().processInstanceId(pi.getId()).singleResult());
+    var failed = failedJobs.list(null, null, 0, 20).getContent().get(0);
+    assertThat(failed.getAttempts()).isEqualTo(2);
+    assertThat(failed.getReprocessCount()).isZero();
+
+    FlakyWebhook.STATUS.set(502);
+    failedJobs.retry(failed.getJobId(), null, "ops@irn.mj.pt");
+
+    // queued by hand: out of /failed-jobs, but the activity list keeps it, as REPROCESSING
+    assertThat(failedJobs.list(null, null, 0, 20).getTotalElements()).isZero();
+    assertThat(failedJobs.stuckActivities(pi.getId())).singleElement().satisfies(activity -> {
+      assertThat(activity.getStatus().name()).isEqualTo("REPROCESSING");
+      assertThat(activity.getFailure().attempts()).isEqualTo(2);
+      assertThat(activity.getFailure().reprocessCount()).isEqualTo(1);
+    });
+
+    runJob(management.createJobQuery().processInstanceId(pi.getId()).singleResult());
+
+    var again = failedJobs.list(null, null, 0, 20).getContent().get(0);
+    assertThat(again.getExceptionMessage()).contains("HTTP 502");
+    assertThat(again.getAttempts()).isEqualTo(3);
+    assertThat(again.getFirstFailedAt()).isEqualTo(failed.getFirstFailedAt());
+    assertThat(again.getReprocessCount()).isEqualTo(1);
+    assertThat(again.getLastReprocessedBy()).isEqualTo("ops@irn.mj.pt");
+    assertThat(again.getLastReprocessedAt()).isNotNull();
+    assertThat(failedJobs.stuckActivities(pi.getId())).extracting(a -> a.getStatus().name()).containsExactly("FAILED");
   }
 
   @Test

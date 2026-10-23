@@ -54,7 +54,8 @@ class FailedJobServiceTest {
     process.setName("Pedido de certidão");
     var lastFailed = java.time.Instant.parse("2026-10-14T10:42:00Z");
     when(failures.findByExecutionIds(List.of("exec-1")))
-        .thenReturn(java.util.Map.of("exec-1", new JobFailureRecorder.Failure(3, lastFailed.minusSeconds(120), lastFailed)));
+        .thenReturn(java.util.Map.of("exec-1", new JobFailureRecorder.Failure(3, lastFailed.minusSeconds(120), lastFailed,
+            1, lastFailed.minusSeconds(60), "ops@irn.mj.pt")));
     // shown in the server's zone, like the rest of the API
     var lastFailedAt = java.time.LocalDateTime.ofInstant(lastFailed, java.time.ZoneId.systemDefault());
     when(processes.findAllByEngineProcessNumberIn(any())).thenReturn(List.of(process));
@@ -77,6 +78,8 @@ class FailedJobServiceTest {
     assertThat(row.getExecutionId()).isEqualTo("exec-1");
     assertThat(row.getAttempts()).isEqualTo(3);
     assertThat(row.getLastFailedAt()).isEqualTo(lastFailedAt);
+    assertThat(row.getReprocessCount()).isEqualTo(1);
+    assertThat(row.getLastReprocessedBy()).isEqualTo("ops@irn.mj.pt");
   }
 
   @Test
@@ -105,12 +108,16 @@ class FailedJobServiceTest {
   @Test
   void retryUsesTheConfiguredDefaultAndRejectsUnknownJobsAndBadCounts() {
     var query = deadLetters(1, List.of());
+    var job = mock(Job.class);
+    when(job.getExecutionId()).thenReturn("exec-1");
+    when(query.singleResult()).thenReturn(job);
     service.retry("job-1", null, "ops@irn.mj.pt");
     verify(management).moveDeadLetterJobToExecutableJob("job-1", 3);
+    verify(failures).recordReprocess("exec-1", "ops@irn.mj.pt");
 
     assertThatThrownBy(() -> service.retry("job-1", 0, "ops@irn.mj.pt")).isInstanceOf(IllegalArgumentException.class);
 
-    when(query.count()).thenReturn(0L);
+    when(query.singleResult()).thenReturn(null);
     assertThatThrownBy(() -> service.retry("gone", 2, "ops@irn.mj.pt")).isInstanceOf(IllegalArgumentException.class);
     verify(management, never()).moveDeadLetterJobToExecutableJob("gone", 2);
   }
