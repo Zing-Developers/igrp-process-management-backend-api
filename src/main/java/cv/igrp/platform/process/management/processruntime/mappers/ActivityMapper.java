@@ -85,6 +85,8 @@ public class ActivityMapper {
       activityProgressDTO.setAttempts(failure.attempts());
       activityProgressDTO.setFirstFailedAt(DateUtil.toLocalDateTime(failure.firstFailedAt()));
       activityProgressDTO.setLastFailedAt(DateUtil.toLocalDateTime(failure.lastFailedAt()));
+      activityProgressDTO.setReprocessCount(failure.reprocessCount());
+      activityProgressDTO.setLastReprocessedAt(DateUtil.toLocalDateTime(failure.lastReprocessedAt()));
     }
 
     return activityProgressDTO;

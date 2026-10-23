@@ -139,13 +139,13 @@ When the attempts run out the job becomes a dead-letter job and the process wait
 
 | Endpoint | Permission | What it does |
 |---|---|---|
-| `GET /failed-jobs?processInstanceId=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs: app process id, number and name, `executionId` (one per branch of a process), `activityId`, error message, `attempts`, `firstFailedAt`, `lastFailedAt` |
+| `GET /failed-jobs?processInstanceId=&businessKey=&page=&size=` | `FAILED_JOBS:visualizar` | Page of failed jobs, optionally for one process (by app id or business key): app process id, number and name, `executionId` (one per branch of a process), `activityId`, error message, `attempts`, `firstFailedAt`, `lastFailedAt`, `reprocessCount`, `lastReprocessedAt`, `lastReprocessedBy` |
 | `GET /failed-jobs/{jobId}/stacktrace` | `FAILED_JOBS:diagnosticar` | Full stack trace of the last failure (text/plain) |
-| `POST /failed-jobs/{jobId}/retry` body `{"retries": 3}` (optional) | `FAILED_JOBS:reprocessar` | Puts the job back on the queue; it runs on the next job acquisition |
+| `POST /failed-jobs/{jobId}/retry` body `{"retries": 3}` (optional) | `FAILED_JOBS:reprocessar` | Puts the job back on the queue; it runs on the next job acquisition. Counted in `reprocessCount` |
 
-Activiti keeps no failure time and gives a retried job a new id each attempt, so `JobFailureRecorder` keeps its own record per execution (`t_job_failure`, V15): it counts each failure, reprocessing included, and clears the row on success. Failures from before V15 have no record and come back with `attempts` and the dates as null.
+Activiti keeps no failure time and gives a retried job a new id each attempt, so `JobFailureRecorder` keeps its own record per execution (`t_job_failure`, V15): it counts each failure, reprocessing included, and clears the row on success. Each reprocess also bumps `reprocessCount` and records when and by whom (V17), so `attempts: 4, reprocessCount: 1` reads as four failed runs, one round of them started by hand. A reprocess that fails again comes back to `/failed-jobs` with the new error, the total `attempts` and the original `firstFailedAt`; one that succeeds leaves no row and no entry. Failures from before V15 have no record and come back with `attempts` and the dates as null.
 
-The process's activity list (`GET /activities/progress`) also shows these activities. The engine's history leaves them out, since a failed attempt rolls back, so they are added at the end of the list with status `FAILED` (out of retries) or `RETRYING`, each with `jobId`, `errorMessage`, `attempts` and the failure times. With parallel branches each failure is its own row.
+The process's activity list (`GET /activities/progress`) also shows these activities. The engine's history leaves them out, since a failed attempt rolls back, so they are added at the end of the list with status `FAILED` (out of retries), `RETRYING` or `REPROCESSING` (put back on the queue from `/failed-jobs`, waiting for or in its run; `/failed-jobs` only lists it again if it fails out), each with `jobId`, `errorMessage`, `attempts`, `reprocessCount` and the failure and reprocess times. Who reprocessed it is only in `/failed-jobs`. With parallel branches each failure is its own row.
 
 Extra IRN permissions per tier go in `IRN_FAILED_JOBS_ACCEPT_READ`, `_DIAGNOSE` and `_RETRY`.
 
