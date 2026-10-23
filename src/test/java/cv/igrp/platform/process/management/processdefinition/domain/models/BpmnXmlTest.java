@@ -69,6 +69,39 @@ class BpmnXmlTest {
     assertTrue(deployedTask("activiti:async=\"false\" camunda:asyncBefore=\"true\"").isAsynchronous());
     assertTrue(deployedTask("camunda:async=\"true\" camunda:asyncBefore=\"false\"").isAsynchronous());
     assertFalse(deployedTask("camunda:async='false' camunda:asyncBefore='false'").isAsynchronous());
+    // What the frontend's converter writes for camunda:async + asyncBefore.
+    assertTrue(deployedTask("activiti:async=\"false\" activiti:async=\"true\"").isAsynchronous());
+  }
+
+  @Test
+  void shouldTreatAsyncAfterAsAsyncLikeTheFrontendDoes() throws Exception {
+    assertTrue(deployedTask("camunda:asyncAfter=\"true\"").isAsynchronous());
+    assertFalse(deployedTask("camunda:asyncAfter=\"false\"").isAsynchronous());
+  }
+
+  @Test
+  void shouldLetTheCamundaAttributeWinOverTheSameActivitiOne() throws Exception {
+    var task = deployedTask("activiti:delegateExpression=\"${other}\" camunda:exclusive=\"false\" activiti:exclusive=\"true\"");
+
+    assertEquals("${igrpWebhookDelegate}", task.getImplementation());
+    assertTrue(task.isNotExclusive());
+  }
+
+  @Test
+  void shouldLeaveXmlTheFrontendAlreadyConvertedUnchanged() {
+    String xml = """
+        <bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:activiti="http://activiti.org/bpmn" id="d">
+          <bpmn2:process id="NOTIFICAR_IRN" isExecutable="true">
+            <bpmn2:serviceTask id="notify" activiti:exclusive="false" activiti:delegateExpression="${igrpWebhookDelegate}" activiti:async="true">
+              <bpmn2:extensionElements>
+                <activiti:field name="webhookUrl"><activiti:string>https://example.org?a=1&amp;b=2</activiti:string></activiti:field>
+              </bpmn2:extensionElements>
+            </bpmn2:serviceTask>
+          </bpmn2:process>
+        </bpmn2:definitions>
+        """;
+
+    assertEquals(xml, BpmnXml.create(xml).getXml());
   }
 
   /** Runs a Camunda-modeler service task through BpmnXml and then Activiti's own parser. */
