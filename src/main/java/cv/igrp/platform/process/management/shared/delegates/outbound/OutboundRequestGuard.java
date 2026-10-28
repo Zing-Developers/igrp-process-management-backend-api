@@ -95,7 +95,7 @@ public class OutboundRequestGuard {
     try {
       addresses = InetAddress.getAllByName(IDN.toASCII(host));
     } catch (UnknownHostException e) {
-      throw new IllegalArgumentException("Webhook host cannot be resolved");
+      throw new UnresolvableHostException();
     }
     for (InetAddress address : addresses) {
       if (isForbidden(address)) {
@@ -238,6 +238,13 @@ public class OutboundRequestGuard {
       return (b[0] & 0xFE) == 0xFC;
     }
     return false;
+  }
+
+  /** DNS did not answer: unlike the other rejections it may pass on its own, so callers can retry it. */
+  public static final class UnresolvableHostException extends IllegalArgumentException {
+    public UnresolvableHostException() {
+      super("Webhook host cannot be resolved");
+    }
   }
 
 }

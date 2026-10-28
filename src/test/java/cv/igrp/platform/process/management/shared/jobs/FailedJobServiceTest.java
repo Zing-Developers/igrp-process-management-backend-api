@@ -113,7 +113,14 @@ class FailedJobServiceTest {
     when(query.singleResult()).thenReturn(job);
     service.retry("job-1", null, "ops@irn.mj.pt");
     verify(management).moveDeadLetterJobToExecutableJob("job-1", 3);
-    verify(failures).recordReprocess("exec-1", "ops@irn.mj.pt");
+    verify(failures).recordReprocess(org.mockito.ArgumentMatchers.eq("exec-1"), org.mockito.ArgumentMatchers.eq("ops@irn.mj.pt"), any());
+
+    // a second click on the same job: the engine already moved it, so it neither counts nor fails with a 500
+    org.mockito.Mockito.doThrow(new org.activiti.engine.JobNotFoundException("job-1"))
+        .when(management).moveDeadLetterJobToExecutableJob("job-1", 2);
+    assertThatThrownBy(() -> service.retry("job-1", 2, "ops2@irn.mj.pt"))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already reprocessed");
+    verify(failures, never()).recordReprocess(org.mockito.ArgumentMatchers.eq("exec-1"), org.mockito.ArgumentMatchers.eq("ops2@irn.mj.pt"), any());
 
     assertThatThrownBy(() -> service.retry("job-1", 0, "ops@irn.mj.pt")).isInstanceOf(IllegalArgumentException.class);
 

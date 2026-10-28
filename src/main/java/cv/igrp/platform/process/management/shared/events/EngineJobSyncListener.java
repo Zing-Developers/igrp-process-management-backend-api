@@ -1,6 +1,7 @@
 package cv.igrp.platform.process.management.shared.events;
 
 import cv.igrp.platform.process.management.processruntime.domain.service.ProcessInstanceService;
+import cv.igrp.platform.process.management.shared.config.AfterCommitExecutor;
 import org.activiti.engine.delegate.event.ActivitiEvent;
 import org.activiti.engine.delegate.event.ActivitiEventListener;
 import org.slf4j.Logger;
@@ -38,9 +39,13 @@ public class EngineJobSyncListener implements ActivitiEventListener {
   private final Set<String> pending = ConcurrentHashMap.newKeySet();
   private volatile boolean ready;
 
+  private final AfterCommitExecutor afterCommit;
+
   public EngineJobSyncListener(ObjectProvider<ProcessInstanceService> processInstanceService,
-                               PlatformTransactionManager transactionManager) {
+                               PlatformTransactionManager transactionManager,
+                               AfterCommitExecutor afterCommit) {
     this.processInstanceService = processInstanceService;
+    this.afterCommit = afterCommit;
     this.newTransaction = new TransactionTemplate(transactionManager);
     this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
@@ -62,7 +67,8 @@ public class EngineJobSyncListener implements ActivitiEventListener {
       TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
         @Override
         public void afterCommit() {
-          sync(processInstanceId);
+          // the job's connection is only returned after this; the sync takes one of its own
+          afterCommit.execute(() -> sync(processInstanceId));
         }
       });
     } else {

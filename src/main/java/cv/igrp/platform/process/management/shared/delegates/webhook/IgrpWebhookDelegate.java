@@ -56,43 +56,52 @@ public class IgrpWebhookDelegate implements JavaDelegate {
     String taskId = execution.getCurrentActivityId();
     String processInstanceId = execution.getProcessInstanceId();
     log.debug("[IgrpWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
-    String baseUrlVariable = (String) execution.getVariable("webhookUrl");
-    String baseUrl = ofNullable(Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution) : null)
-        .map(Object::toString)
-        .filter(s -> !s.isBlank())
-        .orElseThrow(() -> new IllegalArgumentException("webhookUrl argument is required and was not provided"));
-    baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
-    String pathVariable = (String)  execution.getVariable("webhookUrlPath");
-    String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
-    path = EnvVarUtil.resolveEnvVars(path, "webhookUrlPath");
-    String queryParams = (String) execution.getVariable("webhookUrlQueryParams");
-    String query = Objects.nonNull(queryParams)? queryParams : Objects.nonNull(webhookQueryParams) ? (String) webhookQueryParams.getValue(execution) : null;
-    query = EnvVarUtil.resolveEnvVars(query, "webhookQueryParams");
+    String url;
+    String method;
+    Object payload;
+    Map<String, String> headersMap;
+    // what the call needs, read and checked: a failure here cannot pass on a retry
+    try {
+      String baseUrlVariable = (String) execution.getVariable("webhookUrl");
+      String baseUrl = ofNullable(Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution) : null)
+          .map(Object::toString)
+          .filter(s -> !s.isBlank())
+          .orElseThrow(() -> new IllegalArgumentException("webhookUrl argument is required and was not provided"));
+      baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
+      String pathVariable = (String)  execution.getVariable("webhookUrlPath");
+      String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
+      path = EnvVarUtil.resolveEnvVars(path, "webhookUrlPath");
+      String queryParams = (String) execution.getVariable("webhookUrlQueryParams");
+      String query = Objects.nonNull(queryParams)? queryParams : Objects.nonNull(webhookQueryParams) ? (String) webhookQueryParams.getValue(execution) : null;
+      query = EnvVarUtil.resolveEnvVars(query, "webhookQueryParams");
 
-    String url = guard.validate(UriComponentsBuilder.fromUriString(baseUrl)
-        .path(path != null ? path : "")
-        .query(query != null ? query : "")
-        .build()
-        .toUriString());
+      url = guard.validate(UriComponentsBuilder.fromUriString(baseUrl)
+          .path(path != null ? path : "")
+          .query(query != null ? query : "")
+          .build()
+          .toUriString());
 
-    String methodVariable = (String) execution.getVariable("webhookMethod");
-    String method = ofNullable(Objects.nonNull(methodVariable)? methodVariable : Objects.nonNull(webhookMethod) ? webhookMethod.getValue(execution) : null)
-        .orElseThrow(() -> new IllegalArgumentException("webhookMethod argument is required and was not provided"))
-        .toString();
-    method = EnvVarUtil.resolveEnvVars(method, "webhookMethod").toUpperCase();
+      String methodVariable = (String) execution.getVariable("webhookMethod");
+      method = ofNullable(Objects.nonNull(methodVariable)? methodVariable : Objects.nonNull(webhookMethod) ? webhookMethod.getValue(execution) : null)
+          .orElseThrow(() -> new IllegalArgumentException("webhookMethod argument is required and was not provided"))
+          .toString();
+      method = EnvVarUtil.resolveEnvVars(method, "webhookMethod").toUpperCase();
 
-    Object payloadVariable = execution.getVariable("webhookPayload");
-    Object payload = Objects.nonNull(payloadVariable) ? payloadVariable : Objects.nonNull(webhookPayload) ? webhookPayload.getValue(execution) : "";
-    if (payload instanceof String payloadStr) {
-      payload = EnvVarUtil.resolveEnvVars(payloadStr, "webhookPayload");
+      Object payloadVariable = execution.getVariable("webhookPayload");
+      payload = Objects.nonNull(payloadVariable) ? payloadVariable : Objects.nonNull(webhookPayload) ? webhookPayload.getValue(execution) : "";
+      if (payload instanceof String payloadStr) {
+        payload = EnvVarUtil.resolveEnvVars(payloadStr, "webhookPayload");
+      }
+
+      Object payloadHeader = execution.getVariable("webhookPayloadHeader");
+      String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
+          .orElse("").toString();
+      // Parse RAW (unresolved): the guard resolves $[VAR] per header value after deciding allow/block,
+      // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
+      headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
+    } catch (RuntimeException e) {
+      throw WebhookFailures.configError(execution, taskId, e);
     }
-
-    Object payloadHeader = execution.getVariable("webhookPayloadHeader");
-    String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
-        .orElse("").toString();
-    // Parse RAW (unresolved): the guard resolves $[VAR] per header value after deciding allow/block,
-    // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
-    Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
 
     Object responseBody = null;
     Integer statusCode = null;
