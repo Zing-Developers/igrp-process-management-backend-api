@@ -137,6 +137,8 @@ An async task runs after the request that reached it has returned, so the reques
 
 Without `failedJobRetryTimeCycle` the defaults apply: `IGRP_ASYNC_JOB_RETRIES` (3) attempts, `IGRP_ASYNC_JOB_RETRY_WAIT` (60s) apart. These are engine-wide, so they cover every async service task, not only webhooks.
 
+Connections: the job executor runs up to 10 jobs at once (2 normally; it grows only when more than 100 are queued). A job that fails holds two connections for a moment, because Activiti records the retry in a transaction of its own while the failed one is still open. What the app does after a job commits (sync the tasks, clear the failure record) runs on two threads of its own (`AfterCommitExecutor`), so a job that succeeds holds only one. Size the pool for the worst case, 2 per executor thread plus the web requests: Hikari's default of 10 is short of that once the executor reaches 10 threads. Set `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` (for example 30) where that load is possible.
+
 When the attempts run out the job becomes a dead-letter job and the process waits on that task. The `/failed-jobs` endpoints show and reprocess it:
 
 | Endpoint | Permission | What it does |

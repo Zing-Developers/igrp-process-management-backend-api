@@ -118,7 +118,7 @@ class WebhookAsyncRetryEngineTest {
     dataSource.setURL("jdbc:h2:mem:webhook-retry;DB_CLOSE_DELAY=1000");
     dataSource.setUser("sa"); // what the standalone engine connects as
     jdbc = new JdbcTemplate(dataSource);
-    failures = new JobFailureRecorder(jdbc, new DataSourceTransactionManager(dataSource));
+    failures = new JobFailureRecorder(jdbc, new DataSourceTransactionManager(dataSource), new cv.igrp.platform.process.management.shared.config.AfterCommitExecutor(Runnable::run));
     var conf = new StandaloneInMemProcessEngineConfiguration();
     conf.setJdbcUrl("jdbc:h2:mem:webhook-retry;DB_CLOSE_DELAY=1000");
     conf.setTypedEventListeners(java.util.Map.<String, java.util.List<ActivitiEventListener>>of(

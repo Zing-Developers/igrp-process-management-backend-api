@@ -6,6 +6,7 @@ import org.activiti.engine.delegate.event.ActivitiEventListener;
 import org.activiti.engine.delegate.event.ActivitiEventType;
 import org.activiti.engine.delegate.event.ActivitiExceptionEvent;
 import org.activiti.engine.runtime.Job;
+import cv.igrp.platform.process.management.shared.config.AfterCommitExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -36,9 +37,12 @@ public class JobFailureRecorder implements ActivitiEventListener {
 
   private final JdbcTemplate jdbc;
   private final TransactionTemplate newTransaction;
+  private final AfterCommitExecutor afterCommit;
 
-  public JobFailureRecorder(JdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+  public JobFailureRecorder(JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
+                            AfterCommitExecutor afterCommit) {
     this.jdbc = jdbc;
+    this.afterCommit = afterCommit;
     this.newTransaction = new TransactionTemplate(transactionManager);
     this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
@@ -73,11 +77,13 @@ public class JobFailureRecorder implements ActivitiEventListener {
           TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-              clear(executionId);
+              // off this thread, which still holds the job's connection (see AsyncJobRetryConfig)
+              final Instant committedAt = Instant.now();
+              afterCommit.execute(() -> clear(executionId, committedAt));
             }
           });
         } else {
-          clear(executionId);
+          clear(executionId, Instant.now());
         }
       }
     } catch (RuntimeException e) {
@@ -85,9 +91,14 @@ public class JobFailureRecorder implements ActivitiEventListener {
     }
   }
 
-  private void clear(String executionId) {
+  /**
+   * Only a failure from before the commit: by the time this runs, a next async task on the same
+   * execution may have failed already, and its record must stay.
+   */
+  private void clear(String executionId, Instant committedAt) {
     try {
-      newTransaction.executeWithoutResult(s -> jdbc.update("DELETE FROM t_job_failure WHERE execution_id = ?", executionId));
+      newTransaction.executeWithoutResult(s -> jdbc.update(
+          "DELETE FROM t_job_failure WHERE execution_id = ? AND last_failed_at <= ?", executionId, Timestamp.from(committedAt)));
     } catch (RuntimeException e) {
       LOGGER.warn("Could not clear the failure record of execution {}", executionId, e);
     }

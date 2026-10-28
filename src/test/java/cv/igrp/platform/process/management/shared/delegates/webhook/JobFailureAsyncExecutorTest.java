@@ -50,6 +50,8 @@ class JobFailureAsyncExecutorTest {
   private JdbcTemplate jdbc;
   private JobFailureRecorder failures;
   private FailedJobService failedJobs;
+  // as AfterCommitExecutor in AsyncJobRetryConfig
+  private final java.util.concurrent.ExecutorService afterCommit = java.util.concurrent.Executors.newFixedThreadPool(2);
 
   @BeforeEach
   void setUp() throws Exception {
@@ -60,7 +62,7 @@ class JobFailureAsyncExecutorTest {
     jdbc = new JdbcTemplate(dataSource);
     jdbc.execute(new String(getClass().getResourceAsStream("/db/migration/V15__create_job_failure.sql").readAllBytes()));
     jdbc.execute(new String(getClass().getResourceAsStream("/db/migration/V17__job_failure_reprocess.sql").readAllBytes()));
-    failures = new JobFailureRecorder(jdbc, transactionManager);
+    failures = new JobFailureRecorder(jdbc, transactionManager, new cv.igrp.platform.process.management.shared.config.AfterCommitExecutor(afterCommit));
 
     var conf = new SpringProcessEngineConfiguration();
     conf.setDataSource(dataSource);
@@ -86,6 +88,7 @@ class JobFailureAsyncExecutorTest {
   @AfterEach
   void tearDown() {
     engine.close();
+    afterCommit.shutdownNow();
     jdbc.execute("DROP ALL OBJECTS");
   }
 

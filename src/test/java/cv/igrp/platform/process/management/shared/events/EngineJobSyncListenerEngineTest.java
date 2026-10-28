@@ -78,7 +78,7 @@ class EngineJobSyncListenerEngineTest {
     }).when(processInstances).syncFromEngine(anyString());
     ObjectProvider<ProcessInstanceService> provider = mock(ObjectProvider.class);
     when(provider.getObject()).thenReturn(processInstances);
-    listener = new EngineJobSyncListener(provider, transactionManager);
+    listener = new EngineJobSyncListener(provider, transactionManager, new cv.igrp.platform.process.management.shared.config.AfterCommitExecutor(Runnable::run));
 
     var conf = new SpringProcessEngineConfiguration();
     conf.setDataSource(dataSource);
