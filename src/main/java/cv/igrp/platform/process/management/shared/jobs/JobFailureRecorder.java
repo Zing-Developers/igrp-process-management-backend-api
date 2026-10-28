@@ -12,6 +12,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.Timestamp;
@@ -62,11 +64,32 @@ public class JobFailureRecorder implements ActivitiEventListener {
         final Throwable cause = event instanceof ActivitiExceptionEvent failure ? failure.getCause() : null;
         recordFailure(job.getExecutionId(), job.getProcessInstanceId(), messageOf(cause));
       } else if (event.getType() == ActivitiEventType.JOB_EXECUTION_SUCCESS && job.getExceptionMessage() != null) {
-        // only a job that failed before carries an exception message, so only it can have a row
-        newTransaction.executeWithoutResult(s -> jdbc.update("DELETE FROM t_job_failure WHERE execution_id = ?", job.getExecutionId()));
+        // only a job that failed before carries an exception message, so only it can have a row.
+        // The async executor fires SUCCESS when it hands the job to the agenda, before the task runs;
+        // a failure follows in the same transaction. So clear only once that transaction commits,
+        // as EngineJobSyncListener does: deleting now wiped the row before every failure.
+        final String executionId = job.getExecutionId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+          TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+              clear(executionId);
+            }
+          });
+        } else {
+          clear(executionId);
+        }
       }
     } catch (RuntimeException e) {
       LOGGER.warn("Could not record the outcome of job {} (execution {})", job.getId(), job.getExecutionId(), e);
+    }
+  }
+
+  private void clear(String executionId) {
+    try {
+      newTransaction.executeWithoutResult(s -> jdbc.update("DELETE FROM t_job_failure WHERE execution_id = ?", executionId));
+    } catch (RuntimeException e) {
+      LOGGER.warn("Could not clear the failure record of execution {}", executionId, e);
     }
   }
 

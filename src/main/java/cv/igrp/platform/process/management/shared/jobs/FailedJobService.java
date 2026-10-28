@@ -130,10 +130,11 @@ public class FailedJobService {
     if (attempts < 1 || attempts > 100) {
       throw new IllegalArgumentException("retries must be between 1 and 100");
     }
-    managementService.moveDeadLetterJobToExecutableJob(jobId, attempts);
+    // before the move: once moved, the job executor can run (and fail) it before this line returns
     if (job.getExecutionId() != null) {
       failures.recordReprocess(job.getExecutionId(), requestedBy);
     }
+    managementService.moveDeadLetterJobToExecutableJob(jobId, attempts);
     LOGGER.info("Dead-letter job {} moved back to the executable queue with {} retries by {}", jobId, attempts, requestedBy);
   }
 
