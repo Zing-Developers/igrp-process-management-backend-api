@@ -109,14 +109,14 @@ public class JobFailureRecorder implements ActivitiEventListener {
   }
 
   /**
-   * A dead-letter job of this execution was put back on the queue by {@code by}. A failure that
-   * predates the recorder has no row, so there is nothing to count on.
+   * A dead-letter job of this execution was put back on the queue by {@code by} at {@code at}. A
+   * failure that predates the recorder has no row, so there is nothing to count on.
    */
-  public void recordReprocess(String executionId, String by) {
+  public void recordReprocess(String executionId, String by, Instant at) {
     newTransaction.executeWithoutResult(s -> jdbc.update(
         "UPDATE t_job_failure SET reprocess_count = reprocess_count + 1, last_reprocessed_at = ?, last_reprocessed_by = ?"
             + " WHERE execution_id = ?",
-        Timestamp.from(Instant.now()), by, executionId));
+        Timestamp.from(at), by, executionId));
   }
 
   public Map<String, Failure> findByExecutionIds(Collection<String> executionIds) {
