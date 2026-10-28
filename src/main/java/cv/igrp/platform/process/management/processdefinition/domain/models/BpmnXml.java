@@ -15,7 +15,8 @@ public class BpmnXml {
   private static final String CAMUNDA_NS = "http://camunda.org/schema/1.0/bpmn";
   private static final String ACTIVITI_NS = "http://activiti.org/bpmn";
   private static final Pattern START_TAG = Pattern.compile("<\\w[\\w:.-]*(?:[^\"'<>]|\"[^\"]*\"|'[^']*')*>");
-  private static final Pattern ATTRIBUTE = Pattern.compile("\\s+(\\w+):([\\w.-]+)\\s*=\\s*([\"'])(.*?)\\3", Pattern.DOTALL);
+  // every attribute, prefixed or not, so a match never starts inside another attribute's value
+  private static final Pattern ATTRIBUTE = Pattern.compile("\\s+(?:(\\w+):)?([\\w.-]+)\\s*=\\s*([\"'])(.*?)\\3", Pattern.DOTALL);
   private static final String ASYNC_FLAG = "async(Before|After)?";
 
   private final String xml;
@@ -35,41 +36,58 @@ public class BpmnXml {
   /**
    * The modeler is Camunda's, so its extensions come in the Camunda namespace, which Activiti
    * ignores (no delegateExpression, no fields). The studio frontend converts them before deploying
-   * (convertCamundaToActiviti); this applies the same rules so a deployment that skipped it behaves
-   * the same, and is a no-op on XML the frontend already converted. Rebinding the namespace URI is
-   * enough for the parser: the prefix can stay "camunda:".
+   * (convertCamundaToActiviti); this applies the same rules so a deployment that skipped it comes out
+   * the same, and is a no-op on XML the frontend already converted. That includes the prefix: the
+   * frontend turns an exported definition back for the Camunda editor only when it declares
+   * xmlns:activiti, so a "camunda:" prefix bound to Activiti's URI would come back without its
+   * delegate and fields. The URI swap at the end covers any other prefix bound to Camunda's namespace.
    */
   private static String toActiviti(String xml) {
     return START_TAG.matcher(xml).replaceAll(m -> Matcher.quoteReplacement(normalizeTag(m.group())))
+        .replace("</camunda:", "</activiti:")
         .replace(CAMUNDA_NS, ACTIVITI_NS);
   }
 
   /**
-   * Per tag, two rules from the frontend, both of which would otherwise put the same attribute
-   * twice in the Activiti namespace (malformed XML, the deploy fails):
+   * Per tag, the frontend's rules. The first two would otherwise put the same attribute twice in the
+   * Activiti namespace (malformed XML, the deploy fails):
    * <ul>
    *   <li>an activiti:X next to a camunda:X is dropped, the Camunda one wins;</li>
    *   <li>Activiti has a single async flag, so asyncBefore and asyncAfter collapse into async, on
-   *   if any of them (or an existing async) is on.</li>
+   *   if any of them (or an existing async) is on;</li>
+   *   <li>the camunda prefix becomes activiti, on the element, its attributes and its declaration
+   *   (dropped when the tag already declares xmlns:activiti).</li>
    * </ul>
    */
   private static String normalizeTag(String tag) {
     var attributes = ATTRIBUTE.matcher(tag).results().toList();
     var camundaNames = attributes.stream().filter(a -> "camunda".equals(a.group(1))).map(a -> a.group(2)).toList();
-    var asyncFlags = attributes.stream().filter(a -> a.group(2).matches(ASYNC_FLAG)).toList();
+    boolean declaresActiviti = attributes.stream().anyMatch(a -> "xmlns".equals(a.group(1)) && "activiti".equals(a.group(2)));
+    var asyncFlags = attributes.stream().filter(BpmnXml::isAsyncFlag).toList();
     // Also when async is there twice: the frontend writes that for camunda:async + asyncBefore.
     boolean collapse = asyncFlags.size() > 1 || asyncFlags.stream().anyMatch(a -> !"async".equals(a.group(2)));
 
     String kept = ATTRIBUTE.matcher(tag).replaceAll(a -> {
-      boolean shadowed = "activiti".equals(a.group(1)) && camundaNames.contains(a.group(2));
-      boolean collapsed = collapse && a.group(2).matches(ASYNC_FLAG);
-      return shadowed || collapsed ? "" : Matcher.quoteReplacement(a.group());
-    });
+      final String prefix = a.group(1);
+      final String name = a.group(2);
+      if ("activiti".equals(prefix) && camundaNames.contains(name) || collapse && isAsyncFlag(a)) {
+        return "";
+      }
+      if ("xmlns".equals(prefix) && "camunda".equals(name) && (CAMUNDA_NS.equals(a.group(4)) || ACTIVITI_NS.equals(a.group(4)))) {
+        return declaresActiviti ? "" : Matcher.quoteReplacement(" xmlns:activiti=\"" + ACTIVITI_NS + "\"");
+      }
+      return Matcher.quoteReplacement("camunda".equals(prefix) ? a.group().replaceFirst("camunda:", "activiti:") : a.group());
+    }).replaceFirst("^<camunda:", "<activiti:");
     if (!collapse) {
       return kept;
     }
     boolean on = asyncFlags.stream().anyMatch(a -> "true".equals(a.group(4)));
-    return kept.replaceFirst("(/?>)$", " " + asyncFlags.get(0).group(1) + ":async=\"" + on + "\"$1");
+    final String prefix = asyncFlags.get(0).group(1);
+    return kept.replaceFirst("(/?>)$", " " + ("camunda".equals(prefix) ? "activiti" : prefix) + ":async=\"" + on + "\"$1");
+  }
+
+  private static boolean isAsyncFlag(MatchResult attribute) {
+    return attribute.group(1) != null && !"xmlns".equals(attribute.group(1)) && attribute.group(2).matches(ASYNC_FLAG);
   }
 
   /**

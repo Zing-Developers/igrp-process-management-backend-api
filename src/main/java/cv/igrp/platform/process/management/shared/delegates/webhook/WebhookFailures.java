@@ -1,5 +1,7 @@
 package cv.igrp.platform.process.management.shared.delegates.webhook;
 
+import cv.igrp.platform.process.management.shared.delegates.outbound.OutboundRequestGuard;
+import cv.igrp.platform.process.management.shared.jobs.NonRetryableJobException;
 import org.activiti.bpmn.model.FlowNode;
 import org.activiti.engine.delegate.DelegateExecution;
 
@@ -35,6 +37,10 @@ final class WebhookFailures {
     final String error = cause != null
         ? (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName())
         : (status != null && status >= 400 ? "HTTP " + status : null);
+    if (cause instanceof RuntimeException runtime && isConfigError(runtime) && isAsync(execution)) {
+      // e.g. an unsupported method or a response over the size limit: the same call fails the same way
+      throw new NonRetryableJobException(taskId + ": " + error, cause);
+    }
     if (error != null && isAsync(execution) && (status == null || isRetryable(status))) {
       // Rolled back with the job; the message lands on the (dead-letter) job instead
       throw new WebhookCallException(taskId + ": " + error, cause);
@@ -49,6 +55,23 @@ final class WebhookFailures {
     } else {
       runtime.removeVariable(processInstanceId, taskId + "Error");
     }
+  }
+
+  /**
+   * For what a delegate reads and checks before calling (URL, method, $[VAR], the outbound policy):
+   * in an async task a failure there would only spend the retries, so it goes straight to the dead
+   * letter. A synchronous task keeps failing the action, as before.
+   */
+  static RuntimeException configError(DelegateExecution execution, String taskId, RuntimeException e) {
+    return isAsync(execution) && !(e instanceof OutboundRequestGuard.UnresolvableHostException)
+        ? new NonRetryableJobException(taskId + ": " + e.getMessage(), e)
+        : e;
+  }
+
+  /** Bad input rather than a bad moment; a host DNS cannot resolve right now is the exception. */
+  private static boolean isConfigError(RuntimeException e) {
+    return (e instanceof IllegalArgumentException || e instanceof IllegalStateException)
+        && !(e instanceof OutboundRequestGuard.UnresolvableHostException);
   }
 
   static final class WebhookCallException extends RuntimeException {

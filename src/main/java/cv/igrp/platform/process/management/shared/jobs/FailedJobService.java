@@ -9,6 +9,8 @@ import cv.igrp.platform.process.management.shared.application.dto.FailedJobListP
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.entity.ProcessInstanceEntity;
 import cv.igrp.platform.process.management.shared.infrastructure.persistence.repository.ProcessInstanceEntityRepository;
 import org.activiti.bpmn.model.*;
+import org.activiti.engine.ActivitiOptimisticLockingException;
+import org.activiti.engine.JobNotFoundException;
 import org.activiti.engine.ManagementService;
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
@@ -21,6 +23,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -130,9 +133,17 @@ public class FailedJobService {
     if (attempts < 1 || attempts > 100) {
       throw new IllegalArgumentException("retries must be between 1 and 100");
     }
-    managementService.moveDeadLetterJobToExecutableJob(jobId, attempts);
+    // Taken before the move: once moved, the executor can run and fail the job before the record below,
+    // and that failure must still read as later than the reprocess.
+    final Instant reprocessedAt = Instant.now();
+    try {
+      managementService.moveDeadLetterJobToExecutableJob(jobId, attempts);
+    } catch (JobNotFoundException | ActivitiOptimisticLockingException e) {
+      // two reprocesses of the same job at once: the engine lets one move it, so only that one counts
+      throw new IllegalArgumentException("failed job already reprocessed: " + jobId);
+    }
     if (job.getExecutionId() != null) {
-      failures.recordReprocess(job.getExecutionId(), requestedBy);
+      failures.recordReprocess(job.getExecutionId(), requestedBy, reprocessedAt);
     }
     LOGGER.info("Dead-letter job {} moved back to the executable queue with {} retries by {}", jobId, attempts, requestedBy);
   }

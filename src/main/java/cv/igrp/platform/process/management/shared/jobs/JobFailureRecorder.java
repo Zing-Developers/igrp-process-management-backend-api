@@ -6,12 +6,15 @@ import org.activiti.engine.delegate.event.ActivitiEventListener;
 import org.activiti.engine.delegate.event.ActivitiEventType;
 import org.activiti.engine.delegate.event.ActivitiExceptionEvent;
 import org.activiti.engine.runtime.Job;
+import cv.igrp.platform.process.management.shared.config.AfterCommitExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.Timestamp;
@@ -34,9 +37,12 @@ public class JobFailureRecorder implements ActivitiEventListener {
 
   private final JdbcTemplate jdbc;
   private final TransactionTemplate newTransaction;
+  private final AfterCommitExecutor afterCommit;
 
-  public JobFailureRecorder(JdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+  public JobFailureRecorder(JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
+                            AfterCommitExecutor afterCommit) {
     this.jdbc = jdbc;
+    this.afterCommit = afterCommit;
     this.newTransaction = new TransactionTemplate(transactionManager);
     this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
@@ -62,11 +68,39 @@ public class JobFailureRecorder implements ActivitiEventListener {
         final Throwable cause = event instanceof ActivitiExceptionEvent failure ? failure.getCause() : null;
         recordFailure(job.getExecutionId(), job.getProcessInstanceId(), messageOf(cause));
       } else if (event.getType() == ActivitiEventType.JOB_EXECUTION_SUCCESS && job.getExceptionMessage() != null) {
-        // only a job that failed before carries an exception message, so only it can have a row
-        newTransaction.executeWithoutResult(s -> jdbc.update("DELETE FROM t_job_failure WHERE execution_id = ?", job.getExecutionId()));
+        // only a job that failed before carries an exception message, so only it can have a row.
+        // The async executor fires SUCCESS when it hands the job to the agenda, before the task runs;
+        // a failure follows in the same transaction. So clear only once that transaction commits,
+        // as EngineJobSyncListener does: deleting now wiped the row before every failure.
+        final String executionId = job.getExecutionId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+          TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+              // off this thread, which still holds the job's connection (see AsyncJobRetryConfig)
+              final Instant committedAt = Instant.now();
+              afterCommit.execute(() -> clear(executionId, committedAt));
+            }
+          });
+        } else {
+          clear(executionId, Instant.now());
+        }
       }
     } catch (RuntimeException e) {
       LOGGER.warn("Could not record the outcome of job {} (execution {})", job.getId(), job.getExecutionId(), e);
+    }
+  }
+
+  /**
+   * Only a failure from before the commit: by the time this runs, a next async task on the same
+   * execution may have failed already, and its record must stay.
+   */
+  private void clear(String executionId, Instant committedAt) {
+    try {
+      newTransaction.executeWithoutResult(s -> jdbc.update(
+          "DELETE FROM t_job_failure WHERE execution_id = ? AND last_failed_at <= ?", executionId, Timestamp.from(committedAt)));
+    } catch (RuntimeException e) {
+      LOGGER.warn("Could not clear the failure record of execution {}", executionId, e);
     }
   }
 
@@ -86,14 +120,14 @@ public class JobFailureRecorder implements ActivitiEventListener {
   }
 
   /**
-   * A dead-letter job of this execution was put back on the queue by {@code by}. A failure that
-   * predates the recorder has no row, so there is nothing to count on.
+   * A dead-letter job of this execution was put back on the queue by {@code by} at {@code at}. A
+   * failure that predates the recorder has no row, so there is nothing to count on.
    */
-  public void recordReprocess(String executionId, String by) {
+  public void recordReprocess(String executionId, String by, Instant at) {
     newTransaction.executeWithoutResult(s -> jdbc.update(
         "UPDATE t_job_failure SET reprocess_count = reprocess_count + 1, last_reprocessed_at = ?, last_reprocessed_by = ?"
             + " WHERE execution_id = ?",
-        Timestamp.from(Instant.now()), by, executionId));
+        Timestamp.from(at), by, executionId));
   }
 
   public Map<String, Failure> findByExecutionIds(Collection<String> executionIds) {

@@ -113,12 +113,14 @@ Both webhook delegates record the outcome in process variables: `<task-id>Status
 
 What happens on failure depends on the service task:
 
-| Service task | Retryable failure (no response, 5xx, 408, 429) | Other 4xx |
-|---|---|---|
-| synchronous (default) | variables recorded, process continues | variables recorded, process continues |
-| `activiti:async="true"` | job retried, then parked as a failed job | variables recorded, process continues |
+| Service task | Retryable failure (no response, 5xx, 408, 429) | Other 4xx | Configuration error |
+|---|---|---|---|
+| synchronous (default) | variables recorded, process continues | variables recorded, process continues | the action fails (before the call) or variables recorded (during it) |
+| `activiti:async="true"` | job retried, then parked as a failed job | variables recorded, process continues | parked as a failed job after one attempt, no retries |
 
-A synchronous task never fails the user action that triggered it. To get retries, mark the task async and, optionally, give it its own retry cycle:
+A configuration error is one the same call would repeat: no `webhookUrl` or `webhookMethod`, a `$[VAR]` that is not allowed or not set, a host the outbound policy blocks, an unsupported method, a response over `IGRP_OUTBOUND_MAX_RESPONSE_BYTES`. A host DNS cannot resolve is not one: it may pass, so it keeps the retries. The delegates throw `NonRetryableJobException` for these and `NonRetryableFailedJobCommandFactory` (set in `AsyncJobRetryConfig`) sends the job to the dead letter with that message; fix the BPMN or the configuration and reprocess it.
+
+A synchronous task never fails the user action because the endpoint is down or answers with an error. To get retries, mark the task async and, optionally, give it its own retry cycle:
 
 ```xml
 <serviceTask id="notifyIrn" activiti:async="true" activiti:delegateExpression="${igrpWebhookDelegate}">
@@ -134,6 +136,8 @@ A synchronous task never fails the user action that triggered it. To get retries
 An async task runs after the request that reached it has returned, so the request cannot pick up the user task that follows. `EngineJobSyncListener` does it instead: once any engine job commits (async task, timer, a reprocessed failed job), it copies the new user tasks into the app and closes the process if the engine ended it. `TaskReconciler` is the safety net: every `IGRP_TASK_RECONCILE_INTERVAL` (5m) one pod finds the processes where app and engine disagree for longer than `IGRP_TASK_RECONCILE_GRACE` (2m) and runs the same sync on them.
 
 Without `failedJobRetryTimeCycle` the defaults apply: `IGRP_ASYNC_JOB_RETRIES` (3) attempts, `IGRP_ASYNC_JOB_RETRY_WAIT` (60s) apart. These are engine-wide, so they cover every async service task, not only webhooks.
+
+Connections: the job executor runs up to 10 jobs at once (2 normally; it grows only when more than 100 are queued). A job that fails holds two connections for a moment, because Activiti records the retry in a transaction of its own while the failed one is still open. What the app does after a job commits (sync the tasks, clear the failure record) runs on two threads of its own (`AfterCommitExecutor`), so a job that succeeds holds only one. Size the pool for the worst case, 2 per executor thread plus the web requests: Hikari's default of 10 is short of that once the executor reaches 10 threads. Set `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` (for example 30) where that load is possible.
 
 When the attempts run out the job becomes a dead-letter job and the process waits on that task. The `/failed-jobs` endpoints show and reprocess it:
 

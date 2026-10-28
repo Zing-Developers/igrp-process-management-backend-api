@@ -65,4 +65,23 @@ class WebhookFailuresTest {
     verify(runtime).removeVariable("pi-1", "notifyError");
   }
 
+  @Test
+  void asyncTaskSkipsTheRetriesForAnErrorTheSameCallWouldRepeatButNotForDns() {
+    task.setAsynchronous(true);
+    var tooBig = assertThrows(cv.igrp.platform.process.management.shared.jobs.NonRetryableJobException.class,
+        () -> WebhookFailures.record(execution, "notify", null, new IllegalStateException("Webhook response exceeds the size limit")));
+    org.junit.jupiter.api.Assertions.assertEquals("notify: Webhook response exceeds the size limit", tooBig.getMessage());
+    assertThrows(cv.igrp.platform.process.management.shared.jobs.NonRetryableJobException.class,
+        () -> WebhookFailures.record(execution, "notify", null, new IllegalArgumentException("Unsupported webhookMethod: PATCH")));
+    assertThrows(WebhookFailures.WebhookCallException.class,
+        () -> WebhookFailures.record(execution, "notify", null,
+            new cv.igrp.platform.process.management.shared.delegates.outbound.OutboundRequestGuard.UnresolvableHostException()));
+  }
+
+  @Test
+  void syncTaskStillRecordsAConfigurationErrorAndContinues() {
+    WebhookFailures.record(execution, "notify", null, new IllegalArgumentException("Unsupported webhookMethod: PATCH"));
+    verify(runtime).setVariable("pi-1", "notifyError", "Unsupported webhookMethod: PATCH");
+  }
+
 }
