@@ -2,6 +2,7 @@ package cv.igrp.platform.process.management.shared.config;
 
 import cv.igrp.platform.process.management.shared.events.EngineJobSyncListener;
 import cv.igrp.platform.process.management.shared.jobs.JobFailureRecorder;
+import cv.igrp.platform.process.management.shared.jobs.NonRetryableFailedJobCommandFactory;
 import org.activiti.engine.delegate.event.ActivitiEventListener;
 import org.activiti.engine.delegate.event.ActivitiEventType;
 import org.activiti.spring.boot.ProcessEngineConfigurationConfigurer;
@@ -33,6 +34,8 @@ public class AsyncJobRetryConfig {
       conf.setAsyncExecutorNumberOfRetries(retries);
       conf.setAsyncFailedJobWaitTime(waitSeconds);
       conf.setDefaultFailedJobWaitTime(waitSeconds);
+      // a configuration error (missing URL, blocked host) goes to the dead letter without retries
+      conf.setFailedJobCommandFactory(new NonRetryableFailedJobCommandFactory());
     };
   }
 

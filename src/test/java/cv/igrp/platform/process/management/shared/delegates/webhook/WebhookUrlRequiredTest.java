@@ -44,6 +44,32 @@ class WebhookUrlRequiredTest {
     assertRequired(process, execution);
   }
 
+  @Test
+  void inAnAsyncTaskAConfigurationErrorSkipsTheRetriesButADnsFailureKeepsThem() {
+    var plain = new IgrpWebhookDelegate(restClient, guard);
+    var process = new IgrpProcessWebhookDelegate(mock(MessageUtil.class), restClient, guard);
+    var asyncTask = new org.activiti.bpmn.model.ServiceTask();
+    asyncTask.setAsynchronous(true);
+    var execution = mock(DelegateExecution.class);
+    when(execution.getCurrentActivityId()).thenReturn("notify");
+    when(execution.getCurrentFlowElement()).thenReturn(asyncTask);
+
+    for (JavaDelegate delegate : List.of(plain, process)) {
+      var e = assertThrows(cv.igrp.platform.process.management.shared.jobs.NonRetryableJobException.class, () -> delegate.execute(execution));
+      assertEquals("notify: webhookUrl argument is required and was not provided", e.getMessage());
+    }
+
+    // the host is configured but DNS does not answer right now: left to the engine's retries
+    var url = mock(Expression.class);
+    when(url.getValue(execution)).thenReturn("https://irn.example");
+    plain.webhookUrl = url;
+    process.webhookUrl = url;
+    when(guard.validate(org.mockito.ArgumentMatchers.anyString())).thenThrow(new OutboundRequestGuard.UnresolvableHostException());
+    for (JavaDelegate delegate : List.of(plain, process)) {
+      assertThrows(OutboundRequestGuard.UnresolvableHostException.class, () -> delegate.execute(execution));
+    }
+  }
+
   private static void assertRequired(JavaDelegate delegate, DelegateExecution execution) {
     var e = assertThrows(IllegalArgumentException.class, () -> delegate.execute(execution));
     assertEquals("webhookUrl argument is required and was not provided", e.getMessage());

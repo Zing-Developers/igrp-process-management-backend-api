@@ -43,6 +43,55 @@ class WebhookAsyncRetryEngineTest {
     }
   }
 
+  /** A webhook task whose BPMN has no URL: what the real delegates throw for it. */
+  public static class UnconfiguredWebhook implements JavaDelegate {
+    @Override
+    public void execute(DelegateExecution execution) {
+      CALLS_UNCONFIGURED.incrementAndGet();
+      throw WebhookFailures.configError(execution, execution.getCurrentActivityId(),
+          new IllegalArgumentException("webhookUrl argument is required and was not provided"));
+    }
+  }
+
+  static final AtomicInteger CALLS_UNCONFIGURED = new AtomicInteger();
+
+  private static final String UNCONFIGURED = """
+      <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                   xmlns:activiti="http://activiti.org/bpmn" targetNamespace="test">
+        <process id="unconfigured" isExecutable="true">
+          <startEvent id="start"/>
+          <sequenceFlow id="f1" sourceRef="start" targetRef="callIrn"/>
+          <serviceTask id="callIrn" activiti:async="true"
+                       activiti:class="cv.igrp.platform.process.management.shared.delegates.webhook.WebhookAsyncRetryEngineTest$UnconfiguredWebhook"/>
+          <sequenceFlow id="f2" sourceRef="callIrn" targetRef="end"/>
+          <endEvent id="end"/>
+        </process>
+      </definitions>
+      """;
+
+  @Test
+  void aConfigurationErrorGoesToTheFailedJobsAfterOneAttempt() {
+    engine.getRepositoryService().createDeployment().addString("unconfigured.bpmn20.xml", UNCONFIGURED).deploy();
+    var management = engine.getManagementService();
+    var failedJobs = new FailedJobService(management, engine.getRuntimeService(), engine.getRepositoryService(),
+        mock(ProcessInstanceEntityRepository.class), failures, 1);
+    CALLS_UNCONFIGURED.set(0);
+    var pi = engine.getRuntimeService().startProcessInstanceByKey("unconfigured");
+
+    var job = management.createJobQuery().processInstanceId(pi.getId()).singleResult();
+    assertThatThrownBy(() -> management.executeJob(job.getId()));
+
+    // the setup allows 2 attempts; none is spent on a call that cannot work
+    assertThat(CALLS_UNCONFIGURED).hasValue(1);
+    assertThat(management.createTimerJobQuery().processInstanceId(pi.getId()).count()).isZero();
+    var failed = failedJobs.list(null, null, 0, 20).getContent();
+    assertThat(failed).singleElement().satisfies(row -> {
+      assertThat(row.getExceptionMessage()).isEqualTo("callIrn: webhookUrl argument is required and was not provided");
+      assertThat(row.getAttempts()).isEqualTo(1);
+    });
+    assertThat(failedJobs.stacktrace(failed.get(0).getJobId())).contains("NonRetryableJobException");
+  }
+
   private static final String BPMN = """
       <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                    xmlns:activiti="http://activiti.org/bpmn" targetNamespace="test">
@@ -80,6 +129,7 @@ class WebhookAsyncRetryEngineTest {
     conf.setAsyncExecutorNumberOfRetries(2);
     conf.setAsyncFailedJobWaitTime(0);
     conf.setDefaultFailedJobWaitTime(0);
+    conf.setFailedJobCommandFactory(new cv.igrp.platform.process.management.shared.jobs.NonRetryableFailedJobCommandFactory());
     engine = conf.buildProcessEngine();
     engine.getRepositoryService().createDeployment().addString("notify.bpmn20.xml", BPMN).deploy();
     FlakyWebhook.CALLS.set(0);

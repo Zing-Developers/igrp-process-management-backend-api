@@ -57,29 +57,37 @@ public class IgrpProcessWebhookDelegate implements JavaDelegate {
     String taskId = execution.getCurrentActivityId();
     String processInstanceId = execution.getProcessInstanceId();
     log.debug("[IgrpProcessWebhookDelegate] Executing webhook task: {} from process instance: {}", taskId, processInstanceId);
-    String baseUrlVariable = (String) execution.getVariable("webhookUrl");
-    String baseUrl = ofNullable(Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution) : null)
-        .map(Object::toString)
-        .filter(s -> !s.isBlank())
-        .orElseThrow(() -> new IllegalArgumentException("webhookUrl argument is required and was not provided"));
-    baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
-    String pathVariable = (String)  execution.getVariable("webhookUrlPath");
-    String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
-    path = EnvVarUtil.resolveEnvVars(path, "webhookUrlPath");
+    String url;
+    String payload;
+    Map<String, String> headersMap;
+    // what the call needs, read and checked: a failure here cannot pass on a retry
+    try {
+      String baseUrlVariable = (String) execution.getVariable("webhookUrl");
+      String baseUrl = ofNullable(Objects.nonNull(baseUrlVariable)? baseUrlVariable: Objects.nonNull(webhookUrl)? webhookUrl.getValue(execution) : null)
+          .map(Object::toString)
+          .filter(s -> !s.isBlank())
+          .orElseThrow(() -> new IllegalArgumentException("webhookUrl argument is required and was not provided"));
+      baseUrl = EnvVarUtil.resolveEnvVars(baseUrl, "webhookUrl");
+      String pathVariable = (String)  execution.getVariable("webhookUrlPath");
+      String path = Objects.nonNull(pathVariable) ?  pathVariable : Objects.nonNull(webhookUrlPath) ? (String) webhookUrlPath.getValue(execution): null;
+      path = EnvVarUtil.resolveEnvVars(path, "webhookUrlPath");
 
-    String url = guard.validate(UriComponentsBuilder.fromUriString(baseUrl)
-        .path(path != null ? path : "")
-        .build()
-        .toUriString());
+      url = guard.validate(UriComponentsBuilder.fromUriString(baseUrl)
+          .path(path != null ? path : "")
+          .build()
+          .toUriString());
 
-    String payload = messageUtil.createMessage(execution);
+      payload = messageUtil.createMessage(execution);
 
-    Object payloadHeader = execution.getVariable("webhookPayloadHeader");
-    String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
-        .orElse("").toString();
-    // Parse RAW (unresolved): the guard resolves $[VAR] per header value after deciding allow/block,
-    // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
-    Map<String, String> headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
+      Object payloadHeader = execution.getVariable("webhookPayloadHeader");
+      String payloadHeaderStr = ofNullable(Objects.nonNull(payloadHeader)? payloadHeader : Objects.nonNull(webhookPayloadHeader) ? webhookPayloadHeader.getValue(execution) : null)
+          .orElse("").toString();
+      // Parse RAW (unresolved): the guard resolves $[VAR] per header value after deciding allow/block,
+      // so a credential header can only carry a server-sourced ($[VAR]) value, never a process literal.
+      headersMap = ObjectUtil.parseJsonObjectString(payloadHeaderStr);
+    } catch (RuntimeException e) {
+      throw WebhookFailures.configError(execution, taskId, e);
+    }
 
     Integer statusCode = null;
     Exception failure = null;

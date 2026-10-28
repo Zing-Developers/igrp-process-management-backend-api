@@ -113,12 +113,14 @@ Both webhook delegates record the outcome in process variables: `<task-id>Status
 
 What happens on failure depends on the service task:
 
-| Service task | Retryable failure (no response, 5xx, 408, 429) | Other 4xx |
-|---|---|---|
-| synchronous (default) | variables recorded, process continues | variables recorded, process continues |
-| `activiti:async="true"` | job retried, then parked as a failed job | variables recorded, process continues |
+| Service task | Retryable failure (no response, 5xx, 408, 429) | Other 4xx | Configuration error |
+|---|---|---|---|
+| synchronous (default) | variables recorded, process continues | variables recorded, process continues | the action fails (before the call) or variables recorded (during it) |
+| `activiti:async="true"` | job retried, then parked as a failed job | variables recorded, process continues | parked as a failed job after one attempt, no retries |
 
-A synchronous task never fails the user action that triggered it. To get retries, mark the task async and, optionally, give it its own retry cycle:
+A configuration error is one the same call would repeat: no `webhookUrl` or `webhookMethod`, a `$[VAR]` that is not allowed or not set, a host the outbound policy blocks, an unsupported method, a response over `IGRP_OUTBOUND_MAX_RESPONSE_BYTES`. A host DNS cannot resolve is not one: it may pass, so it keeps the retries. The delegates throw `NonRetryableJobException` for these and `NonRetryableFailedJobCommandFactory` (set in `AsyncJobRetryConfig`) sends the job to the dead letter with that message; fix the BPMN or the configuration and reprocess it.
+
+A synchronous task never fails the user action because the endpoint is down or answers with an error. To get retries, mark the task async and, optionally, give it its own retry cycle:
 
 ```xml
 <serviceTask id="notifyIrn" activiti:async="true" activiti:delegateExpression="${igrpWebhookDelegate}">
