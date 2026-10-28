@@ -82,6 +82,8 @@ class DeployProcessCommandHandlerTest {
     assertEquals(deployedModel.getApplicationBase().getValue(), body.getApplicationBase());
     assertEquals(deployedModel.getDeploymentId(), body.getDeploymentId());
     assertEquals(deployedModel.getDeployedAt(), body.getDeployedAt());
+    // the XML itself, not BpmnXml's Object.toString()
+    assertEquals(deployedModel.getBpmnXml().getXml(), body.getBpmnXml());
     assertTrue(body.isDeployed());
 
     // Verify service call
